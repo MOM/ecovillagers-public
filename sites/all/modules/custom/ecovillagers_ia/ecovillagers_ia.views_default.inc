@@ -11,6 +11,118 @@ function ecovillagers_ia_views_default_views() {
   $export = array();
 
   $view = new view();
+  $view->name = 'comments';
+  $view->description = '';
+  $view->tag = 'default';
+  $view->base_table = 'comment';
+  $view->human_name = 'Comments';
+  $view->core = 7;
+  $view->api_version = '3.0';
+  $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
+
+  /* Display: Master */
+  $handler = $view->new_display('default', 'Master', 'default');
+  $handler->display->display_options['title'] = 'Ecovillagers Discussion';
+  $handler->display->display_options['use_more_always'] = FALSE;
+  $handler->display->display_options['access']['type'] = 'perm';
+  $handler->display->display_options['access']['perm'] = 'access comments';
+  $handler->display->display_options['cache']['type'] = 'none';
+  $handler->display->display_options['query']['type'] = 'views_query';
+  $handler->display->display_options['exposed_form']['type'] = 'basic';
+  $handler->display->display_options['pager']['type'] = 'some';
+  $handler->display->display_options['pager']['options']['items_per_page'] = '5';
+  $handler->display->display_options['style_plugin'] = 'default';
+  $handler->display->display_options['row_plugin'] = 'fields';
+  /* Relationship: Comment: Author */
+  $handler->display->display_options['relationships']['uid']['id'] = 'uid';
+  $handler->display->display_options['relationships']['uid']['table'] = 'comment';
+  $handler->display->display_options['relationships']['uid']['field'] = 'uid';
+  $handler->display->display_options['relationships']['uid']['required'] = TRUE;
+  /* Field: Comment: ID */
+  $handler->display->display_options['fields']['cid']['id'] = 'cid';
+  $handler->display->display_options['fields']['cid']['table'] = 'comment';
+  $handler->display->display_options['fields']['cid']['field'] = 'cid';
+  $handler->display->display_options['fields']['cid']['label'] = '';
+  $handler->display->display_options['fields']['cid']['exclude'] = TRUE;
+  $handler->display->display_options['fields']['cid']['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields']['cid']['link_to_comment'] = FALSE;
+  /* Field: User: Photo */
+  $handler->display->display_options['fields']['field_user_head_shot']['id'] = 'field_user_head_shot';
+  $handler->display->display_options['fields']['field_user_head_shot']['table'] = 'field_data_field_user_head_shot';
+  $handler->display->display_options['fields']['field_user_head_shot']['field'] = 'field_user_head_shot';
+  $handler->display->display_options['fields']['field_user_head_shot']['relationship'] = 'uid';
+  $handler->display->display_options['fields']['field_user_head_shot']['label'] = '';
+  $handler->display->display_options['fields']['field_user_head_shot']['alter']['alter_text'] = TRUE;
+  $handler->display->display_options['fields']['field_user_head_shot']['alter']['text'] = '<a name="comment-[cid]">[field_user_head_shot]</a>';
+  $handler->display->display_options['fields']['field_user_head_shot']['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields']['field_user_head_shot']['click_sort_column'] = 'fid';
+  $handler->display->display_options['fields']['field_user_head_shot']['settings'] = array(
+    'image_style' => 'commenter_thumbnail',
+    'image_link' => '',
+  );
+  /* Field: User: Last Name */
+  $handler->display->display_options['fields']['field_user_name_last']['id'] = 'field_user_name_last';
+  $handler->display->display_options['fields']['field_user_name_last']['table'] = 'field_data_field_user_name_last';
+  $handler->display->display_options['fields']['field_user_name_last']['field'] = 'field_user_name_last';
+  $handler->display->display_options['fields']['field_user_name_last']['relationship'] = 'uid';
+  $handler->display->display_options['fields']['field_user_name_last']['exclude'] = TRUE;
+  /* Field: User: First Name */
+  $handler->display->display_options['fields']['field_user_name_first']['id'] = 'field_user_name_first';
+  $handler->display->display_options['fields']['field_user_name_first']['table'] = 'field_data_field_user_name_first';
+  $handler->display->display_options['fields']['field_user_name_first']['field'] = 'field_user_name_first';
+  $handler->display->display_options['fields']['field_user_name_first']['relationship'] = 'uid';
+  $handler->display->display_options['fields']['field_user_name_first']['label'] = '';
+  $handler->display->display_options['fields']['field_user_name_first']['alter']['alter_text'] = TRUE;
+  $handler->display->display_options['fields']['field_user_name_first']['alter']['text'] = '[field_user_name_first] [field_user_name_last]';
+  $handler->display->display_options['fields']['field_user_name_first']['element_label_colon'] = FALSE;
+  /* Field: Comment: Post date */
+  $handler->display->display_options['fields']['created']['id'] = 'created';
+  $handler->display->display_options['fields']['created']['table'] = 'comment';
+  $handler->display->display_options['fields']['created']['field'] = 'created';
+  $handler->display->display_options['fields']['created']['label'] = '';
+  $handler->display->display_options['fields']['created']['alter']['make_link'] = TRUE;
+  $handler->display->display_options['fields']['created']['alter']['path'] = '#comment-[cid]';
+  $handler->display->display_options['fields']['created']['alter']['absolute'] = TRUE;
+  $handler->display->display_options['fields']['created']['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields']['created']['date_format'] = 'short';
+  $handler->display->display_options['fields']['created']['second_date_format'] = 'long';
+  /* Field: Comment: Comment */
+  $handler->display->display_options['fields']['comment_body']['id'] = 'comment_body';
+  $handler->display->display_options['fields']['comment_body']['table'] = 'field_data_comment_body';
+  $handler->display->display_options['fields']['comment_body']['field'] = 'comment_body';
+  $handler->display->display_options['fields']['comment_body']['label'] = '';
+  $handler->display->display_options['fields']['comment_body']['element_label_colon'] = FALSE;
+  /* Sort criterion: Comment: Post date */
+  $handler->display->display_options['sorts']['created']['id'] = 'created';
+  $handler->display->display_options['sorts']['created']['table'] = 'comment';
+  $handler->display->display_options['sorts']['created']['field'] = 'created';
+  /* Contextual filter: Comment: Nid */
+  $handler->display->display_options['arguments']['nid']['id'] = 'nid';
+  $handler->display->display_options['arguments']['nid']['table'] = 'comment';
+  $handler->display->display_options['arguments']['nid']['field'] = 'nid';
+  $handler->display->display_options['arguments']['nid']['default_action'] = 'default';
+  $handler->display->display_options['arguments']['nid']['default_argument_type'] = 'node';
+  $handler->display->display_options['arguments']['nid']['summary']['number_of_records'] = '0';
+  $handler->display->display_options['arguments']['nid']['summary']['format'] = 'default_summary';
+  $handler->display->display_options['arguments']['nid']['summary_options']['items_per_page'] = '25';
+  $handler->display->display_options['arguments']['nid']['specify_validation'] = TRUE;
+  $handler->display->display_options['arguments']['nid']['validate']['type'] = 'node';
+  $handler->display->display_options['arguments']['nid']['validate_options']['types'] = array(
+    'inspiration' => 'inspiration',
+  );
+  /* Filter criterion: Comment: Approved */
+  $handler->display->display_options['filters']['status']['id'] = 'status';
+  $handler->display->display_options['filters']['status']['table'] = 'comment';
+  $handler->display->display_options['filters']['status']['field'] = 'status';
+  $handler->display->display_options['filters']['status']['value'] = 1;
+  $handler->display->display_options['filters']['status']['group'] = 1;
+  $handler->display->display_options['filters']['status']['expose']['operator'] = FALSE;
+
+  /* Display: Block */
+  $handler = $view->new_display('block', 'Block', 'block');
+  $export['comments'] = $view;
+
+  $view = new view();
   $view->name = 'inspiration_categories';
   $view->description = '';
   $view->tag = 'default';
@@ -210,7 +322,7 @@ function ecovillagers_ia_views_default_views() {
   $handler->display->display_options['relationships']['uid']['field'] = 'uid';
   $handler->display->display_options['relationships']['uid']['required'] = TRUE;
   $handler->display->display_options['defaults']['fields'] = FALSE;
-  /* Field: User: Head Shot */
+  /* Field: User: Photo */
   $handler->display->display_options['fields']['field_user_head_shot']['id'] = 'field_user_head_shot';
   $handler->display->display_options['fields']['field_user_head_shot']['table'] = 'field_data_field_user_head_shot';
   $handler->display->display_options['fields']['field_user_head_shot']['field'] = 'field_user_head_shot';

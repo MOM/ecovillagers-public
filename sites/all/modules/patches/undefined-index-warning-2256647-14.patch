@@ -1,0 +1,12 @@
+diff --git a/commentsblock.module b/commentsblock.module
+index 8afe616..dedefe3 100644
+--- a/commentsblock.module
++++ b/commentsblock.module
+@@ -172,6 +172,6 @@ function comment_block_static_comments($nid, $build = false, $node = false) {
+   // We remove the comments and only load the form if the user wants this.
+   $comment_form_only = variable_get('commentsblock_display', 0);
+   if ($comment_form_only == 1) {
+-    unset($comments[$nid]['comments']['comments']);
++    $comments[$nid]['comments']['comments'] = array();
+   }
+ }

@@ -47,6 +47,21 @@ function ecovillagers_ia_image_default_styles() {
     ),
   );
 
+  // Exported image style: commenter_thumbnail.
+  $styles['commenter_thumbnail'] = array(
+    'label' => 'Commenter Thumbnail',
+    'effects' => array(
+      4 => array(
+        'name' => 'image_scale_and_crop',
+        'data' => array(
+          'width' => 85,
+          'height' => 85,
+        ),
+        'weight' => 1,
+      ),
+    ),
+  );
+
   // Exported image style: inspiration_thumbnail.
   $styles['inspiration_thumbnail'] = array(
     'label' => 'Inspiration Thumbnail',

@@ -12,3 +12,47 @@ include_once 'ecovillagers_ia.features.inc';
 function ecovillagers_ia_menu_alter(&$items) {
   $items['user/register']['title'] = t("Become a member");
 }
+
+/**
+ * Implements hook_page_build().
+ */
+function ecovillagers_ia_page_build(&$page) {
+  if ($_GET['q'] == 'user/register') {
+    // Hard-code the registration page title.
+    drupal_set_title(t("Ecovillagers Membership"));
+  }
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function ecovillagers_ia_block_info() {
+  $blocks['slogan'] = array(
+    'info' => t('Site slogan'),
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function ecovillagers_ia_block_view($delta = '') {
+  switch ($delta) {
+    case 'slogan':
+      $block['content'] = array(
+        '#markup' => variable_get('site_slogan'),
+      );
+      break;
+  }
+  return $block;
+}
+
+/**
+ * Implements hook_form_comment_form_alter().
+ */
+function ecovillagers_ia_form_comment_form_alter(&$form, &$form_state) {
+  // Zap the informational "Name" field.
+  if ($form['author']['_author']['#type'] == 'item') {
+    $form['author']['_author'] = array();
+  }
+}
