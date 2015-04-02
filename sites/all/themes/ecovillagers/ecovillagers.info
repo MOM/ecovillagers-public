@@ -1,0 +1,19 @@
+name = Ecovillagers
+description = Site theme for ecovillagers.org.
+
+version = VERSION
+core = 7.x
+
+stylesheets[all][] = style.css
+
+regions[header] = Header
+regions[highlighted] = Highlighted
+regions[content] = Content
+regions[sidebar_first] = Sidebar First
+regions[sidebar_second] = Sidebar Second
+regions[footer] = Footer
+regions[page_top] = Page top
+regions[page_bottom] = Page bottom
+
+settings[breadcrumb_display]= 1
+settings[breadcrumb_separator]= '/'
