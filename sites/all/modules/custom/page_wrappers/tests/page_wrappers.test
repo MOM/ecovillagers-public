@@ -1,0 +1,105 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for page_wrappers
+ */
+
+/**
+ * Sets up basic tools for testing Page Wrappers.
+ */
+class PageWrappersTestCase extends DrupalWebTestCase {
+  protected $privileged_user;
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Page Wrappers',
+      'description' => 'Sets up basic tools for testing Page Wrappers',
+      'group' => 'Page Wrappers',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'page_wrappers',
+    ));
+    parent::setUp($modules);
+
+    $permissions = array_merge($permissions, array(
+      'administer site configuration',
+      'create page content',
+      'edit own page content',
+      'administer page wrappers',
+      'create page_wrapper content',
+      'edit own page_wrapper content',
+    ));
+    $this->privileged_user = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->privileged_user);
+
+    // configure page wrapper select to display on page edit form
+    variable_set('page_wrapper_enabled_node_types', array('page' => 'page'));
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    user_cancel(array(), $this->privileged_user->uid, 'user_cancel_delete');
+    parent::tearDown();
+  }
+
+  public function testPageWrappersNode() {
+    // create page wrapper node
+    $edit = array();
+    $edit['title'] = $this->randomName(8);
+    $edit["page_wrappers_html_template[und][0][value]"] = $this->html_template();
+    $this->drupalPost('node/add/page-wrapper', $edit, t('Save'));
+
+    // confirm template is applied to preview. This also confirms .tpl file was created and that the theme
+    // layer hoodoo that pagewrappers relies on to affect page display is working.
+    $this->drupalGet('node/1');
+    $this->assertText('Test Page Wrapper', t('Page wrapper preview displays expected template content'), 'Page Wrappers Node');
+
+    // Create node and assign page wrapper.
+    $edit = array();
+    $edit['title'] = 'Page Wrappers test page';
+    $edit["body[und][0][value]"] = $this->randomName(16);
+    $edit["page_wrappers[new:0][wrapper_nid]"] = 1;
+    $edit["page_wrappers[new:0][ruleset]"] = 1;
+    $edit["page_wrappers[new:0][weight]"] = 0;
+    $this->drupalPost('node/add/page', $edit, t('Save'));
+
+    // Confirm template is applied to node
+    $this->drupalGet('node/2');
+    $this->assertText('Test Page Wrapper', t('Page wrapper correctly assigned to node content'), 'Page Wrappers Node');
+
+  }
+
+  public function testPageWrappersRulesTest() {
+    //Create two page wrappers
+    $edit['title'] = $this->randomName(8);
+    $edit["page_wrappers_html_template[und][0][value]"] = $this->html_template('Ruleset 1');
+    $this->drupalPost('node/add/page-wrapper', $edit, t('Save'));
+
+    $edit['title'] = $this->randomName(8);
+    $edit["page_wrappers_html_template[und][0][value]"] = $this->html_template('Ruleset 2');
+    $this->drupalPost('node/add/page-wrapper', $edit, t('Save'));
+  }
+
+  protected function html_template($custom_text = '') {
+    return "
+Test Page Wrapper
+<p>[messages]</p>
+<p>[title]</p>
+<p>[content]</p>
+<p>$custom_text</p>
+     ";
+  }
+
+}

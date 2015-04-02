@@ -1,0 +1,421 @@
+<?php
+
+/**
+ * @file
+ * Install routine for page wrappers module.
+ *
+ */
+
+/**
+ * Implementation hook_install().
+ */
+function page_wrappers_install() {
+  // change the clone module's cloning method to save-edit cause that's the way we like it.
+  variable_set('clone_method', 'save-edit');
+  _page_wrappers_create_fields();
+}
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function page_wrappers_uninstall() {
+  variable_del('page_wrapper_enabled_node_types');
+  _page_wrappers_delete_nodes();
+  _page_wrappers_delete_fields();
+
+  node_type_delete('page_wrapper');
+  field_purge_batch(1000);
+}
+
+/**
+ * Implementation of hook_schema().
+ */
+function page_wrappers_schema() {
+  $schema['page_wrappers'] = array(
+    'description' => t('TODO: please describe this table!'),
+    'fields' => array(
+      'nid' => array(
+        'description' => t('TODO: please describe this field!'),
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'template' => array(
+        'description' => t('TODO: please describe this field!'),
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+
+  $schema['node_page_wrappers'] = array(
+    'description' => t('TODO: please describe this table!'),
+    'fields' => array(
+      'nid' => array(
+        'description' => t('Node nid.'),
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'wrapper_nid' => array(
+        'description' => t('Nid of the Page Wrapper node.'),
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'ruleset' => array(
+        'type' => 'varchar',
+        'length' => '255',
+        'description' => 'ID for this ruleset. A 1 signifies this as the default page wrapper',
+        'default' => '1',
+        'not null' => TRUE,
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'Weight of assignment.',
+      ),
+    ),
+    'indexes' => array(
+      'nid' => array('nid'),
+      'weight' => array('weight'),
+      'nid_weight' => array('nid', 'weight'),
+      'wrapper_nid' => array('wrapper_nid'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Node and associated field setup for Page Wrappers content type.
+ */
+function _page_wrappers_create_fields() {
+  $t = get_t();
+
+  // implement node type.
+  if (!in_array('page_wrapper', node_type_get_names())) {
+    $type = array(
+      'type' => 'page_wrapper',
+      'name' => $t('Page Wrapper'),
+      'description' => $t('Allows a user to define custom page templates that can then be assigned to specific nodes.'),
+      'base' => 'node_content',
+      'custom' => 1,
+      'modified' => 1,
+      'locked' => 0,
+      'title_label' => $t('Internal Title'),
+      'node_submitted' => 0,
+    );
+    $type = node_type_set_defaults($type);
+    node_type_save($type);
+  }
+  // build list of themes for the theme css select field's options
+  $themes = list_themes();
+  $themes_options = array();
+  foreach ($themes as $theme) {
+    $themes_options[$theme->name] = $theme->info['name'];
+  }
+  $fields = array(
+    // theme css select field
+    'theme_css' => array(
+      'active' => 1,
+      'cardinality' => -1,
+      'deleted' => 0,
+      'entity_types' => array(),
+      'field_name' => 'page_wrappers_theme_css',
+      'foreign keys' => array(),
+      'indexes' => array(
+        'value' => array(
+          0 => 'value',
+        ),
+      ),
+      'locked' => 0,
+      'module' => 'list',
+      'settings' => array(
+        'allowed_values' => $themes_options,
+      ),
+      'translatable' => 0,
+      'type' => 'list_text',
+      '_instance' => array(
+        'bundle' => 'page_wrapper',
+        'default_value' => NULL,
+        'deleted' => 0,
+        'description' => '',
+        'entity_type' => 'node',
+        'field_name' => 'page_wrappers_theme_css',
+        'label' => 'Include Theme CSS',
+        'required' => 0,
+        'settings' => array(
+          'user_register_form' => FALSE,
+        ),
+        'widget' => array(
+          'active' => 1,
+          'module' => 'options',
+          'settings' => array(),
+          'type' => 'options_select',
+          'weight' => 1,
+        ),
+      ),
+    ),
+    // css filefield
+    'css_filefield' => array(
+      'translatable' => '1',
+      'settings' => array(
+        'display_field' => 1,
+        'display_default' => 0,
+        'uri_scheme' => 'public',
+      ),
+      'field_name' => 'page_wrappers_css',
+      'type' => 'file',
+      'active' => '1',
+      'locked' => '0',
+      'cardinality' => '-1',
+      '_instance' => array(
+        'label' => st('Upload a stylesheet'),
+        'widget' => array(
+          'weight' => '-4',
+          'type' => 'file_generic',
+          'active' => 1,
+          'settings' => array(
+            'progress_indicator' => 'throbber',
+          ),
+        ),
+        'settings' => array(
+          'file_directory' => 'page_wrappers/styles',
+          'file_extensions' => 'css',
+          'max_filesize' => '2 MB',
+          'description_field' => 0,
+          'user_register_form' => FALSE,
+        ),
+        'display' => array(
+          'default' => array(
+            'label' => 'above',
+            'type' => 'file_default',
+            'settings' => array(),
+            'weight' => 0,
+          ),
+          'teaser' => array(
+            'type' => 'hidden',
+            'label' => 'above',
+            'settings' => array(),
+            'weight' => 0,
+          ),
+        ),
+        'required' => 0,
+        'description' => '',
+        'field_name' => 'page_wrappers_css',
+        'entity_type' => 'node',
+        'bundle' => 'page_wrapper',
+      ),
+    ),
+    // javascript filefield
+    'js_filefield' => array(
+      'field_name' => 'page_wrappers_js',
+      'type' => 'file',
+      'active' => '1',
+      'locked' => '0',
+      'cardinality' => '-1',
+      '_instance' => array(
+        'label' => st('Upload a script'),
+        'widget' => array(
+          'weight' => '-4',
+          'type' => 'file_generic',
+          'active' => 1,
+          'settings' => array(
+            'progress_indicator' => 'throbber',
+          ),
+        ),
+        'settings' => array(
+          'file_directory' => 'page_wrappers/scripts',
+          'file_extensions' => 'js',
+          'max_filesize' => '2 MB',
+          'description_field' => 0,
+          'user_register_form' => FALSE,
+        ),
+        'display' => array(
+          'default' => array(
+            'label' => 'above',
+            'type' => 'file_default',
+            'settings' => array(),
+            'weight' => 0,
+          ),
+          'teaser' => array(
+            'type' => 'hidden',
+            'label' => 'above',
+            'settings' => array(),
+            'weight' => 0,
+          ),
+        ),
+        'required' => 0,
+        'description' => '',
+        'field_name' => 'page_wrappers_js',
+        'entity_type' => 'node',
+        'bundle' => 'page_wrapper',
+      ),
+    ),
+    // html template
+    'html_template' => array(
+      'field_name' => 'page_wrappers_html_template',
+      'type' => 'text_with_summary',
+      'cardinality' => 1,
+      'settings' => array(),
+      'entity_types' => array('node'),
+      '_instance' => array(
+        'field_name' => 'page_wrappers_html_template',
+        'entity_type' => 'node',
+        'bundle' => 'page_wrapper',
+        'required' => TRUE,
+        'label' => st('HTML Template'),
+        'description' => st('HTML version of the email body.'),
+        'widget' => array(
+          'type' => 'text_with_summary',
+          'weight' => 6,
+          'settings' => array(),
+        ),
+      ),
+    ),
+  );
+
+  foreach ($fields as $key => $values) {
+    $instance = $values['_instance'];
+    unset($values['_instance']);
+
+    field_create_field($values);
+    field_create_instance($instance);
+  }
+}
+
+function _page_wrappers_delete_fields() {
+  $fields = array(
+    'page_wrappers_css',
+    'page_wrappers_js',
+    'page_wrappers_html_template',
+    'page_wrappers_theme_css',
+  );
+  foreach ($fields as $field_name) {
+    $field = field_info_instance('node', $field_name, 'email_wrapper');
+    field_delete_instance($field);
+    $field = field_info_field($field_name);
+    field_delete_field($field);
+  }
+  drupal_set_message(t('Page Wrapper fields deleted.'));
+}
+
+function _page_wrappers_delete_nodes() {
+  require_once 'page_wrappers.module';
+  $nids = page_wrappers_get_nodes();
+  node_delete_multiple($nids);
+  drupal_set_message(t('Page Wrappers have been deleted.'));
+}
+
+/**
+ * Remove the primary key and add an index
+ */
+function page_wrappers_update_7001() {
+  db_drop_primary_key('node_page_wrappers');
+  db_add_index('node_page_wrappers', 'wrapped_nid', array('nid'));
+  db_add_field('node_page_wrappers', 'ruleset', array(
+    'type' => 'varchar',
+    'length' => '255',
+    'description' => 'ID for this ruleset.',
+    'default' => '1',
+    'not null' => TRUE,
+  ));
+  db_add_field('node_page_wrappers', 'weight', array(
+    'type' => 'int',
+    'not null' => TRUE,
+    'default' => 0,
+    'description' => 'Weight of assignment.',
+  ));
+  return array();
+}
+
+/**
+ * Add indexes to tables.
+ */
+function page_wrappers_update_7002() {
+  $ret = array();
+
+  db_drop_index('node_page_wrappers', 'indexes');
+  db_add_index('node_page_wrappers', 'nid', array('nid'));
+  $ret[] = t('Renamed index "indexes" to "nid" on {node_page_wrappers} table.');
+
+
+  db_add_index('node_page_wrappers', 'nid_weight', array('nid', 'weight'));
+  db_add_index('node_page_wrappers', 'wrapper_nid', array('wrapper_nid'));
+  db_add_index('node_page_wrappers', 'weight', array('weight'));
+  $ret[] = t('Added additional indexes to {node_page_wrappers} table.');
+
+  return implode("\n", $ret);
+}
+
+/**
+ * Add option to include a theme's CSS on a page wrapper.
+ */
+function page_wrappers_update_7003() {
+  $themes = list_themes();
+  $themes_options = array();
+  foreach ($themes as $theme) {
+    $themes_options[$theme->name] = $theme->info['name'];
+  }
+  $field = array(
+    'active' => 1,
+    'cardinality' => -1,
+    'deleted' => 0,
+    'entity_types' => array(),
+    'field_name' => 'page_wrappers_theme_css',
+    'foreign keys' => array(),
+    'indexes' => array(
+      'value' => array(
+        0 => 'value',
+      ),
+    ),
+    'locked' => 0,
+    'module' => 'list',
+    'settings' => array(
+      'allowed_values' => $themes_options,
+    ),
+    'translatable' => 0,
+    'type' => 'list_text',
+  );
+  $field_instance = array(
+    'bundle' => 'page_wrapper',
+    'default_value' => NULL,
+    'deleted' => 0,
+    'description' => 'Include all of the CSS from the selected theme in this page wrapper.',
+    'display' => array(
+      'default' => array(
+        'label' => 'above',
+        'module' => 'list',
+        'settings' => array(),
+        'type' => 'list_default',
+        'weight' => 2,
+      ),
+      'teaser' => array(
+        'label' => 'above',
+        'settings' => array(),
+        'type' => 'hidden',
+        'weight' => 0,
+      ),
+    ),
+    'entity_type' => 'node',
+    'field_name' => 'page_wrappers_theme_css',
+    'label' => 'Include Theme CSS',
+    'required' => 0,
+    'settings' => array(
+      'user_register_form' => FALSE,
+    ),
+    'widget' => array(
+      'active' => 1,
+      'module' => 'options',
+      'settings' => array(),
+      'type' => 'options_select',
+      'weight' => 1,
+    ),
+  );
+
+  field_create_field($field);
+  field_create_instance($field_instance);
+}
