@@ -84,8 +84,21 @@ function ecovillagers_ia_views_default_views() {
   $handler->display->display_options['fields']['created']['alter']['path'] = '#comment-[cid]';
   $handler->display->display_options['fields']['created']['alter']['absolute'] = TRUE;
   $handler->display->display_options['fields']['created']['element_label_colon'] = FALSE;
-  $handler->display->display_options['fields']['created']['date_format'] = 'short';
+  $handler->display->display_options['fields']['created']['date_format'] = 'custom';
+  $handler->display->display_options['fields']['created']['custom_date_format'] = 'M. j, Y';
   $handler->display->display_options['fields']['created']['second_date_format'] = 'long';
+  /* Field: Comment: Post date */
+  $handler->display->display_options['fields']['created_1']['id'] = 'created_1';
+  $handler->display->display_options['fields']['created_1']['table'] = 'comment';
+  $handler->display->display_options['fields']['created_1']['field'] = 'created';
+  $handler->display->display_options['fields']['created_1']['label'] = '';
+  $handler->display->display_options['fields']['created_1']['alter']['make_link'] = TRUE;
+  $handler->display->display_options['fields']['created_1']['alter']['path'] = '#comment-[cid]';
+  $handler->display->display_options['fields']['created_1']['alter']['absolute'] = TRUE;
+  $handler->display->display_options['fields']['created_1']['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields']['created_1']['date_format'] = 'custom';
+  $handler->display->display_options['fields']['created_1']['custom_date_format'] = 'g:ia';
+  $handler->display->display_options['fields']['created_1']['second_date_format'] = 'long';
   /* Field: Comment: Comment */
   $handler->display->display_options['fields']['comment_body']['id'] = 'comment_body';
   $handler->display->display_options['fields']['comment_body']['table'] = 'field_data_comment_body';
@@ -340,6 +353,7 @@ function ecovillagers_ia_views_default_views() {
   $handler->display->display_options['fields']['field_user_name_first']['field'] = 'field_user_name_first';
   $handler->display->display_options['fields']['field_user_name_first']['relationship'] = 'uid';
   $handler->display->display_options['fields']['field_user_name_first']['label'] = 'Presented by';
+  $handler->display->display_options['fields']['field_user_name_first']['element_label_colon'] = FALSE;
   /* Field: User: Last Name */
   $handler->display->display_options['fields']['field_user_name_last']['id'] = 'field_user_name_last';
   $handler->display->display_options['fields']['field_user_name_last']['table'] = 'field_data_field_user_name_last';
@@ -351,8 +365,10 @@ function ecovillagers_ia_views_default_views() {
   $handler->display->display_options['fields']['created']['id'] = 'created';
   $handler->display->display_options['fields']['created']['table'] = 'node';
   $handler->display->display_options['fields']['created']['field'] = 'created';
-  $handler->display->display_options['fields']['created']['label'] = 'Published';
-  $handler->display->display_options['fields']['created']['date_format'] = 'medium';
+  $handler->display->display_options['fields']['created']['label'] = '';
+  $handler->display->display_options['fields']['created']['element_label_colon'] = FALSE;
+  $handler->display->display_options['fields']['created']['date_format'] = 'custom';
+  $handler->display->display_options['fields']['created']['custom_date_format'] = 'F j, Y';
   $handler->display->display_options['fields']['created']['second_date_format'] = 'long';
   $handler->display->display_options['defaults']['sorts'] = FALSE;
   $handler->display->display_options['defaults']['arguments'] = FALSE;
@@ -535,7 +551,8 @@ return ($items[0][\'value\'] || in_array(\'authenticated user\', $GLOBALS[\'user
   $handler->display->display_options['fields']['field_inspiration_public_teaser']['id'] = 'field_inspiration_public_teaser';
   $handler->display->display_options['fields']['field_inspiration_public_teaser']['table'] = 'field_data_field_inspiration_public_teaser';
   $handler->display->display_options['fields']['field_inspiration_public_teaser']['field'] = 'field_inspiration_public_teaser';
-  $handler->display->display_options['fields']['field_inspiration_public_teaser']['label'] = 'Public Summary';
+  $handler->display->display_options['fields']['field_inspiration_public_teaser']['label'] = '';
+  $handler->display->display_options['fields']['field_inspiration_public_teaser']['element_label_colon'] = FALSE;
   $handler->display->display_options['defaults']['sorts'] = FALSE;
   $handler->display->display_options['defaults']['arguments'] = FALSE;
   /* Contextual filter: Content: Nid */
@@ -641,14 +658,6 @@ return !($items[0][\'value\'] || in_array(\'authenticated user\', $GLOBALS[\'use
   $handler->display->display_options['fields']['counter']['element_label_colon'] = FALSE;
   $handler->display->display_options['fields']['counter']['counter_start'] = '1';
   $handler->display->display_options['fields']['counter']['reverse'] = 0;
-  /* Field: Content: Slide Headline */
-  $handler->display->display_options['fields']['field_overview_slide_headline']['id'] = 'field_overview_slide_headline';
-  $handler->display->display_options['fields']['field_overview_slide_headline']['table'] = 'field_data_field_overview_slide_headline';
-  $handler->display->display_options['fields']['field_overview_slide_headline']['field'] = 'field_overview_slide_headline';
-  $handler->display->display_options['fields']['field_overview_slide_headline']['label'] = '';
-  $handler->display->display_options['fields']['field_overview_slide_headline']['alter']['make_link'] = TRUE;
-  $handler->display->display_options['fields']['field_overview_slide_headline']['alter']['path'] = 'node/[nid]';
-  $handler->display->display_options['fields']['field_overview_slide_headline']['element_label_colon'] = FALSE;
   /* Field: Content: Slide Image */
   $handler->display->display_options['fields']['field_overview_slide_image']['id'] = 'field_overview_slide_image';
   $handler->display->display_options['fields']['field_overview_slide_image']['table'] = 'field_data_field_overview_slide_image';
@@ -667,6 +676,8 @@ return !($items[0][\'value\'] || in_array(\'authenticated user\', $GLOBALS[\'use
   $handler->display->display_options['fields']['field_overview_slide_blurb']['table'] = 'field_data_field_overview_slide_blurb';
   $handler->display->display_options['fields']['field_overview_slide_blurb']['field'] = 'field_overview_slide_blurb';
   $handler->display->display_options['fields']['field_overview_slide_blurb']['label'] = '';
+  $handler->display->display_options['fields']['field_overview_slide_blurb']['alter']['alter_text'] = TRUE;
+  $handler->display->display_options['fields']['field_overview_slide_blurb']['alter']['text'] = '[field_overview_slide_blurb] <span class="slide-blurb-raquo">&raquo;</span>';
   $handler->display->display_options['fields']['field_overview_slide_blurb']['alter']['make_link'] = TRUE;
   $handler->display->display_options['fields']['field_overview_slide_blurb']['alter']['path'] = 'node/[nid]';
   $handler->display->display_options['fields']['field_overview_slide_blurb']['element_label_colon'] = FALSE;

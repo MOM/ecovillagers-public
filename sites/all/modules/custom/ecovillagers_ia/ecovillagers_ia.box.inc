@@ -26,5 +26,36 @@ function ecovillagers_ia_default_box() {
   );
   $export['anonymous_user_notice'] = $box;
 
+  $box = new stdClass();
+  $box->disabled = FALSE; /* Edit this to true to make a default box disabled initially */
+  $box->api_version = 1;
+  $box->delta = 'footer_home_link';
+  $box->plugin_key = 'simple';
+  $box->title = '';
+  $box->description = 'Footer Home Link/Logo';
+  $box->options = array(
+    'body' => array(
+      'value' => '<p><a href="/">Ecovillagers Cooperative</a></p>',
+      'format' => 'full_html',
+    ),
+  );
+  $export['footer_home_link'] = $box;
+
+  $box = new stdClass();
+  $box->disabled = FALSE; /* Edit this to true to make a default box disabled initially */
+  $box->api_version = 1;
+  $box->delta = 'site_social_links';
+  $box->plugin_key = 'simple';
+  $box->title = '';
+  $box->description = 'Site Social Links';
+  $box->options = array(
+    'body' => array(
+      'value' => '<ul><li><a class="site-social-twitter" href="/">Twitter</a></li><li><a class="site-social-facebook" href="/">Facebook</a></li><li><a class="site-social-youtube" href="/">Youtube</a></li></ul>',
+      'format' => 'full_html',
+    ),
+    'additional_classes' => '',
+  );
+  $export['site_social_links'] = $box;
+
   return $export;
 }

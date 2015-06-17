@@ -84,8 +84,8 @@ function ecovillagers_ia_image_default_styles() {
       1 => array(
         'name' => 'image_scale_and_crop',
         'data' => array(
-          'width' => 480,
-          'height' => 600,
+          'width' => 475,
+          'height' => 486,
         ),
         'weight' => 1,
       ),
