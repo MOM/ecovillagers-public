@@ -4,7 +4,9 @@ description = Site theme for ecovillagers.org.
 version = VERSION
 core = 7.x
 
-stylesheets[all][] = style.css
+stylesheets[all][] = css/style.css
+
+scripts[] = js/ecovillagers-global.js
 
 regions[header] = Header
 regions[highlighted] = Highlighted
