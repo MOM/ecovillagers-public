@@ -46,7 +46,7 @@
     </div> <!-- /#content-wrapper -->
 
     <?php if ($page['sidebar_first']): ?>
-      <div id="sidebar-first" class="sidebar">
+      <div id="sidebar-first" class="sidebar<?php print (count(element_children($page['sidebar_first'])) > 1) ? ' with-bottom' : ' top-only'; ?>">
         <?php print render($page['sidebar_first']); ?>
       </div> <!-- /#sidebar-first -->
     <?php endif; ?>
