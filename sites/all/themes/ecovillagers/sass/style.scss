@@ -508,7 +508,7 @@ body {
   margin: 0 0 0.2em;
 }
 #content {
-  font: 20px/31px $gentium;
+  font: 20px/30px $gentium;
   color: black;
   a {
     color: #248040;
@@ -829,6 +829,11 @@ body.home {
 
   /* slide viewer */
   #content .view-overview-slides {
+    .flexslider {
+      background: none;
+      border: none;
+      border-radius: 0;
+    }
     .views-slideshow-cycle-main-frame {
     }
     .views-slideshow-cycle-main-frame-row {
@@ -851,8 +856,35 @@ body.home {
     }
   }
 }
-/* Non-handheld home page content, i.e., standard slide viewer */
+
+/* =============================================================================== *
+ *  ALL NON-HANDHELD: > 710px                                                      *
+ * =============================================================================== */
 @media #{$non-handheld} {
+  #main-wrapper {
+    text-align: center;
+  }
+  #main {
+    display: inline-block;
+    padding: 35px 0;
+    overflow: hidden; /* contain floats */
+    text-align: left;
+  }
+  #content-wrapper {
+    float: left;
+  }
+  #sidebar-first {
+    float: left;
+    padding-bottom: 55px;
+    #block-views-inspirations-block-author {
+      margin: 35px 10px 20px;
+    }
+    #block-views-inspirations-block-categories {
+      margin: 21px;
+    }
+  }
+
+  /* Non-handheld home page content, i.e., standard slide viewer */
   body.home {
     #page {
       background: white url(../img/home-content-bg.jpg) no-repeat top center;
@@ -878,11 +910,67 @@ body.home {
           left: 12px;
         }
         .views-field-field-overview-slide-blurb {
-          padding: 12px 30px 0;
+          padding: 16px 30px 0;
           font-size: 25px;
           line-height: 30px;
         }
 
+        .flexslider {
+          .flex-control-nav {
+            position: absolute;
+            top: 630px;
+            left: 130px;
+            li {
+              float: left;
+              margin: 0 23px 0 0;
+              a {
+                /* reset flexslider defaults */
+                border: none;
+                border-radius: 0;
+                -webkit-border-radius: 0;
+                box-shadow: none;
+                -webkit-box-shadow: none;
+
+                width: 37px;
+                height: 37px;
+                overflow: hidden;
+                background: none;
+                @include replace-text(url(../img/home-viewer-selection.png), 0, 0);
+                background-position: -37px 0;
+                cursor: pointer;
+                &.flex-active {
+                  background-position: 0 0;
+                }
+              }
+            }
+          }
+          .flex-direction-nav {
+            a {
+              width: 60px;
+              height: 97px;
+              @include replace-text(url(../img/home-viewer-advance.png), 0, 0);
+              position: absolute;
+              top: 441px;
+              left: 0;
+              cursor: pointer;
+              &.flex-prev {
+                left: -100px;
+              }
+              &.flex-next {
+                left: 517px;
+                background-position: -60px 0;
+              }
+              /* override flexslider css */
+              display: block;
+              opacity: 0.8;
+              &:hover {
+                opacity: 1;
+              }
+            }
+          }
+        }
+
+/* Views Slideshow version
         .widget_pager_bottom {
           position: absolute;
           top: 630px;
@@ -924,6 +1012,7 @@ body.home {
             }
           }
         }
+*/
       }
     }
   }
@@ -966,13 +1055,19 @@ body.home {
       background: url(../img/home-viewer-blurb-bg-handheld.png) no-repeat bottom left;
       background-size: 100% auto;
 
+/* Views Slideshow version
       .views-slideshow-cycle-main-frame {
-        width: 96vw; /* leave a clipping area */
+        width: 96vw;   // leave a clipping area
         margin: 0 auto;
       }
       .views-slideshow-cycle-main-frame-row {
-        width: 96vw; /* match the slideshow frame */
+        width: 96vw;   // match the slideshow frame
       }
+
+      .views-slideshow-controls-bottom {
+        display: none;
+      }
+*/
       .views-field-field-overview-slide-image a img {
         width: 100%; /* scale to fill the frame */
         height: auto;
@@ -984,9 +1079,15 @@ body.home {
         line-height: 6.7vw;
       }
 
-      .views-slideshow-controls-bottom {
-        display: none;
+      .flexslider {
+        .flex-control-nav {
+          display: none !important; /* never show */
+        }
+        .flex-direction-nav {
+          display: none !important; /* never show */
+        }
       }
+
     }
   }
   #breadcrumb {
@@ -1204,6 +1305,40 @@ body.home {
       padding-right: 10px;
     }
   }
+  #content-wrapper {
+    width: 57vw;
+    margin-right: 2.5vw;
+  }
+  #sidebar-first {
+    width: 33vw;
+    #block-service-links-service-links {
+      text-align: center;
+      padding: 5px 0 10px;
+      h2 {
+        margin: 0;
+        width: 130px;
+        padding: 0;
+        text-align: left;
+        display: inline-block;
+      }
+      .content {
+        margin: 0 auto;
+        height: 22px;
+        width: 130px;
+        overflow: visible;
+        ul {
+          padding: 0;
+          height: 22px;
+        }
+      }
+    }
+    #block-views-inspirations-block-author {
+      font-size: 22px;
+      line-height: 24px;
+    }
+  }
+
+
   #footer {
     padding: 25px 1vw 15px 3vw;
     #block-ecovillagers-ia-slogan {
@@ -1245,6 +1380,13 @@ body.home {
  * =============================================================================== */
 //@media (min-width: 850px) and (max-width: 949px) and (max-resolution: 1.99dppx), (min-width: 1700px) and (max-width: 1899px) and (min-resolution: 2dppx) {
 @media (min-width: 850px) and (max-width: 949px) and (max-resolution: 143dpi), (min-width: 850px) and (max-width: 949px) and (-webkit-max-device-pixel-ratio: 1.4) {
+  #content-wrapper {
+    width: 60vw;
+    margin-right: 2.5vw;
+  }
+  #sidebar-first {
+    width: 31vw;
+  }
   #footer {
     padding: 25px 15px 15px 3vw;
     #block-ecovillagers-ia-slogan {
