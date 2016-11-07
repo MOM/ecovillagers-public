@@ -1286,6 +1286,10 @@ body.home {
       font-size: 6.3vw;
       line-height: 7.5vw;
     }
+    #block-menu-block-1 {  /* kill this whole block of style for three menu columns */
+      float: left;
+      width: 54vw;
+    }
     .menu-name-main-menu ul.menu {
       font: 3.9vw/5vw $bariol-light;
       margin: 5vw 0 0;
@@ -1306,7 +1310,7 @@ body.home {
     }
     #block-boxes-site-social-links {
       float: left;
-      width: 41vw;
+      width: 31vw;  /* 41vw for three menu columns */
       margin: 3.8vw 0 0 0.5vw;
       ul {
         padding: 1.2vw 0 0 0;
@@ -1331,10 +1335,13 @@ body.home {
       }
     }
     #block-boxes-footer-home-link {
+      clear: left;  /* kill this rule for three menu columns */
+      padding-top: 10px; /* kill this rule for three menu columns */
       p {
         margin-top: 5vw;
       }
       a {
+	margin: 0 auto;  /* kill this rule for three menu columns */
         width: 25.3vw;
         height: 27.6vw;
         background-size: 100%;
@@ -1397,7 +1404,7 @@ body.home {
     }
     #block-menu-block-1 {
       float: left;
-      width: 64vw;
+      width: 44vw;  /* 64vw for three menu columns */
       li.menu-mlid-356,
       li.menu-mlid-359 {
         width: 22.35vw;
@@ -1409,8 +1416,8 @@ body.home {
       a { margin-right: 0; }
     }
     #block-boxes-footer-home-link {
-      clear: left;
-      padding-top: 35px;
+      /* clear: left;  needed for three menu columns */
+      padding-top: 10px;  /* 35px for three menu columns */
       p { margin: 0; }
       a { margin: 0 auto; }
     }
@@ -1445,7 +1452,7 @@ body.home {
     }
     #block-menu-block-1 {
       float: left;
-      width: 64vw;
+      width: 44vw;  /* 64vw for three menu columns */
       ul.menu {
         font-size: 2.4vw;
         line-height: 2.9vw;
@@ -1461,8 +1468,8 @@ body.home {
       a { margin-right: 0; }
     }
     #block-boxes-footer-home-link {
-      clear: left;
-      padding-top: 35px;
+      /* clear: left;  needed for three menu columns */
+      padding-top: 10px;  /* 35px for three menu columns */
       p { margin: 0; }
       a { margin: 0 auto; }
     }
@@ -1510,7 +1517,7 @@ body.home {
     }
     #block-menu-block-1 {
       float: left;
-      width: 560px;
+      width: 360px;  /* 560px for three menu columns */
       ul.menu {
         font-size: 21px;
         line-height: 25px;
