@@ -569,6 +569,22 @@ body {
       margin: 0.3em 0;
     }
   }
+  
+  /* Make YouTube video player responsive, per https://css-tricks.com/NetMag/FluidWidthVideo/Article-FluidWidthVideo.php */
+  .video-container {
+    position:relative;
+    padding-bottom:56.25%;
+    padding-top:30px;
+    height:0;
+    overflow:hidden;
+  }
+  .video-container iframe, .video-container object, .video-container embed {
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+  }
 }
 #block-boxes-anonymous-user-notice,
 #block-views-comments-block {
