@@ -946,6 +946,19 @@ body.home {
       }
     }
   }
+  
+  body.node-type-overview {
+    #content-wrapper {
+      float: none;
+      margin-right: 0;
+      width: 80vw;
+    }
+    #sidebar-first {
+      float: none;
+      width: 80vw;
+      padding: 0;
+    }
+  }
 
   /* Non-handheld home page content, i.e., standard slide viewer */
   body.home {
@@ -1240,6 +1253,14 @@ body.home {
     position: relative; /* container */
     padding-bottom: 3vw;
     min-height: 86.3vw;
+  }
+  body.node-type-overview {
+    #sidebar-first {
+      min-height: auto;
+    }
+    #block-service-links-service-links {
+      margin-bottom: 0;
+    }
   }
   #block-service-links-service-links {
     border-top-width: 1.3vw;
@@ -1578,6 +1599,15 @@ body.home {
       height: 20.7vw;
     }
   }
+  body.node-type-overview {
+    #content-wrapper {
+      width: 970px;
+    }
+    #sidebar-first {
+      width: 970px;
+    }
+  }
+
 }
 
 /* =============================================================================== *
