@@ -996,7 +996,7 @@ body.node-type-overview {
     }
     #content {
       .overview-section {
-	h2, h3, p {
+	h2, h3, p, li {
 	  margin: 1em 65px;
 	  line-height: 1.5em;
 	}
@@ -1326,7 +1326,7 @@ body.node-type-overview {
 	.overview-overlay {
 	  margin: 0;
 	  
-	  h3, p {
+	  h3, p, li {
 	    margin: 0.5em 1em;
 	  }
 	}
@@ -1573,7 +1573,7 @@ body.node-type-overview {
   body.node-type-overview {
     #content {
       .overview-section {
-	h3, p {
+	h3, p, li {
 	  width: 50vw;
 	  margin-right: 5vw
 	}
@@ -1643,7 +1643,7 @@ body.node-type-overview {
   body.node-type-overview {
     #content {
       .overview-section {
-	h3, p {
+	h3, p, li {
 	  width: 50vw;
 	}
 	.overview-overlay {
@@ -1722,7 +1722,7 @@ body.node-type-overview {
   body.node-type-overview {
     #content {
       .overview-section {
-	h3, p {
+	h3, p, li {
 	  width: 50vw;
 	}
 	.overview-overlay {
@@ -1776,7 +1776,7 @@ body.node-type-overview {
   body.node-type-overview {
     #content {
       .overview-section {
-	h3, p {
+	h3, p, li {
 	  width: 600px;
 	}
 	.overview-illustration {
