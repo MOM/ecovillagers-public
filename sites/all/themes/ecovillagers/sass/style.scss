@@ -572,6 +572,7 @@ body {
   
   /* Make YouTube video player responsive, per https://css-tricks.com/NetMag/FluidWidthVideo/Article-FluidWidthVideo.php */
   .video-container {
+    margin: 1em;
     position:relative;
     padding-bottom:56.25%;
     padding-top:30px;
@@ -917,6 +918,48 @@ body.home {
   }
 }
 
+/**
+ * OVERVIEW PAGE
+ */
+body.node-type-overview {
+  #main {
+    padding-top: 0;
+    width: 100%;  /* why is this necessary? */
+  }
+  #breadcrumb {
+    display: none;
+  }
+  #content-wrapper {
+    width: 100%;
+    float: none;
+    margin-right: 0;
+    
+    h1.title {
+      display: none;
+    }
+    .field-name-field-overview-subtitle {
+      display: none;  /* @TODO: figure out how to incorporate this content into the design */
+    }
+  }
+  #content {
+    .overview-section {
+      background-size: 100% auto;
+      background-repeat: no-repeat;
+      
+      .overview-overlay {
+	display: inline-block;
+	margin: 2em 0;
+	background-image: url(../img/overview-text-overlay-bg.png);
+	color: white;
+	
+	a {
+	  color: white;
+	}
+      }
+    }
+  }
+}
+
 /* =============================================================================== *
  *  ALL NON-HANDHELD: > 710px                                                      *
  * =============================================================================== */
@@ -948,15 +991,28 @@ body.home {
   }
   
   body.node-type-overview {
-    #content-wrapper {
-      float: none;
-      margin-right: 0;
-      width: 80vw;
+    #main {
+      padding: 0;
+    }
+    #content {
+      .overview-section {
+	h2, h3, p {
+	  margin: 1em 65px;
+	  line-height: 1.5em;
+	}
+	.overview-illustration {
+	  float: right;
+	}
+      }
     }
     #sidebar-first {
       float: none;
-      width: 80vw;
+      width: 100%;
       padding: 0;
+      
+      #block-service-links-service-links {
+	border-bottom: none;
+      }
     }
   }
 
@@ -1255,8 +1311,55 @@ body.home {
     min-height: 86.3vw;
   }
   body.node-type-overview {
+    #main {
+      padding: 0;
+    }
+    #content {
+      h2, h3, p {
+	line-height: 1.5em;
+	margin: 1em;
+      }
+      h2 {
+	text-align: center;
+      }
+      .overview-section {
+	.overview-overlay {
+	  margin: 0;
+	  
+	  h3, p {
+	    margin: 0.5em 1em;
+	  }
+	}
+	.overview-illustration {
+	  width: 45vw;
+	  display: block;
+	  margin: 0 auto;
+	}
+      }
+
+    }
     #sidebar-first {
       min-height: auto;
+      padding-bottom: 0;
+      
+      #block-service-links-service-links {
+	h2 {
+	  width: 21vw;
+	  padding-right: 37vw;
+	  font-size: 5vw;
+	}
+	ul {
+	  padding: 2px 0 2px 30vw;
+	  top: -2vw;
+	}
+	a {
+	  width: 5vw;
+	  height: 5vw;
+	  img {
+	    width: 5vw;
+	  }
+	}
+      }
     }
     #block-service-links-service-links {
       margin-bottom: 0;
@@ -1467,6 +1570,24 @@ body.home {
       height: 750px;
     }
   }
+  body.node-type-overview {
+    #content {
+      .overview-section {
+	h3, p {
+	  width: 50vw;
+	  margin-right: 5vw
+	}
+	.overview-overlay {
+	  width: 63vw;
+	}
+	.overview-illustration {
+	  margin-right: 7.6vw;
+	  width: 28vw;
+	  height: auto;
+	}
+      }
+    }
+  }
 }
 
 /* =============================================================================== *
@@ -1517,6 +1638,22 @@ body.home {
     }
     #main {
       height: 86.5vw;
+    }
+  }
+  body.node-type-overview {
+    #content {
+      .overview-section {
+	h3, p {
+	  width: 50vw;
+	}
+	.overview-overlay {
+	  width: 63vw;
+	}
+	.overview-illustration {
+	  margin-right: 65px;
+	  width: 240px;
+	}
+      }
     }
   }
 }
@@ -1582,6 +1719,22 @@ body.home {
       height: 87.5vw;
     }
   }
+  body.node-type-overview {
+    #content {
+      .overview-section {
+	h3, p {
+	  width: 50vw;
+	}
+	.overview-overlay {
+	  width: 62vw;
+	}
+	.overview-illustration {
+	  margin-right: 9vw;
+	  width: 240px;
+	}
+      }
+    }
+  }
 }
 
 /* =============================================================================== *
@@ -1599,15 +1752,6 @@ body.home {
       height: 20.7vw;
     }
   }
-  body.node-type-overview {
-    #content-wrapper {
-      width: 970px;
-    }
-    #sidebar-first {
-      width: 970px;
-    }
-  }
-
 }
 
 /* =============================================================================== *
@@ -1627,6 +1771,21 @@ body.home {
     }
     #footer {
       height: 249px;
+    }
+  }
+  body.node-type-overview {
+    #content {
+      .overview-section {
+	h3, p {
+	  width: 600px;
+	}
+	.overview-illustration {
+	  margin-right: 140px;
+	}
+	.overview-overlay {
+	  width: 700px;
+	}
+      }
     }
   }
 }
