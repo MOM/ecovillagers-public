@@ -1360,11 +1360,17 @@ body.node-type-overview {
 	  margin: 0 auto;
 	}
 	.overview-transition {
-	  display: inline-block;
+	  display: inline-block;  /* keep our margins to ourselves */
 	  color: white;
-	  margin: 2vw 5vw;
+	  margin: 2vw 0;
+	  width: 90%;
+	  padding: 0 5%;
 	  font-size: 1em;
 	}
+      }
+      .overview-button a {
+	padding: 0.7em 5%;
+	width: 82%;
       }
 
     }
