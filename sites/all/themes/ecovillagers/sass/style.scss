@@ -957,6 +957,25 @@ body.node-type-overview {
 	}
       }
     }
+    .overview-button {
+      text-align: center;
+      
+      a {
+	display: inline-block;
+	border: 2px #999 solid;
+	border-radius: 7px;
+	background-color: #eee;
+	font-family: Bariol;
+	font-size: 1.2em;
+	color: #666;
+	padding: 0.6em 5em;
+      }
+      a:hover {
+	background-color: #999;
+	color: #ddd;
+	text-decoration: none;
+      }
+    }
   }
 }
 
