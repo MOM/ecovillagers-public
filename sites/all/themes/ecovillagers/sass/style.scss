@@ -1003,6 +1003,11 @@ body.node-type-overview {
 	.overview-illustration {
 	  float: right;
 	}
+	.overview-transition {
+	  display: inline-block;
+	  color: white;
+	  margin: 5vw 65px;
+	}
       }
     }
     #sidebar-first {
@@ -1334,6 +1339,12 @@ body.node-type-overview {
 	  width: 45vw;
 	  display: block;
 	  margin: 0 auto;
+	}
+	.overview-transition {
+	  display: inline-block;
+	  color: white;
+	  margin: 2vw 5vw;
+	  font-size: 1em;
 	}
       }
 
@@ -1784,6 +1795,9 @@ body.node-type-overview {
 	}
 	.overview-overlay {
 	  width: 700px;
+	}
+	.overview-transition {
+	  margin: 60px 65px;
 	}
       }
     }
