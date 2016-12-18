@@ -1,0 +1,154 @@
+<?php
+
+/**
+ * @file
+ * Sets up the base table for our entity and a table to store information about
+ * the entity types.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function sba_message_schema() {
+  $schema = array();
+
+  $schema['sba_message'] = array(
+    'description' => 'The base table for sba_message entities.',
+    'fields' => array(
+      'sba_message_id' => array(
+        'description' => 'Primary Key: Identifier for a sba_message.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The {sba_message_type}.type of this sba_message.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'language' => array(
+        'description' => 'The language of the sba_message.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'name' => array(
+        'description' => 'The name of the sba_message - a human-readable identifier.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the sba_message was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the sba_message was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'data' => array(
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big',
+        'serialize' => TRUE,
+        'description' => 'A serialized array of additional data.',
+      ),
+    ),
+    'primary key' => array('sba_message_id'),
+    'indexes' => array(
+      'type' => array('type'),
+    ),
+  );
+
+  $schema['sba_message_type'] = array(
+    'description' => 'Stores information about defined sba_message types.',
+    'fields' => array(
+      'id' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique sba_message type identifier.',
+      ),
+      'type' => array(
+        'description' => 'The machine-readable name of this sba_message type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'label' => array(
+        'description' => 'The human-readable name of this sba_message type.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'weight' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'The weight of this sba_message type in relation to others.',
+      ),
+      'data' => array(
+        'type' => 'text',
+        'not null' => FALSE,
+        'size' => 'big',
+        'serialize' => TRUE,
+        'description' => 'A serialized array of additional data related to this sba_message type.',
+      ),
+    ) + entity_exportable_schema_fields(),
+    'primary key' => array('id'),
+    'unique keys' => array(
+      'type' => array('type'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function sba_message_uninstall() {
+
+  // Remove fields implemented by this module.
+  _sba_message_delete_fields();
+
+  field_purge_batch(1000);
+}
+
+/**
+ * rename alert table to actions, if it exists.
+ */
+function sba_message_update_7001() {
+  $field_info = field_info_field('field_sba_alert_id');
+  if(!empty($field_info)) {
+    foreach ($field_info['storage']['details']['sql']['FIELD_LOAD_CURRENT'] as $field) {
+      foreach ($field as $key => $value) {
+        db_change_field('field_data_field_sba_alert_id', $value, 'field_sba_action_id' . "_" . $key, $field_info['columns'][$key]);
+        db_change_field('field_revision_field_sba_alert_id', $value, 'field_sba_action_id' . "_" . $key, $field_info['columns'][$key]);
+
+      }
+    }
+
+    db_rename_table('field_data_field_sba_alert_id', 'field_data_field_sba_action_id');
+    db_rename_table('field_revision_field_sba_alert_id', 'field_revision_field_sba_action_id');
+
+    db_update('field_config')
+      ->fields(array('field_name' => 'field_sba_action_id'))
+      ->condition('field_name', 'field_sba_alert_id', '=')
+      ->execute();
+
+    db_update('field_config_instance')
+      ->fields(array('field_name' => 'field_sba_action_id'))
+      ->condition('field_name', 'field_sba_alert_id', '=')
+      ->execute();
+  }
+}

@@ -1,0 +1,414 @@
+<?php
+
+/**
+ * @file
+ * Defines custom fields types for Springobard P2P.
+ */
+
+/**
+ * Implements hook_theme().
+ */
+function springboard_p2p_fields_theme() {
+  return array(
+    'springboard_p2p_fields_campaign_goals' => array(
+      'render element' => 'springboard_p2p_fields_campaign_goals',
+      'file' => 'springboard_p2p_fields.widget.inc',
+      'path' => drupal_get_path('module', 'springboard_p2p_fields') . '/includes',
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_info().
+ */
+function springboard_p2p_fields_field_info() {
+  return array(
+    'springboard_p2p_fields_campaign_goals' => array(
+      'label' => t('Peer to peer goals configuration'),
+      'description' => t('Goals configuration for a peer to peer campaign.'),
+      'default_widget' => 'springboard_p2p_fields_campaign_goals_widget',
+      'default_formatter' => 'hidden',
+      'no_ui' => FALSE,
+      'property_callbacks' => array('springboard_p2p_fields_campaign_goals_property_callback'),
+      'property_type' => 'field_campaign_goals',
+    ),
+    'springboard_p2p_fields_personal_campaign_progress' => array(
+      'label' => t('Peer to peer personal campaign progress'),
+      'description' => t('Progress for a peer to peer personal campaign'),
+      'default_widget' => 'springboard_p2p_fields_personal_campaign_progress_widget',
+      'default_formatter' => 'hidden',
+      'no_ui' => FALSE,
+    ),
+  );
+}
+
+/**
+ * Property callback for the campaign goals.
+ */
+function springboard_p2p_fields_campaign_goals_property_callback(&$info, $entity_type, $field, $instance, $field_type) {
+  $property = &$info[$entity_type]['bundles'][$instance['bundle']]['properties'][$field['field_name']];
+
+  $property['label'] = t('Campaign goal');
+  $property['getter callback'] = 'springboard_p2p_fields_property_field_campaign_goals_get';
+  // Update the property info with the info for goal fields.
+  $property['property info'] = springboard_p2p_fields_property_field_campaign_goals_info();
+}
+
+/**
+ * Defines info for the properties of the field_campaign_goals data structure.
+ */
+function springboard_p2p_fields_property_field_campaign_goals_info() {
+
+  return array(
+    'goal_type' => array(
+      'type' => 'text',
+      'label' => t('Goal type'),
+    ),
+    'fundraising_goal' => array(
+      'type' => 'text',
+      'label' => t('Fundraising goal'),
+    ),
+    'submission_goal' => array(
+      'type' => 'text',
+      'label' => t('Submission goal'),
+    ),
+  );
+}
+
+/**
+ * Callback for getting field property values.
+ */
+function springboard_p2p_fields_property_field_campaign_goals_get($entity, array $options, $name, $entity_type, $info) {
+  $goal = springboard_p2p_fields_get_goal_from_entity($entity);
+
+  $properties = array(
+    'goal_type' => $goal['goal_type'],
+    'fundraising_goal' => '',
+    'submission_goal' => '',
+  );
+
+  if ($goal['goal_type'] == 'amount') {
+    $properties['fundraising_goal'] = $goal['goal_value'];
+  }
+  else {
+    $properties['submission_goal'] = $goal['goal_value'];
+  }
+
+  return $properties;
+}
+
+/**
+ * Get the enabled goal data from an entity.
+ *
+ * @param object $entity
+ *   The entity.
+ *
+ * @return array
+ *   An array with 'goal_type' and 'goal_value" keys, and optionally other
+ *   goal data.
+ *
+ * @todo This only handles a single enabled goal.
+ */
+function springboard_p2p_fields_get_goal_from_entity($entity) {
+  $goal_set_id = $entity->field_p2p_campaign_goals[$entity->language][0]['goal_set_id'];
+  $goals_field = new SpringboardP2pCampaignGoalsField();
+  $goals = $goals_field->load($goal_set_id);
+  foreach ($goals as $goal) {
+    if ($goal['enabled']) {
+      return $goal;
+    }
+  }
+
+  // Somewhat safe default.
+  return array(
+    'goal_type' => 'submissions',
+    'goal_value' => 0,
+  );
+}
+
+/**
+ * Implements hook_field_validate().
+ *
+ * This hook gives us a chance to validate content that's in our
+ * field. We're really only interested in the $items parameter, since
+ * it holds arrays representing content in the field we've defined.
+ * We want to verify that the items only contain RGB hex values like
+ * this: #RRGGBB. If the item validates, we do nothing. If it doesn't
+ * validate, we add our own error notification to the $errors parameter.
+ *
+ * @see field_example_field_widget_error()
+ */
+function springboard_p2p_fields_field_validate($entity_type, $entity, $field, $instance, $langcode, $items, &$errors) {
+
+  SpringboardP2pFieldsFactory::getField($field['type'])
+    ->validate($field, $langcode, $items, $errors);
+}
+
+/**
+ * Implements hook_field_is_empty().
+ *
+ * If any of the rows are enabled and have a nid selected, then the field is
+ * not empty.
+ */
+function springboard_p2p_fields_field_is_empty($item, $field) {
+
+  return SpringboardP2pFieldsFactory::getField($field['type'])
+    ->isEmpty($item);
+}
+
+/**
+ * Implements hook_field_presave().
+ */
+function springboard_p2p_fields_field_presave($entity_type, $entity, $field, $instance, $langcode, &$items) {
+
+  SpringboardP2pFieldsFactory::getField($field['type'])
+    ->presave($items);
+
+}
+
+/**
+ * Implements hook_field_delete().
+ *
+ * Removes externally saved goal data when an entity is deleted.
+ */
+function springboard_p2p_fields_field_delete($entity_type, $entity, $field, $instance, $langcode, &$items) {
+
+  SpringboardP2pFieldsFactory::getField($field['type'])
+    ->delete($items);
+}
+
+/**
+ * Implements hook_field_widget_info().
+ *
+ * Defines the campaign goals widget for selecting goals on a p2p campaign.
+ *
+ * @see field_example_field_widget_form()
+ */
+function springboard_p2p_fields_field_widget_info() {
+  return array(
+    'springboard_p2p_fields_campaign_goals_widget' => array(
+      'label' => t('Peer to peer campaign goals table'),
+      'field types' => array('springboard_p2p_fields_campaign_goals'),
+      'behaviors' => array(
+        'default value' => FIELD_BEHAVIOR_NONE,
+      ),
+    ),
+    'springboard_p2p_fields_personal_campaign_progress_widget' => array(
+      'label' => t('Personal campaign progress widget'),
+      'field types' => array('springboard_p2p_fields_personal_campaign_progress'),
+      'behaviors' => array(
+        'default value' => FIELD_BEHAVIOR_NONE,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_form().
+ *
+ * Defines a table of content types, default forms, goal types, and goals.
+ */
+function springboard_p2p_fields_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+
+  return SpringboardP2pFieldsFactory::getField($field['type'])
+    ->widgetForm($instance, $items, $delta, $element);
+}
+
+/**
+ * Implements hook_field_widget_error().
+ *
+ * @see field_example_field_validate()
+ * @see form_error()
+ */
+function springboard_p2p_fields_field_widget_error($element, $error, $form, &$form_state) {
+  form_error($element, $error['message']);
+}
+
+/**
+ * Generates the table rows array for the form types tables.
+ *
+ * @param array $form
+ *   The admin settings form api array.
+ * @param string $type
+ *   The form_types form key.  Either 'fundraiser_items'
+ *   or 'webform_user_items' depending on which table this is.
+ *
+ * @return array
+ *   An array of rows ready for the table theming.
+ */
+function springboard_p2p_fields_form_types_table_rows(&$form, $type) {
+  $rows = array();
+  $columns = array(
+    'enabled',
+    'nid',
+    'campaign_id',
+    'goal_type',
+    'goal_value',
+  );
+
+  foreach (element_children($form['form_types'][$type]) as $key) {
+    $cells = array();
+    foreach ($columns as $field) {
+      if (isset($form['form_types'][$type][$key][$field])) {
+        $cells[] = drupal_render($form['form_types'][$type][$key][$field]);
+      }
+    }
+
+    $rows[] = array(
+      'data' => $cells,
+    );
+  }
+  return $rows;
+}
+
+/**
+ * Returns a list of fundraiser and webform user enabled content types.
+ *
+ * The webform user enabled types exclude the fundraiser enabled types.
+ *
+ * @return array
+ *   Example.
+ *   array(
+ *     'fundraiser' => array(
+ *       'donation_form' => 'Donation form',
+ *     ),
+ *     'webform_user' => array(
+ *       'petition' => 'Petition',
+ *     ),
+ *   )
+ */
+function springboard_p2p_fields_get_sorted_content_types() {
+  $sorted_types = array(
+    'fundraiser' => array(),
+    'webform_user' => array(),
+  );
+
+  $node_types = node_type_get_names();
+
+  foreach ($node_types as $key => $name) {
+    if (fundraiser_is_donation_type($key)) {
+      $sorted_types['fundraiser'][$key] = $name;
+    }
+    elseif (_webform_user_is_webform_user_node_type($key)) {
+      $sorted_types['webform_user'][$key] = $name;
+    }
+  }
+
+  return $sorted_types;
+}
+
+/**
+ * Gets a list of node nids and titles that are of the given content type.
+ *
+ * @param string $type
+ *   The content type to search for.
+ *
+ * @return array|bool
+ *   An associative array of objects containing the node nids and titles.
+ */
+function springboard_p2p_fields_get_node_options_by_types($type) {
+  $result = db_select('node', 'n')
+    ->fields('n', array('nid', 'title'))
+    ->condition('type', $type, '=')
+    ->condition('status', 0, '>')
+    ->execute()
+    ->fetchAllAssoc('nid');
+
+  return $result;
+}
+
+/**
+ * Formats node objects in an array to be suitable for a form's select options.
+ *
+ * @param array $nodes
+ *   The array of objects as returned by
+ *   springboard_p2p_fields_get_node_options_by_types().
+ *
+ * @return array
+ *   An associative array used for select options.
+ */
+function springboard_p2p_fields_format_node_options($nodes) {
+  $options = array();
+  foreach ($nodes as $node) {
+    $options[$node->nid] = $node->title;
+  }
+
+  return $options;
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ */
+function springboard_p2p_fields_field_formatter_info() {
+  return array(
+    'springboard_p2p_fields_campaign_goals_default' => array(
+      'label' => t('Default'),
+      'description' => t('Displays campaign goals.'),
+      'field types' => array('springboard_p2p_fields_campaign_goals'),
+      'settings' => array(),
+    ),
+    'springboard_p2p_fields_personal_campaign_progress_auto' => array(
+      'label' => t('Auto'),
+      'description' => t('Displays personal campaign progress by either amount or submissions, based on the parent campaign goal type.'),
+      'field types' => array('springboard_p2p_fields_personal_campaign_progress'),
+      'settings' => array(),
+    ),
+    'springboard_p2p_fields_personal_campaign_progress_amount' => array(
+      'label' => t('Amount'),
+      'description' => t('Displays personal campaign progress fundraising amount.'),
+      'field types' => array('springboard_p2p_fields_personal_campaign_progress'),
+      'settings' => array(),
+    ),
+    'springboard_p2p_fields_personal_campaign_progress_submissions' => array(
+      'label' => t('Submissions'),
+      'description' => t('Displays personal campaign submissions count.'),
+      'field types' => array('springboard_p2p_fields_personal_campaign_progress'),
+      'settings' => array(),
+    ),
+    'springboard_p2p_fields_personal_campaign_progress_count' => array(
+      'label' => t('Count'),
+      'description' => t('Displays personal campaign progress count.'),
+      'field types' => array('springboard_p2p_fields_personal_campaign_progress'),
+      'settings' => array(),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ */
+function springboard_p2p_fields_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+
+  return SpringboardP2pFieldsFactory::getField($field['type'])
+    ->formatterView($entity_type, $entity, $items, $display);
+}
+
+/**
+ * Format a goal value based on its type and get a render array.
+ *
+ * @param array $goal
+ *   Array with goal_type and goal_value keys.
+ *
+ * @return array
+ *   Render array for the goal.
+ */
+function springboard_p2p_fields_format_campaign_goal_value($goal) {
+  $prefix = '';
+  $suffix = '';
+  $markup = '';
+
+  if ($goal['goal_type'] == 'amount') {
+    $prefix = '$ ';
+    $markup = number_format($goal['goal_value'], 2);
+  }
+  elseif ($goal['goal_type'] == 'submissions') {
+    $markup = number_format($goal['goal_value']);
+    $suffix = ' submissions';
+  }
+
+  return array(
+    '#prefix' => $prefix,
+    '#suffix' => $suffix,
+    '#markup' => $markup,
+  );
+}

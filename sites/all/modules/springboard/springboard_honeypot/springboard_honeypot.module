@@ -1,0 +1,85 @@
+<?php
+
+/**
+ * @file
+ * Springboard Honeypot module.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_honeypot_menu() {
+  $items['admin/config/content/springboard-honeypot'] = array(
+    'title' => 'Springboard Honeypot configuration',
+    'description' => 'Configure Springboard Honeypot.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_honeypot_admin_form'),
+    'access arguments' => array('administer honeypot'),
+    'file' => 'springboard_honeypot.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_honeypot_reject().
+ */
+function springboard_honeypot_honeypot_reject($form_id, $uid, $type) {
+  $ip = ip_address();
+  springboard_honeypot_add($uid, $ip);
+  if (springboard_honeypot_count($uid, $ip) >= variable_get('springboard_honeypot_count_threshold', 50)) {
+    springboard_honeypot_add_to_blacklist($ip);
+  }
+}
+
+/**
+ * Implements hook_honeypot_form_protections_alter().
+ */
+function springboard_honeypot_honeypot_form_protections_alter(&$options, $form) {
+  // Get our timer blacklist.
+  $blacklist = variable_get('springboard_honeypot_timer_blacklist', '');
+  $blacklist = array_map('trim', explode("\n", $blacklist));
+
+  // Remove the time restriction option from each blacklisted form.
+  if (in_array($form['#form_id'], $blacklist) && $key = array_search('time_restriction', $options)) {
+    unset($options[$key]);
+  }
+}
+
+/**
+ * Add an IP to the blacklist.
+ */
+function springboard_honeypot_add($uid, $ip) {
+  db_insert('springboard_honeypot')
+    ->fields(array(
+      'uid' => $uid,
+      'ip' => $ip,
+      'timestamp' => REQUEST_TIME,
+    ))
+    ->execute();
+}
+
+/**
+ * Count the number of Honeypot rejections for a given IP and uid.
+ */
+function springboard_honeypot_count($uid, $ip) {
+  $query = db_select('springboard_honeypot')
+    ->condition('uid', $uid)
+    ->condition('ip', $ip);
+  return $query->countQuery()->execute()->fetchField();
+}
+
+/**
+ * Immediately add the IP to the system blacklist.
+ */
+function springboard_honeypot_add_to_blacklist($ip) {
+  db_insert('blocked_ips')
+    ->fields(array('ip' => $ip))
+    ->execute();
+  watchdog('springboard_honeypot', 'Banned IP address %ip', array('%ip' => $ip));
+
+  // Now that the IP has been added to the system blacklist, delete the IP from
+  // springboard_honeypot to keep it from growing too large.
+  db_delete('springboard_honeypot')
+    ->condition('ip', $ip)
+    ->execute();
+}

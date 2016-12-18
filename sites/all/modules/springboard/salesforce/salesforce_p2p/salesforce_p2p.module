@@ -1,0 +1,97 @@
+<?php
+
+/**
+ * @file
+ * Provides peer to peer integration support for Salesforce.
+ */
+
+/**
+ * Implements hook_salesforce_queue_create_item_alter()
+ */
+function salesforce_p2p_salesforce_queue_create_item_alter(&$item) {
+
+  // Add a token for the peer to peer category to the peer to peer campaign
+  if ($item['module'] == 'node' && $item['delta'] == 'p2p_campaign') {
+    // Load up the campaign node. Use reset to ensure freshly saved values.
+    $node = node_load($item['drupal_id'], NULL, TRUE);
+    // Wrap the entity to make it easier to work with.
+    $wrapper = entity_metadata_wrapper('node', $node);
+    // Calling raw() will get us the id of the category instead of loading the enire entity.
+    $category_id = $wrapper->field_p2p_category->raw();
+
+    $item['sobject']->fields['P2P_Category__c'] = sprintf('[P2P_Category__c:p2p_category:%d]', $category_id);
+
+    // Allow the category to be updated during the sync.
+    $item['sync_rules']['P2P_Category__c'] = 'always';
+  }
+
+  // Add a token for peer to peer campaign to the personal campaign.
+  if ($item['module'] == 'node' && $item['delta'] == 'p2p_personal_campaign') {
+    // Load up personal campaign node. Use reset to ensure freshly saved values.
+    $node = node_load($item['drupal_id'], NULL, TRUE);
+    // Wrap the entity to make it easier to work with.
+    $wrapper = entity_metadata_wrapper('node', $node);
+    // Calling raw() will get us the id of the category instead of loading the entire entity.
+    $campaign_id = $wrapper->field_p2p_campaign->raw();
+
+    // Relate peer to peer campaign.
+    $item['sobject']->fields['P2P_Campaign__c'] = sprintf('[P2P_Campaign__c:p2p_campaign:%d]', $campaign_id);
+
+    // Relate peer to peer campaigner.
+    $item['sobject']->fields['P2P_Campaigner__c'] = sprintf('[Contact:user:%d]', $node->uid);
+
+    // Relate to the category.
+    // TODO: This node load might be a bit heavy here. Maybe look for a better solution.
+    $category_node = node_load($campaign_id);
+    $wrapper = entity_metadata_wrapper('node', $category_node);
+    $category_id = $wrapper->field_p2p_category->raw();
+
+    $item['sobject']->fields['P2P_Category__c'] = sprintf('[P2P_Category__c:p2p_category:%d]', $category_id);
+  }
+
+  // Donation.
+  if ($item['module'] == 'salesforce_donation' && $item['delta'] == 'donation') {
+
+    $action = db_query("
+      SELECT sa.personal_campaign_nid
+      FROM {fundraiser_donation} fd
+      INNER JOIN {springboard_p2p_personal_campaign_action} sa
+      ON sa.sid = fd.sid
+      WHERE fd.did = :did AND sa.action_type = :action_type
+      ", array(':did' => $item['drupal_id'], ':action_type' => 'fundraiser'))->fetchObject();
+
+    if (!empty($action)) {
+      $item['sobject']->fields['P2P_Personal_Campaign__c'] = sprintf('[P2P_Personal_Campaign__c:p2p_personal_campaign:%d]', $action->personal_campaign_nid);
+    }
+
+  }
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_item_alter.
+ *
+ * This approach is a little unorthadox in terms of altering the item being queued.
+ * Typically hook_salesforce_queue_create_item_alter would be used but there is a timing
+ * issue here where the springboard_p2p_personal_campaign_action has not yet been saved
+ * and therefore we are unable to retrieve the id of the p2p personal campaign like we
+ * do for donations.
+ *
+ * Since the p2p_pcid is saved in a webform component during submission we can grab it
+ * from there for actions. The downside is a query has to be run to determine the component
+ * id of the p2p_pcid field. Once we have the cid we can look in the drupal_object (in this
+ * case a webform submisssion) and retreive the id of the p2p personal campaign.
+ */
+function salesforce_p2p_salesforce_genmap_map_item_alter(&$item, $drupal_object) {
+  if ($item['module'] == 'webform' && $item['object_type'] == 'sb_Actions_Taken__c') {
+    // Check to see if this form has a p2p_pcid field.
+    $p2p_cid_component_id = db_query("SELECT cid FROM {webform_component} WHERE nid = :nid and form_key = 'p2p_pcid'", array(':nid' => $item['delta']))->fetchField();
+    if ($p2p_cid_component_id) {
+      // We have the component id for the p2p personal campaign id. We can use that to get the
+      // value out of the webform submission array.
+      if (array_key_exists($p2p_cid_component_id, $drupal_object->data) && !empty($drupal_object->data[$p2p_cid_component_id]['value'][0])) {
+        $p2p_pcid = $drupal_object->data[$p2p_cid_component_id]['value'][0];
+        $item['sobject']->fields['P2P_Personal_Campaign__c'] = sprintf('[P2P_Personal_Campaign__c:p2p_personal_campaign:%d]', $p2p_pcid);
+      }
+    }
+  }
+}

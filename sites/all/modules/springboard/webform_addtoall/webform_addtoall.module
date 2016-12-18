@@ -1,0 +1,157 @@
+<?php
+
+/**
+ * @file
+ * TODO: Enter file description here.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function webform_addtoall_permission() {
+  return array(
+    'add components to any webform type' => array(
+      'title' => t('add components to any webform type'),
+      'description' => t('Add components to any webform'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function webform_addtoall_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id == 'webform_component_edit_form' && user_access('add components to any webform type')) {
+    $node_names = node_type_get_names();
+    $webform_types = array();
+    $types = variable_get('webform_node_types', array('webform'));
+    foreach ($types as $key => $value) {
+      if (is_numeric($key) && $value) {
+        $webform_types[$value] = $value;
+      }
+    }
+    $webform_names = array_intersect_key($node_names, $webform_types);
+    $form['addtoall'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Add to all'),
+      '#weight' => 10,
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#description' => 'Check the boxes below to add this webform component to all of the webforms of that type.',
+    );
+    $form['addtoall']['webform_types'] = array(
+      '#type' => 'checkboxes',
+      '#title' => t('Webform content types'),
+      '#options' => $webform_names,
+      '#description' => t(''),
+    );
+    $form['#submit'][] = 'webform_addtoall_form_submit';
+  }
+}
+
+/**
+ * Submit handler added by webform_addtoall_form_alter().
+ */
+function webform_addtoall_form_submit($form, &$form_state) {
+  // Grab the selected types to clone to and process each one.
+  foreach ($form_state['values']['addtoall']['webform_types'] as $type) {
+    if ($type) {
+      // Build a list of nids for each form type.
+      $result = db_query("SELECT nid FROM {node} WHERE type = :type ", array(':type' => $type));
+      $nids = array();
+      while ($obj = $result->fetchObject()) {
+        $nids[] = $obj->nid;
+      }
+      // Clone the component to these nodes.
+      webform_addtoall_component_clone($nids, $form_state['values']);
+    }
+  }
+}
+
+/**
+ * Clones the component to mulitple nodes after checking for duplicate component.
+ *
+ * @param $nids
+ *       An array of node ids.
+ * @param $form_values
+ *       An array of form values from $form_state['values']
+ */
+function webform_addtoall_component_clone($nids, $form_values) {
+  // Set source component info
+  $source_node = node_load($form_values['nid'], NULL, TRUE);
+  $source_form_key = $form_values['form_key'];
+  $source_pid = $form_values['pid'];
+  // Not all components have a parent, act accordingly.
+  if ($source_pid) {
+    $source_pid_form_key =  $source_node->webform['components'][$source_pid]['form_key'];
+  }
+  else {
+    $source_pid_form_key = FALSE;
+  }
+  $source_weight = $form_values['weight'];
+  foreach ($nids as $nid) {
+    // Don't do anything if this is the source node
+    if ($nid != $source_node->nid) {
+      // Basic cleanup and prep of the $form_values
+      $form_values = webform_addtoall_component_cleanup($form_values, $nid);
+      // Make sure destination node is a proper webform, or don't clone into it.
+      $node = node_load($nid, NULL, TRUE);
+      if (!webform_ensure_record($node)) {
+        $form_values['clone'] = FALSE;
+      }
+      // Check each component  on the destination node for parent and source form_keys
+      foreach ($node->webform['components'] as $pid => $component) {
+        if ($component['form_key'] == $source_pid_form_key) {
+          $form_values['pid'] = $pid;
+          $form_values['weight'] = $source_weight;
+        }
+        elseif ($component['form_key'] == $source_form_key) {
+          $form_values['clone'] = FALSE;
+        }
+      }
+      // Unless otherwise noted, clone the component
+      if ($form_values['clone']) {
+        webform_component_insert($form_values);
+        $message_link = l($node->title, 'node/' . $nid);
+        drupal_set_message( t('Component %name cloned to !link of type %type.', array('%name' => $form_values['name'], '!link' => $message_link, '%type' => $node->type)) ); // Coder: This is ok.
+      }
+    }
+  }
+}
+
+/**
+ * Cleanup the component form values
+ * This sets some default values for cloning the component fields to other nodes.
+ * It also removes empty values for the "extra" , which is stored as a serialized array
+ *
+ * @param $form_values
+ *       An array of form values from $form_state['values']
+ * @param $nid
+ *      Node id as integer
+ */
+function webform_addtoall_component_cleanup($form_values, $nid) {
+  // Change component data to reflect the node we are cloing to.
+  $form_values['nid'] = $nid;
+  // Set default values for a fresh component
+  $form_values['cid'] = NULL;
+  $form_values['clone'] = TRUE;
+  $form_values['pid'] = 0;
+  $form_values['weight'] = 100;
+  // Remove empty extra values.
+  if (isset($form_values['extra'])) {
+    foreach ($form_values['extra'] as $key => $value) {
+      if ($value  === '' && !isset($form['display'][$key]['#options'][''])) {
+        unset($form_values['extra'][$key]);
+      }
+    }
+  }
+  // Remove empty attribute values.
+  if (isset($form_values['extra']['attributes'])) {
+    foreach ($form_values['extra']['attributes'] as $key => $value) {
+      if ($value === '') {
+        unset($form_values['extra']['attributes'][$key]);
+      }
+    }
+  }
+  return $form_values;
+}

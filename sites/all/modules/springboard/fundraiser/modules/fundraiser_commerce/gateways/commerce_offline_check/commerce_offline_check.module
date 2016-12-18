@@ -1,0 +1,61 @@
+<?php
+/**
+ * @file
+ * Code for the Bill Me Later feature.
+ */
+
+include_once 'includes/commerce_offline_check.inc';
+
+function commerce_offline_check_fundraiser_commerce_fundraiser_gateway_info() {
+  return array(
+    'payment_method' => array('offline_check'),
+    'form callback' => 'commerce_offline_check_submit_form',
+    'charge callback' => 'commerce_offline_check_fundraiser_commerce_charge',
+  );
+}
+
+function commerce_offline_check_commerce_payment_method_info() {
+  $payment_methods = array();
+  $payment_methods['offline_check'] = array(
+    'title' => t('Offline Check'),
+    'description' => t('Allows checking account information to be collected for offline payments.'),
+    'active' => TRUE,
+    'fieldable' => TRUE,
+  );
+  return $payment_methods;
+}
+
+function commerce_offline_check_commerce_order_status_info() {
+  $status = array(
+    'offline_check' => array(
+      'name' => 'offline_check',
+      'title' => 'Offline Check',
+      'state' => 'complete',
+    ),
+  );
+  return $status;
+}
+
+function commerce_offline_check_commerce_payment_transaction_status_info() {
+  $statuses = array();
+    $statuses['offline_check'] = array(
+      'status' => 'complete',
+      'title' => 'Offline Check',
+      'icon' => '',
+      'total' => TRUE,
+    );
+  return $statuses;
+}
+
+/**
+ * Implements hook_fundraiser_donation_success().
+ */
+function commerce_offline_check_fundraiser_donation_success($donation) {
+  if($donation->gateway['gateway_details']['method_id'] == 'offline_check') {
+    _fundraiser_commerce_update_order_status('offline_check', $donation->did);
+    $donation->status = 'offline_check';
+    $donation->status_label = _fundraiser_commerce_get_label_by_status('offline_check');
+    $donation->status_charged = _fundraiser_commerce_get_charged_by_status('offline_check');
+  }
+}
+

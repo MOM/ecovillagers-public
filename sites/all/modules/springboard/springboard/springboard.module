@@ -1,0 +1,493 @@
+<?php
+
+/**
+ * @file
+ * Provides a admin facing interface to the Springboard system.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function springboard_permission() {
+  return array(
+    'administer springboard' => array(
+      'title' => t('Administer Springboard'),
+      'description' => t('Perform administration tasks for springboard.'),
+    ),
+    'access springboard dashboard' => array(
+      'title' => t('Access the Springboard dashboard'),
+      'description' => t('Access the main landing page for springboard.'),
+    ),
+    'administer springboard dashboard' => array(
+      'title' => t('Administer the Springboard dashboard'),
+      'description' => t('Change available panes and other settings for the main landing page for springboard.')
+    )
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_menu() {
+  $items = array();
+
+  // Springboard task list.
+  $items['admin/springboard'] = array(
+    'title' => 'Springboard',
+    'description' => 'Access reports and site maintenance tasks.',
+    'access arguments' => array('access springboard dashboard'),
+    'page callback' => 'springboard_admin_dashboard',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => -5,
+    );
+  // Springboard reports admin.
+  $items['admin/springboard/reports'] = array(
+    'title' => 'Reports',
+    'description' => 'View Springboard-related reports.',
+    'page callback' => 'system_admin_menu_block_page',
+    'module' => 'system',
+    'file path' => drupal_get_path('module', 'system'),
+    'file' => 'system.admin.inc',
+    'access arguments' => array('administer springboard'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => -3,
+  );
+  // Springboard settings list.
+  $items['admin/springboard/options'] = array(
+    'title' => 'Settings',
+    'description' => 'Configure Springboard modules.',
+    'page callback' => 'system_admin_menu_block_page',
+    'module' => 'system',
+    'file path' => drupal_get_path('module', 'system'),
+    'file' => 'system.admin.inc',
+    'access arguments' => array('administer springboard'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => -2,
+  );
+  // Springboard dashboard settings.
+  $items['admin/springboard/settings/springboard'] = array(
+    'title' => 'Springboard',
+    'description' => 'Configure Springboard.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_admin_settings'),
+    'access arguments' => array('administer springboard'),
+    'file' => 'springboard.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 7,
+  );
+  // Springboard dashboard settings.
+  $items['admin/springboard/settings/dashboard'] = array(
+    'title' => 'Springboard Dashboard Configuration',
+    'description' => 'Configure Springboard dashboard.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_dashboard_settings'),
+    'access arguments' => array('administer springboard dashboard'),
+    'file' => 'springboard.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => -5,
+  );
+  // Springboard Help
+  $items['admin/springboard/help'] = array(
+    'title' => 'Help',
+    'description' => 'Get help using Springboard.',
+    'page callback' => 'springboard_help_page',
+    'access arguments' => array('administer springboard'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 99,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_menu().
+ * Build Springboard admin menu from existing modules' paths.
+ */
+function springboard_menu_alter(&$items) {
+
+}
+
+/**
+ * Implements hook_theme().
+ */
+function springboard_theme($existing, $type, $theme, $path) {
+  return array(
+    'springboard_sf_status' => array(
+      'variables' => array('status' => '', 'identity' => array(), 'batch_status' => '', 'queue' => ''),
+      'template' => '/templates/springboard-sf-status',
+    ),
+    'springboard_help' => array(
+      'variables' => array('help_array' => array()),
+      'template' => '/templates/springboard-help',
+    ),
+  );
+}
+
+/**
+ * Implements hook_init().
+ *
+ * Sets some default settings in JS for other modules to use.
+ */
+function springboard_init() {
+  $settings = array(
+    'springboard' => array(
+      'cookie_path' => ini_get('session.cookie_path'),
+    ),
+  );
+
+  drupal_add_js($settings, 'setting');
+}
+
+/**
+ * Menu callback. Springboard dashboard page.
+ */
+function springboard_admin_dashboard() {
+  $content = '<div class="springboard-dashboard dashboard row-fluid">';
+  // Load the enabled panes for the dashboard.
+  $panes = module_invoke_all('springboard_dashboard_panes');
+  drupal_alter('springboard_dashboard_panes', $panes);
+  $enabled_panes = variable_get('springboard_enabled_panes', array());
+  // Sort panes based on weight. Weight is current hard-coded.
+  uasort($panes, 'drupal_sort_weight');
+  $column_left = '';
+  $column_right = '';
+  $column_bottom = '';
+  foreach ($panes as $pane_key => $pane) {
+    if (!empty($pane['content']) && !empty($enabled_panes[$pane_key])) {
+
+      if ($pane['position'] == 'column_left') {
+        $column_left .= '<div class="springboard-pane ' . drupal_clean_css_identifier($pane_key) . '">' . $pane['content'] . '</div>';
+      }
+      else if ($pane['position'] == 'column_right') {
+        $column_right .= '<div class="springboard-pane ' . drupal_clean_css_identifier($pane_key) . '">' . $pane['content'] . '</div>';
+      }
+      else {
+        $column_bottom .= '<div class="springboard-pane ' . drupal_clean_css_identifier($pane_key) . '">' . $pane['content'] . '</div>';
+      }
+    }
+  }
+  $content .= '<div class="springboard-col span8">' . $column_left . "</div>";
+  $content .= '<div class="springboard-col span4">' . $column_right . "</div>";
+  $content .= '<div class="springboard-col sb-col-bottom span12">' . $column_bottom . "</div>";
+  $content .= '</div>';
+  return $content;
+}
+
+/**
+ * Menu callback. Springboard help.
+ */
+function springboard_help_page() {
+  $help_array = module_invoke_all('springboard_help');
+  drupal_alter('springboard_help', $help_array);
+  return theme('springboard_help', array('help_array' => $help_array));
+}
+
+/**
+ * Implements hook_springboard_help().
+ */
+function springboard_springboard_help() {
+  $help_array = array();
+  $help_array[t('Issue Tracker')] = array(
+    t('The Springboard project issue tracker is hosted on !issue_tracker',
+      array('!issue_tracker' => l(t('drupal.org'), 'http://drupal.org/project/springboard'))),
+  );
+  return $help_array;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function springboard_block_info() {
+  $blocks = array();
+  $blocks['springboard_sf_status'] = array(
+    'info' => t('Salesforce Status'),
+    'cache' => DRUPAL_NO_CACHE,
+
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function springboard_block_view($delta) {
+  switch ($delta) {
+    case 'springboard_sf_status':
+      return array('subject' => t('Sync Status'), 'content' => _springboard_sf_status());
+    break;
+  }
+}
+/**
+ * Implements hook_springboard_dashboard_panes().
+ */
+function springboard_springboard_dashboard_panes() {
+  $sf_status = module_invoke('springboard', 'block_view', 'springboard_sf_status');
+  $panes['springboard_sf_status'] = array(
+    'label' => $sf_status ['subject'],
+    'description' => $sf_status ['subject'],
+    'content' => $sf_status['content'],
+    'position' => 'column_right',
+    'weight' => 1,
+  );
+  return $panes;
+}
+
+/**
+ * Hook callback. For the Springboard Salesforce Status pane.
+ */
+function _springboard_sf_status() {
+  $output = '';
+  if (module_exists('salesforce')) {
+    $identity = array();
+    // Call on the module to get the current connection status
+    $sf = salesforce_get_api();
+    $status = FALSE;
+    if ($sf->isAuthorized()) {
+      $status = TRUE;
+      $identity = $sf->getIdentity();
+    }
+    else {
+      $status = FALSE;
+    }
+    // Latest batch # total items :: success :: fail.
+    $batch_status = t('Batch info unavailable, please install Salesforce Log.');
+    if (module_exists('salesforce_log')) {
+      $query = db_select('salesforce_log_batch', 'sflog')
+        ->fields('sflog')
+        ->orderBy('bid', 'DESC')
+        ->range(0, 1)
+        ->execute();
+      $batch = $query->fetchObject();
+      if ($batch) {
+        $batch_status = t('<a href="/springboard/reports/integration-reports/item?bid=@id">Batch # @id</a> of @record_count items processed with <span class="successes">@success_count successes</span> and <span class="failures">@fail_count failures</span>.',
+          array(
+          '@id' => $batch->bid,
+          '@record_count' => $batch->count,
+          '@success_count' => $batch->successes,
+          '@fail_count' => $batch->failures,
+        ));
+      }
+      else {
+        $batch_status = t('No batches processed yet.');
+      }
+    }
+    $queue = (module_exists('salesforce_queue') && $status) ? drupal_get_form('springboard_dashboard_queue') : '';
+    return theme('springboard_sf_status', array('status' => $status, 'identity' => $identity, 'batch_status' => $batch_status, 'queue' => $queue));
+  }
+  return 'status';
+}
+
+/**
+ * Springboard dashboard queue processor button
+ */
+function springboard_dashboard_queue() {
+  $form = array();
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Run Springboard Sync'),
+    '#submit' => array('springboard_dashboard_queue_submit'),
+  );
+  return $form;
+}
+
+/**
+ * Submit handler for Springboard dashboard queue processor button
+ */
+function springboard_dashboard_queue_submit(&$form_state) {
+  salesforce_queue_process_queue();
+}
+
+/**
+ * Additional universal behaviors.
+ */
+
+/**
+ * Implements hook_form_alter().
+ */
+function springboard_form_alter(&$form, &$form_state, $form_id) {
+  // Alter the webform client form.
+  // Why hook_form_alter and not hook_form_FORM_ID_alter?
+  // Because webform's form id varies: webform_client_form_NID.
+  if (strstr($form_id, 'webform_client_form') !== FALSE) {
+    // Include the file with the user profile list. TODO for effeciency, move user profile list to .module
+    module_load_include('inc', 'springboard', 'springboard.admin');
+    $user_profile_fields = _springboard_default_user_profile();
+    // For each user profile, update the field with the given value.
+    foreach ($user_profile_fields as $user_profile_field) {
+      $field_name = $user_profile_field['field_name'];
+      $input_class = isset($user_profile_field['extra']['classes']) ? $user_profile_field['extra']['classes'] : 'input-medium';
+      $field = _springboard_get_form_field($form, $field_name);
+      $field['#attributes']['class'][] = $input_class;
+      $form = _springboard_update_form_field($form, $field_name, $field);
+    }
+  }
+}
+
+/**
+ * Given a standard form array. Locate a given key and return it.
+ * Recursive.
+ */
+function _springboard_get_form_field($form, $field_key) {
+  // Walks a given form looking for the given key. Returns it when found.
+  foreach (element_children($form) as $child) {
+    if ($child == $field_key) {
+      // Return the found array.
+      return $form[$child];
+    }
+    else {
+      // Check this child for other children.
+      $found = _springboard_get_form_field($form[$child], $field_key);
+      if (!empty($found)) {
+        return $found;
+      }
+    }
+  }
+}
+
+/**
+ * Given a standard form array. Locate a given key and update it.
+ * Recursive.
+ */
+function _springboard_update_form_field($form, $field_key, $new_field) {
+  // Walks a given form looking for the given key. Returns it when found.
+  foreach (element_children($form) as $child) {
+    if ($child == $field_key) {
+      // Update the array.
+      $form[$child] = array_merge($form[$child], $new_field);
+    }
+    else {
+      // Check this child for other children.
+      $form[$child] = _springboard_update_form_field($form[$child], $field_key, $new_field);
+    }
+  }
+  return $form;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Hides default and custom market source fields from users on the user edit
+ * page.
+ */
+function springboard_form_user_profile_form_alter(&$form, $form_state) {
+
+  // User with permission can view the hidden groups
+  if (user_access('administer users')) {
+    return;
+  }
+  $group = 'group_profile_admin';
+  if (!empty($form['#groups'][$group]->children)) {
+    foreach ($form['#groups'][$group]->children as $field_name) {
+      $form[$field_name]['#access'] = FALSE;
+    }
+  }
+
+}
+
+/**
+ * Helper function.
+ *
+ * Useful for update scripts in any module that implements
+ * hook_springboard_dashboard_panes().
+ *
+ * Enables all dashboard panes that are not explicitly set to "off".
+ */
+function springboard_enable_new_panes() {
+  $panes = module_invoke_all('springboard_dashboard_panes');
+  drupal_alter('springboard_dashboard_panes', $panes);
+  foreach ($panes as $name => $info) {
+    $panes[$name] = $info['label'];
+  }
+  $enabled_panes = variable_get('springboard_enabled_panes', array());
+  foreach($panes as $key => $pane) {
+    if(!in_array($key, $enabled_panes)) {
+      $enabled_panes[$key] = $key;
+      watchdog('springboard', 'Springboard dashboard @key pane enabled.', array('@key' => $key));
+    }
+  }
+  variable_set('springboard_enabled_panes', $enabled_panes);
+}
+
+/**
+ * Implements hook_modules_enabled().
+ */
+function springboard_modules_enabled($modules) {
+  // Get the Springboard roles.
+  $sb_admin_role = user_role_load_by_name('Springboard administrator');
+  $sb_editor_role = user_role_load_by_name('Springboard editor');
+
+  if (in_array('springboard_target', $modules)) {
+    // Set Springboard administrator permissions for targets.
+    if ($sb_admin_role) {
+      user_role_grant_permissions($sb_admin_role->rid, array(
+        'add target to action',
+        'delete targets',
+        'edit targets',
+        'create targets',
+        'view targets',
+        )
+      );
+    }
+
+    // Set Springboard editor permissions for targets.
+    if ($sb_editor_role) {
+      user_role_grant_permissions($sb_editor_role->rid, array(
+        'add target to action',
+        'view targets',
+        )
+      );
+    }
+  }
+
+  if (in_array('sba_message_action', $modules)) {
+    // Set Springboard administrator permissions for targets.
+    if ($sb_admin_role) {
+      user_role_grant_permissions($sb_admin_role->rid, array(
+        'create sba_message_action content',
+        'edit own sba_message_action content',
+        'edit any sba_message_action content',
+        'delete own sba_message_action content',
+        'delete any sba_message_action content',
+        )
+      );
+    }
+
+    // Set Springboard editor permissions for targets.
+    if ($sb_editor_role) {
+      user_role_grant_permissions($sb_editor_role->rid, array(
+        'create sba_message_action content',
+        'edit own sba_message_action content',
+        'edit any sba_message_action content',
+        'delete own sba_message_action content',
+        'delete any sba_message_action content',
+        )
+      );
+    }
+  }
+
+  if (in_array('springboard_petition', $modules)) {
+    // Set Springboard administrator permissions for targets.
+    if ($sb_admin_role) {
+      user_role_grant_permissions($sb_admin_role->rid, array(
+        'create springboard_petition content',
+        'edit own springboard_petition content',
+        'edit any springboard_petition content',
+        'delete own springboard_petition content',
+        'delete any springboard_petition content',
+        )
+      );
+    }
+
+    // Set Springboard editor permissions for targets.
+    if ($sb_editor_role) {
+      user_role_grant_permissions($sb_editor_role->rid, array(
+        'create springboard_petition content',
+        'edit own springboard_petition content',
+        'edit any springboard_petition content',
+        'delete own springboard_petition content',
+        'delete any springboard_petition content',
+        )
+      );
+    }
+  }
+}

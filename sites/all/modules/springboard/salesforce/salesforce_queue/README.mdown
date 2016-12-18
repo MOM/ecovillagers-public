@@ -1,0 +1,295 @@
+# Salesforce Queue
+
+Provide a means of collecting instructions to send to Salesforce and then
+executing those instructions in logically ordered batches.  Its primary goals
+are:
+
+  * Store communication requests for Salesforce
+  * Execute those requests in a logical order
+  * Minimize the number of individual requests to Salesforce
+  * Minimize the chance of communication error with Salesforce
+  * Maximize the ability to recover in the event of error
+  * Minimize its resource requirements when processing requests
+
+This module strives to be intelligent and do everything automagickally for you,
+with the limitation of that it only receives and processes specific Salesforce
+instructions.
+
+
+## Why build a custom queue system?
+
+Although Drupal ships with its own built in queue system, and there are numerous
+3rd party queue systems out there that we could take advantage of, none of them
+could meet the unique needs required to queue and batch requests to Salesforce
+in a rapid request environment for complex mapping schemes.
+
+**Queue items are processed in batches,** as opposed to one item at a time.
+Salesforce has a rolling maximum number of requests that can be made in a 24
+hour period, and high traffic sites with tremendous user feedback have been
+known to exceed this limit when requests are sent to Salesforce individually.
+Therefore, the many items need to be taken from the queue at once and grouped
+into batches that can be sent to Salesforce in one request.
+
+**Items must be processed in the order they were received.** Queue items can
+have dependencies on other queue items, requiring that items that were submitted
+into the queue earlier be processed before items that were submitted later.
+For example, two queue items request to have a 'Contact' and 'Account' record
+created in Salesforce that refer to the same person.  The 'Contact' record would
+be created first, then the 'Account' record would be created and refer to the
+prior 'Contact' record in Salesforce.  If the 'Account' record were created
+first, it would fail because there would not yet be a 'Contact' record to refer
+to.
+
+Due to the two above requirements, only one processor can work on the queue at
+any given time, and when a batch of queue items are claimed the entire queue
+must be leased in order to prevent the possibility of overlapping threads
+requesting a batch simultaneously.  Also, to ensure overlapping threads do not
+erroneously release the queue, it has also required that the queue is leased
+with a key and can only be release prior to its lease expiring when the
+appropriate key is used.  This approach to a queue could not be found elsewhere.
+
+
+## Types of queues
+
+Items are segregated into separate queues, the default being "new", "retry" and
+"fail".  If no queue is specified when adding an item to a queue, then the item
+will automatically be added to the "new" queue.  When claiming items, you can
+specify to claim items from only a specific queue or all queues. Any number of
+arbitrary queues may be created by merely adding an item with a name of the
+queue you wish to create.
+
+The system also has a concept of which queues it "tracks" and which queues it
+"ignores".  By default, it tracks the "new" and "retry" queues and ignores the
+"fail" queues.  This allows the ability to work with multiple queues
+simultaneously while ignoring others.  Any number of arbitrary queues may be
+added to the tracked queues list on the Salesforce Queue configuration page.
+
+
+## Configuration
+
+Config page: admin/config/salesforce/salesforce-queue
+
+  * **Maximum items to process:** The maximum number of items to claim from the
+    queue and process in one thread.  Defaults to 1000.  Change this value if
+    you find that the processor requires too much system resources when
+    processing the queue.
+  * **Maximum retries of a queue Item:** If an item in the "new" queue fails,
+    `salesforce_queue` will re-queue it into the "retry" queue and start a
+    counter.  This value is the number of times the processor should attempt to
+    execute the item's requests before being moved into the "fail" queue.
+    Defaults to 5.
+  * **Queue lease limit:** When items are claimed from the queue, the claimer is
+    granted a lease preventing any other thread from being able to claim items
+    from the queue when the lease is active.  The claimer is expected to release
+    the lease when when it has completed its work.  However, in the case where
+    the claimer has either forgotten to release the batch, or has gotten caught
+    up in its work and is taking too long, the lease will eventually expire
+    allowing another thread to finally have access to claim items from the
+    queue. Specify the length of time that lease should be.  Defaults to 1 hour.
+    Change this time if you find processes take over an hour and you want to
+    grant more time or restrict it.
+  * **Minimum cron frequency:** The minimum amount of time that has to pass
+    before processing the queue will be attempted once again.  Defaults to 1
+    minute.  You will most likely want to change this time if your processing
+    takes longer than your cron run frequencies and you are continuously getting
+    reports that you cannot process the queue because it is already leased.
+  * **Queue sort order for Salesforce objects:** Decides which order Salesforce
+    objects should be processed.  This is effectively declaring the dependency
+    tree of your Salesforce instance, where the most independent objects would
+    be closer to the top and the most dependent objects on the bottom.  For
+    example, if ObjectA references ObjectB, then ObjectB should be placed above
+    ObjectA in the list.
+  * **Tracked queues of the multi-queue processor:** If you have added items to
+    queues other than the default ones, those other queues will appear here.
+    You can add those arbitrary other queues to the tracked queues list so that
+    the multi-queue processor will add items from those queues and process them
+    along with the rest. _NOTE: This configuration option is hidden unless the
+    `salesforce_queue_tracked_queues_show_config` variable is set to `TRUE`._
+
+
+## Queue an item
+
+Load a new `SalesforceQueue` class by providing the name of the queue to work
+with.  If no queue name is provided, items created will automatically be added
+to the "new" queue.
+
+```php
+<?php
+  // The sObject are the instructions to Salesforce.  The 'fields' property are
+  // the fields to write to the given record.  It is an associated array with
+  // the key as the Salesforce object type's field name and the value is the
+  // value to write to the record.
+  $fields = array(
+    'FirstName' => 'John',
+    'LastName' => 'Doe',
+    'Email' => 'john.doe@example.com',
+  );
+  // The `SalesforceObject` class is a helper to build an object.  The first
+  // parameter is the name of the Salesforce object type.
+  $sobject = new SalesforceObject('Contact', $fields);
+
+  // An associative array of the item to add to the queue.
+  $item = array(
+    // Id of the Drupal record, such as node id or user id.
+    'drupal_id' => 2430,
+    // Name of the module providing the entity or other "thing".  Note that all
+    // nodes should use the module node even if the node type was supplied by
+    // another module.
+    'module' => 'user',
+    // The name of the entity, the entity's bundle, or the other "thing".  For
+    // example, if this record was a node, this would be the node's node type,
+    // like "article" or "profile".  In the case of webform, the submissions
+    // would have the delta be "submission".  When in doubt, use the name of the
+    // module.
+    'delta' => 'user',
+    // Name of the Salesforce object type.
+    'object_type' => 'Contact',
+    // Operation to perform in Salesforce.
+    'operation' => 'UPSERT',
+    // Name of the Salesforce object type's field that is used to identify a
+    // specific record.  Optional, except when the operation is UPSERT.
+    'dedupe_field' => 'Email',
+    // The instructions to Salesforce.
+    'sobject' => $sobject,
+    // The instructions to follow as we are writing to Salesforce.
+    'sync_rules' => array(
+      'FirstName' => SALESFORCE_SYNC_RULE_ALWAYS,
+      'LastName' => SALESFORCE_SYNC_RULE_ALWAYS,
+      'Email' => SALESFORCE_SYNC_RULE_BLANK,
+    ),
+  );
+  $queue = salesforce_queue_load();
+  $queue->createItem($item);
+```
+
+
+## Misc helpers
+
+### Count number of items in the queue
+
+Methods performed against a `SalesforceQueue` object will only be performed
+against items in the queue that was requested.  If you specify no specific queue
+and count, you will count all items in all queues.  However, if you specify a
+specific queue when loading the `SalesforceQueue` class, you will count only the
+items that are in that specific queue.
+
+```php
+<?php
+  // All items in the entire queue.
+  $queue = salesforce_queue_load();
+  $count = $queue->numberOfItems();
+
+  // Only failed items.
+  $queue = salesforce_queue_load('fail');
+  $count = $queue->numberOfItems();
+
+  // Only items being tracked.
+  $queue = salesforce_queue_load();
+  $count = $queue->numberOfItems(TRUE);
+```
+
+
+### Delete an item
+
+The `deleteItem()` method is part of the `DrupalReliableQueueInterface` and
+therefore expects a certain workflow when using this method.  It expects that
+you would be deleting an item after claiming and processing it, and so it
+requires passing in the original item.  Really, all you need to do is create an
+object that has the `drupal_id`, `module`, `delta` and `object_type` properties
+and this will work fine.
+
+```php
+<?php
+  $queue = salesforce_queue_load();
+
+  // Claim and delete an item.
+  $item = $queue->claimItem();
+  $queue->deleteItem($item);
+
+  // Manually delete an item from the queue.
+  $item = new stdClass();
+  $item->drupal_id = 4352;
+  $item->module = 'webform';
+  $item->delta = 'submission';
+  $item->object_type = 'Opportunity';
+  $queue->deleteItem($item);
+```
+
+
+### Check if an item is in a queue
+
+```php
+<?php
+  // Build an associative array of the required information to search for.
+  $data = array(
+    'drupal_id' => 1480,
+    'module' => 'node',
+    'delta' => 'profile',
+    'object_type' => 'Account',
+  );
+
+  // It will return TRUE if it is in the queue, and FALSE if it is not.
+  $queue = salesforce_queue_load();
+  $in_queue = $queue->itemInQueue();
+  if ($in_queue) {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+```
+
+
+### Manually process items
+
+```php
+<?php
+  // Process the normal multi-queue processor which will go through any queue
+  // that is part of "tracked queues".
+  salesforce_queue_process_queue();
+  // Or
+  $processor = salesforce_queue_load_processor();
+  $processor->process();
+
+  // Only process the failed items.
+  salesforce_queue_process_queue('fail');
+  // Or
+  $processor = salesforce_queue_load_processor('fail');
+  $processor->process();
+```
+
+
+### Get records after manual processing
+
+The `SalesforceQueueProcessor` object will keep track of all records that have
+been processed by that object allowing you to retrieve those specific records
+and perform additional actions upon them.
+
+```php
+<?php
+  // Manually process queue.
+  $processor = salesforce_queue_load_processor();
+  $processor->process();
+
+  // Array of items that had created new Salesforce records, along with their
+  // updated sobjects and Salesforce Ids.
+  $new_records = $processor->getNewSfRecords();
+
+  // Array of Salesforce Ids segregated by their Salesforce object type.
+  $processed_items = $processor->getProcessedItemIds();
+
+  // Delete all of the new records that were created. Handy for testing.
+  $processor->deleteNewSfRecords();
+```
+
+
+## Internal details of the queue and processor
+
+### Queue
+
+@TODO: Kathleen
+
+
+### Processor
+
+@TODO: Kathleen

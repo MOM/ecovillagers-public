@@ -1,0 +1,88 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function email_wrappers_example_menu() {
+  $items['email_wrappers_example'] = array(
+    'title' => 'email templates example form',
+    'description' => 'email templates example form',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('email_wrappers_example_test_form'),
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+
+/**
+ * An example mail configuration form. Typical use case for this is setting up an admin-configurable
+ * mail template on one or more module settings pages.
+ */
+function email_wrappers_example_test_form() {
+  // pull in the required include file to get access to email_wrappers helper functions.
+  module_load_include('inc', 'email_wrappers', 'email_wrappers.api');
+  module_load_include('module', 'email_wrappers');
+  // set up some initial parameters for our new mail configuration form.
+  // - name & module are required to uniquely identify this mail configuration in the database.
+  //
+  // - recipient_callback is an optional callback function your module implements to set the mail recipient before mail is sent.
+  //   This is required for any mail configurations that do not have a hardcoded recipient value (Example: an email sent when a user registers
+  //   for a service your module provides would need to get the user's email address before sending. A hardcoded recipient would be useless
+  //   in this case.
+  //
+  // - send_callback is another optional callback function that your module implements. It is invoked after an email is sent.
+  //   The $mail object used to generate the email and any additional parameters you pass into email_wrappers_send_mail() via $params are passed as arguments
+  //   to your callback function.
+
+  $params = array(
+    'name' => 'test_form',
+    'module' => 'email_wrappers_example',
+    'delta' => 'example_1',
+    'recipient_callback' => 'email_wrappers_example_recipient_callback',
+    'send_callback' => 'email_wrappers_example_send_callback',
+  );
+
+  // Generate the mail configuration form.
+  $form = email_wrappers_mail_form(array(), $params);
+
+  // Add an additional button we can use to send a test mail.
+  $form['email_wrappers_example_send'] = array(
+    '#type' => 'button',
+    '#value' => 'send!',
+    '#executes_submit_callback' => TRUE,
+    '#submit' => array('email_wrappers_example_send'),
+  );
+  return $form;
+}
+
+/**
+ * Button submit callback, triggers mail send when clicked.
+ */
+function email_wrappers_example_send($form, $form_state) {
+  module_load_include('inc', 'email_wrappers', 'email_wrappers.api');
+  $params = array(
+    'delta' => 'example_1',
+    'module' => 'email_wrappers_example',
+  );
+  $mail = email_wrappers_mail_load($params);
+  email_wrappers_send_mail($mail, $params);
+}
+
+/**
+ * Invoked to provide a recipient before mail is sent. Note, this will
+ * override any hardcoded recipient values entered in the mail configuration form.
+ */
+function email_wrappers_example_recipient_callback($mail, $params = array()) {
+  drupal_set_message('recipient callback invoked');
+  return 'your_email@example.com'; // for a full test replace this value with an email address you can check.
+}
+
+/**
+ * Invoked when a mail is sent.
+ */
+function email_wrappers_example_send_callback($mail, $params = array()) {
+  drupal_set_message('send callback invoked');
+  drupal_set_message('Your mail has been sent!');
+}

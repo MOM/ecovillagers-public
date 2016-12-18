@@ -1,0 +1,21 @@
+diff --git a/commerce_authnet.module b/commerce_authnet.module
+index 2246c2d..7a9e8af 100644
+--- a/commerce_authnet.module
++++ b/commerce_authnet.module
+@@ -377,10 +377,12 @@ function commerce_authnet_aim_submit_form_submit($payment_method, $pane_form, $p
+
+   // Build a description for the order.
+   $description = array();
+-
+-  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+-    if (in_array($line_item_wrapper->type->value(), commerce_product_line_item_types())) {
+-      $description[] = round($line_item_wrapper->quantity->value(), 2) . 'x ' . $line_item_wrapper->line_item_label->value();
++  // Descriptions come from products, though not all environments have them. So check first.
++  if (function_exists('commerce_product_line_item_types')) {
++    foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
++      if (in_array($line_item_wrapper->type->value(), commerce_product_line_item_types())) {
++        $description[] = round($line_item_wrapper->quantity->value(), 2) . 'x ' . $line_item_wrapper->line_item_label->value();
++      }
+     }
+   }
+

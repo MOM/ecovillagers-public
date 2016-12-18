@@ -1,0 +1,70 @@
+<?php
+
+/**
+ * @file
+ * Ensures users have cURL, libxml, and SOAP enabled prior to installation.
+ */
+
+/**
+ * Implements hook_requirements().
+ */
+function commerce_sage_payments_requirements($phase) {
+  // Skip the requirements check if SimpleTest is installed to avoid multiple
+  // cURL rows.
+  if (module_exists('simpletest')) {
+    return;
+  }
+  $t = get_t();
+  $has_curl = function_exists('curl_init');
+  $requirements['commerce_sage_payments_curl'] = array(
+    'title' => $t('cURL'),
+    'value' => $has_curl ? $t('Enabled') : $t('Not found'),
+  );
+  if (!$has_curl) {
+    $requirements['commerce_sage_payments_curl'] += array(
+      'severity' => REQUIREMENT_ERROR,
+      'description' => $t("Sage Payments requires the PHP <a href='!curl_url'>cURL</a> library.", array('!curl_url' => 'http://php.net/manual/en/curl.setup.php')),
+    );
+  }
+
+  if (module_exists('commerce_cardonfile')) {
+    $path = drupal_get_path('module', 'commerce_cardonfile') . '/commerce_cardonfile.info';
+    $info = drupal_parse_info_file($path);
+    if (isset($info['version']) && version_compare($info['version'], '7.x-2', '<=')) {
+      $requirements['commerce_sage_payments_cardonfile'] = array(
+        'title' => $t('Card on File'),
+        'value' => $t('Less than 2.x'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => $t("Sage Payments now requires Card on File 2.x"),
+      );
+    }
+  }
+
+  $has_libxml = function_exists('simplexml_load_string');
+  $requirements['commerce_sage_payments_libxml'] = array(
+    'title' => $t('libxml'),
+    'value' => $has_libxml ? $t('Enabled') : $t('Not found'),
+  );
+  if (!$has_libxml) {
+    $requirements['commerce_sage_payments_libxml'] += array(
+      'severity' => REQUIREMENT_ERROR,
+      'description' => $t("Sage Payments requires the PHP <a href='!simplexml_url'>xmllib</a> library.", array('!simplexml_url' => 'http://www.php.net/manual/en/simplexml.setup.php')),
+    );
+  }
+
+
+  $has_soap = function_exists('simplexml_load_string');
+  $requirements['commerce_sage_payments_soap'] = array(
+    'title' => $t('SOAP'),
+    'value' => $has_soap ? $t('Enabled') : $t('Not found'),
+  );
+  if (!$has_soap) {
+    $requirements['commerce_sage_payments_soap'] += array(
+      'severity' => REQUIREMENT_ERROR,
+      'description' => $t("Sage Payments requires the PHP <a href='!soap_url'>SOAP</a> extension.", array('!soap_url' => 'http://php.net/manual/en/book.soap.php')),
+    );
+  }
+
+
+  return $requirements;
+}

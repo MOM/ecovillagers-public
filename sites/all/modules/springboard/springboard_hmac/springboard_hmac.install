@@ -1,0 +1,44 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the hmac module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function springboard_hmac_schema() {
+
+  $schema['springboard_hmac'] = array(
+    'description' => 'Stores hmac data.',
+    'fields' => array(
+      'hid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique hmac ID.',
+      ),
+      'hmac' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+        'description' => "hmac",
+      ),
+    ),
+    'unique keys' => array(
+      'hmac' => array('hmac'),
+    ),
+    'primary key' => array('hid'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Set the default error message.
+ */
+function springboard_hmac_install() {
+  variable_set('springboard_hmac_error_message', t('An error occurred and we could not complete the operation.'));
+}

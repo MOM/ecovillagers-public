@@ -1,0 +1,5 @@
+
+TO DO LIST FOR FUTURE DEVELOPMENT
+---------------------------------
+
+1) Implement fundraiser_rules.

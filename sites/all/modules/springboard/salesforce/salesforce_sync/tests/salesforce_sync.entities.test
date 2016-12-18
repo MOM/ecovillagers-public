@@ -1,0 +1,99 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_sync
+ */
+
+module_load_include('test', 'salesforce_sync', 'tests/salesforce_sync');
+
+/**
+ * Tests basic set up for mapping salesforce objects to webforms.
+ */
+class SalesforceSyncEntitiesTestCase extends SalesforceSyncTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Mapping Entities',
+      'description' => 'Ensure that the record entity map functions properly.',
+      'group' => 'Salesforce Sync',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    parent::setUp($modules, $permissions);
+
+    // Create an example record.
+    $this->example_record = array(
+      'mid' => 3,
+      'sfid' => uniqid(),
+      'module' => 'foo_bar',
+      'delta' => 'baz',
+      'drupal_id' => 8,
+      'object_type' => 'Account',
+    );
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Test the salesforce_sync_map entity.
+   */
+  public function testEntity() {
+    // Map entity type exists.
+    $entity_info = entity_get_info('salesforce_sync_map');
+    $this->assertTrue(isset($entity_info['label']), 'Entity has a label');
+    $this->assertEqual('Salesforce Record Map', $entity_info['label'], 'Entity has expected label.');
+
+    // Create a salesforce_sync_map entity object.
+    $test_map = entity_create('salesforce_sync_map', $this->example_record);
+    $this->assertEqual('salesforce_sync_map', $test_map->entityType(), 'Creating a new entity record works as expected.');
+
+    // Save the entity to the database.
+    entity_save('salesforce_sync_map', $test_map);
+    $new_map_id = _salesforce_sync_get_rmid($test_map);
+    $test_map_db = entity_load('salesforce_sync_map', array($new_map_id));
+    $this->assertEqual($test_map->sfid, $test_map_db[$new_map_id]->sfid, 'Newly created record entity has the correct Salesforce id.');
+
+    // Delete the entity from the database.
+    entity_delete('salesforce_sync_map', $new_map_id);
+    $all_entities = entity_load('salesforce_sync_map');
+    $this->assertTrue(empty($all_entities));
+  }
+
+  /**
+   * Tests for salesforce_sync_crud records.
+   */
+  public function testMapCrud() {
+    // salesforce_sync_save_map() new.
+    $result = salesforce_sync_save_map($this->example_record);
+    $this->assertEqual(SAVED_NEW, $result, 'New record map saved as expected.');
+
+    // salesforce_sync_load_map().
+    $record = salesforce_sync_load_map($this->example_record);
+    $this->assertEqual($this->example_record['sfid'], $record->sfid, 'The retreived record is the same as the example record.');
+
+    // salesforce_sync_save_map() update entity.
+    $result = salesforce_sync_save_map($record);
+    $this->assertEqual(SAVED_UPDATED, $result, 'Record map entity updated as expected.');
+
+    // salesforce_sync_save_map() update array.
+    $result = salesforce_sync_save_map($this->example_record);
+    $this->assertEqual(SAVED_UPDATED, $result, 'Record map array updated as expected.');
+
+    // salesforce_sync_delete_map().
+    $this->assertTrue(salesforce_sync_delete_map($record), 'Delete command processed as expected.');
+    $this->assertFalse(salesforce_sync_load_map($this->example_record), 'The deleted record cannot be found in the table.');
+  }
+}

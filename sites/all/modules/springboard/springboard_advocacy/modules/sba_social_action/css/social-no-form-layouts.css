@@ -1,0 +1,119 @@
+.row-fluid,
+.row-fluid[class*="span"] {
+    min-height: 1px;
+}
+
+.field-name-field-social-call-to-action {
+    font-weight: bold;
+    margin-bottom: 1em;
+}
+
+#take-action-wrapper {
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    width: 100%;
+    border: 1px solid #d5d5d5;
+    padding: 0 20px 20px ;
+    margin-bottom: 40px;
+    border-radius: 4px;
+}
+
+#take-action-wrapper > legend{
+    border:none;
+    padding: 0 10px;
+    margin-bottom: 0;
+    width: auto;
+}
+
+#take-action-wrapper fieldset legend {
+    font-size: 18px;
+}
+
+#sba-messages-form label,
+#sba-messages-form .description {
+    font-weight: bold;
+}
+
+#edit-actions {
+    clear:both;
+    background-color: #fff;
+    border-top: none;
+    padding: 0;
+    margin: 0;
+    position: relative;
+}
+
+#edit-actions input {
+    width: 100%;
+    max-width: 500px;
+    background: #247AAD;
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    display:block;
+    margin: 0 auto;
+    font-size: 1.5em;
+    padding: 10px 0;
+    text-shadow: none;
+}
+
+#edit-actions input:hover {
+    background: #1E72A3;
+}
+
+#sba-messages-form {
+    clear: both;
+}
+
+
+#webform-component-sbp-first-name.control-group,
+#webform-component-sbp-last-name.control-group,
+#webform-component-mail.control-group,
+#webform-component-sbp-address.control-group,
+#webform-component-sbp-address-line-2.control-group,
+#webform-component-sbp-city.control-group,
+#webform-component-sbp-state.control-group,
+#webform-component-sbp-zip.control-group{
+    float: none;
+    clear:both;
+    width: 99%;
+}
+
+#webform-component-sbp-first-name.control-group input,
+#webform-component-sbp-last-name.control-group input,
+#webform-component-mail.control-group input,
+#webform-component-sbp-address.control-group input,
+#webform-component-sbp-address-line-2.control-group input,
+#webform-component-sbp-city.control-group input,
+#webform-component-sbp-zip.control-group input {
+    width: 100%;
+}
+
+#webform-component-sbp-state.control-group select {
+    -ms-box-sizing:content-box;
+    -moz-box-sizing:content-box;
+    -webkit-box-sizing:content-box;
+    box-sizing:content-box;
+    width:100%;
+}
+
+#edit-actions {
+    clear: both;
+}
+
+.node-sba-social-action .field-name-field-message-action-img {
+    float:right;
+    width: 30%;
+    padding: 5px 5px 2em 10px;
+}
+
+.node-sba-social-action .field-name-field-message-action-img img,
+#image img{
+    display: block;
+    margin: 0 auto 20px auto;
+}
+
+.node-sba-social-action .field-name-body {
+    padding-left: 20px;
+}

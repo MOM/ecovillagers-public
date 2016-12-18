@@ -1,0 +1,1414 @@
+<?php
+/**
+ * @file
+ * Provides an upsell modal for creating recurring donations.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function fundraiser_upsell_menu() {
+  $items = array();
+  $items['admin/springboard/options/fundraiser/fundraiser_upsell'] = array(
+    'title' => 'Sustainer upsell settings',
+    'description' => 'Administer fundraiser upsell settings.',
+    'access arguments' => array('administer fundraiser upsells'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fundraiser_upsell_admin_settings_form'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'includes/fundraiser_upsell.admin.inc',
+  );
+  $items['admin/springboard/options/fundraiser/fundraiser_upsell/general'] = array(
+    'title' => 'General settings',
+    'description' => 'Administer fundraiser upsell settings.',
+    'access arguments' => array('administer fundraiser upsells'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fundraiser_upsell_admin_settings_form'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'file' => 'includes/fundraiser_upsell.admin.inc',
+  );
+  $items['admin/springboard/options/fundraiser/fundraiser_upsell/thank-you'] = array(
+    'title' => 'Thank you settings',
+    'description' => 'Administer fundraiser upsell "thank you" settings.',
+    'access arguments' => array('administer fundraiser upsells'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fundraiser_upsell_admin_thank_you_settings'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'includes/fundraiser_upsell.mail.inc',
+  );
+  // Give admins an easy way to preview the upsell & thank you content.
+  $items['node/%node/fundraiser_upsell_preview'] = array(
+    'title' => 'Upsell preview',
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'fundraiser_upsell_modal_preview',
+    'page arguments' => array(1),
+    'access callback' => 'fundraiser_upsell_preview_access',
+    'access arguments' => array(1),
+  );
+
+  // Arg 3 is either a did or 'preview'.
+  $items['node/%node/fundraiser_upsell/%/%ctools_js'] = array(
+    'page callback' => 'fundraiser_upsell_modal',
+    'page arguments' => array(1, 3, 4),
+    'access callback' => 'fundraiser_upsell_access',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+
+/**
+ * Implements hook_springboard_admin_alias_patterns().
+ */
+function fundraiser_upsell_springboard_admin_alias_patterns() {
+    return array(
+    // Fundraiser upsell page.
+    'admin/springboard/options/fundraiser/fundraiser_upsell' => array(
+      'path' => array(
+        'regex' => '|^/admin/springboard/options/fundraiser/fundraiser_upsell$|',
+        'replacement' => 'admin/springboard/options/fundraiser/fundraiser_upsell',
+      ),
+      'alias' => array(
+        'regex' => '|^springboard/settings/config/upsell$|',
+        'replacement' => 'springboard/settings/config/upsell',
+      ),
+    ),
+    // Fundraiser upsell thank you page.
+    'admin/springboard/options/fundraiser/fundraiser_upsell/thank-you' => array(
+      'path' => array(
+        'regex' => '|^/admin/springboard/options/fundraiser/fundraiser_upsell/thank-you$|',
+        'replacement' => 'admin/springboard/options/fundraiser/fundraiser_upsell/thank-you',
+      ),
+      'alias' => array(
+        'regex' => '|^springboard/settings/config/upsell-thank-you$|',
+        'replacement' => 'springboard/settings/config/upsell-thank-you',
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_springboard_admin_admin_menu_items_alter().
+ */
+function fundraiser_upsell_springboard_admin_admin_menu_items_alter(&$items) {
+  // Settings > Settings > Sustainer Upsell.
+  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/options/fundraiser/fundraiser_upsell'] = array(
+    'link_path' => 'admin/springboard/options/fundraiser/fundraiser_upsell',
+    'link_title' => 'Sustainer Upsell Settings',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 0,
+    'customized' => 1,
+    'weight' => 0,
+  );
+
+  // Settings > Settings > Sustainer upsell confirmations.
+  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/options/fundraiser/fundraiser_upsell/thank-you'] = array(
+    'link_path' => 'admin/springboard/options/fundraiser/fundraiser_upsell/thank-you',
+    'link_title' => 'Sustainer Upsell Confirmations',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 0,
+    'customized' => 1,
+    'weight' => 1,
+  );
+}
+
+/**
+ * Implements hook_permission().
+ */
+function fundraiser_upsell_permission() {
+  return array(
+    'administer fundraiser upsells' => array(
+      'title' => t('Administer fundraiser upsell feature'),
+      'description' => t('Manage all site-wide and node-specific fundraiser upsell settings.'),
+    ),
+    'administer fundraiser upsell node settings' => array(
+      'title' => t('Administer fundraiser upsell node settings'),
+      'description' => t('Manage node-specific fundraiser upsells settings.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Inject the upsell settings form into donation edit forms and modify the
+ * donation forms to process the upsell if necessary.
+ */
+function fundraiser_upsell_form_alter(&$form, &$form_state, $form_id) {
+  // Edit form - inject the Upsell settings into the node form.
+  if (!empty($form['#node_edit_form']) && fundraiser_upsell_is_available($form['#node'])) {
+    fundraiser_upsell_add_node_settings($form);
+  }
+  // View form - add the upsell submit function unless blocked by cookies.
+  elseif (strpos($form_id, 'webform_client_form_') !== FALSE
+    && !empty($form['#node'])
+    && fundraiser_upsell_is_enabled($form['#node'])
+    && fundraiser_upsell_should_display_modal()) {
+    $form['#submit'][] = 'fundraiser_upsell_webform_submit';
+  }
+}
+
+/**
+ * Form for injecting into the node edit page.
+ *
+ * @param array $form
+ *   The form to modify.
+ */
+function fundraiser_upsell_add_node_settings(&$form) {
+  $node = $form['#node'];
+
+  // This is a new node, load some global defaults.
+  if (empty($form['#node']->nid)) {
+    $node->fundraiser_upsell = array(
+      'content' => variable_get('fundraiser_upsell_default_content', ''),
+      'footer' => variable_get('fundraiser_upsell_default_content_disclaimer', ''),
+      'thankyou' => variable_get('fundraiser_upsell_thank_you_content', ''),
+      'charge_time' => variable_get('fundraiser_upsell_default_charge_time', 'one_month'),
+    );
+  }
+
+  $form['fundraiser_upsell'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Upsell settings'),
+    '#weight' => -4,
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#group' => 'additional_settings',
+    '#tree' => TRUE,
+    '#access' => user_access('administer fundraiser upsells') || user_access('administer fundraiser upsell node settings'),
+  );
+  $form['fundraiser_upsell']['enabled'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Upsell enabled'),
+    '#default_value' => !empty($node->fundraiser_upsell['enabled']) ? $node->fundraiser_upsell['enabled'] : '',
+  );
+
+  $form['fundraiser_upsell']['charge_time'] = array(
+    '#title' => t('When to charge the first upsell donation.'),
+    '#description' => t('When to charge the upsell donation after the initial one time donation.  Note that charging in one month does not work for offsite recurring payment methods and the upsell modal will not display in those cases.'),
+    '#type' => 'radios',
+    '#options' => array(
+      'immediately' => t('Charge immediately after the initial one time donation.'),
+      'one_month' => t('Charge one month from the initial one time donation.'),
+    ),
+    '#default_value' => !empty($node->fundraiser_upsell['charge_time']) ? $node->fundraiser_upsell['charge_time'] : 'one_month',
+  );
+
+  $form['fundraiser_upsell']['content'] = array(
+    '#title' => t('Form specific Upsell Content'),
+    '#type' => 'textarea',
+    '#default_value' => !empty($node->fundraiser_upsell['content']) ? $node->fundraiser_upsell['content'] : '',
+    '#description' => t('Content for the initial upsell page.'),
+  );
+
+  $form['fundraiser_upsell']['content_tokens'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Available content tokens'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+  $form['fundraiser_upsell']['content_tokens']['help'] = array(
+    '#theme' => 'token_tree',
+    '#token_types' => array('all', 'donation'),
+    '#global_types' => TRUE,
+    '#click_insert' => TRUE,
+  );
+
+  $form['fundraiser_upsell']['footer'] = array(
+    '#title' => t('Form specific Upsell Footer'),
+    '#type' => 'textfield',
+    '#maxlength' => 255,
+    '#default_value' => !empty($node->fundraiser_upsell['footer']) ? $node->fundraiser_upsell['footer'] : '',
+    '#description' => t('Content that goes below the upsell form.  It can be used for a disclaimer.'),
+  );
+
+  $form['fundraiser_upsell']['thankyou'] = array(
+    '#title' => t('Thank you content'),
+    '#type' => 'textarea',
+    '#default_value' => !empty($node->fundraiser_upsell['thankyou']) ? $node->fundraiser_upsell['thankyou'] : '',
+    '#description' => t('The content in the modal after the sustainer is processed.'),
+  );
+
+  $form['fundraiser_upsell']['thankyou_tokens'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Available thank you message tokens'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+
+  $form['fundraiser_upsell']['thankyou_tokens']['help'] = array(
+    '#theme' => 'token_tree',
+    '#token_types' => array('all', 'donation'),
+    '#global_types' => TRUE,
+    '#click_insert' => TRUE,
+  );
+
+  $form['fundraiser_upsell']['modal_theme'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Modal theming'),
+    '#weight' => 5,
+  );
+  $form['fundraiser_upsell']['modal_theme']['class'] = array(
+    '#title' => t('Custom CSS class(es)'),
+    '#type' => 'textfield',
+    '#default_value' => !empty($node->fundraiser_upsell['modal_theme']['class']) ? $node->fundraiser_upsell['modal_theme']['class'] : '',
+    '#description' => t('Separate multiple classes with a space.'),
+  );
+  $form['fundraiser_upsell']['modal_theme']['width'] = array(
+    '#title' => t('Modal window width (in pixels)'),
+    '#type' => 'textfield',
+    '#size' => 5,
+    '#default_value' => !empty($node->fundraiser_upsell['modal_theme']['width']) ? $node->fundraiser_upsell['modal_theme']['width'] : 400,
+    '#description' => t('This will override the site default.'),
+    '#field_suffix' => 'px',
+  );
+  $form['fundraiser_upsell']['modal_theme']['height'] = array(
+    '#title' => t('Modal window height (in pixels)'),
+    '#type' => 'textfield',
+    '#size' => 5,
+    '#default_value' => !empty($node->fundraiser_upsell['modal_theme']['height']) ? $node->fundraiser_upsell['modal_theme']['height'] : 300,
+    '#description' => t('This will override the site default.'),
+    '#field_suffix' => 'px',
+  );
+
+  if (module_exists('email_wrappers')) {
+    // If this is an edit form, use the node's email wrapper settings.
+    if (!empty($form['#node']->nid)) {
+      $email_wrapper_delta = 'nid_' . $form['#node']->nid;
+    }
+    // Otherwise, start with the default global settings.
+    else {
+      $email_wrapper_delta = 'thank_you_settings';
+    }
+    module_load_include('inc', 'email_wrappers', 'email_wrappers.api');
+    $params = array(
+      'name' => 'fundraiser_upsell',
+      'module' => 'fundraiser_upsell',
+      'delta' => $email_wrapper_delta,
+    );
+
+    // Generate the mail configuration form.
+    $form['fundraiser_upsell']['email_wrappers'] = email_wrappers_mail_form(array(), $params);
+    $form['fundraiser_upsell']['email_wrappers']['#type'] = 'fieldset';
+    $form['fundraiser_upsell']['email_wrappers']['#title'] = t('Confirmation email settings');
+
+    $form['fundraiser_upsell']['email_wrappers']['headers']['from_name']['#required'] = FALSE;
+    $form['fundraiser_upsell']['email_wrappers']['headers']['from_mail']['#required'] = FALSE;
+    $form['fundraiser_upsell']['email_wrappers']['message']['subject']['#required'] = FALSE;
+
+    unset($form['fundraiser_upsell']['email_wrappers']['headers']['recipients']);
+    unset($form['fundraiser_upsell']['email_wrappers']['headers']['cc']);
+    unset($form['fundraiser_upsell']['email_wrappers']['headers']['bcc']);
+    unset($form['fundraiser_upsell']['email_wrappers']['save']);
+    unset($form['fundraiser_upsell']['email_wrappers']['#validate']);
+    unset($form['fundraiser_upsell']['email_wrappers']['#submit']);
+
+    $form['fundraiser_upsell']['email_wrappers']['message']['tokens'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Available message tokens'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#weight' => 10,
+    );
+
+    $form['fundraiser_upsell']['email_wrappers']['message']['tokens']['help'] = array(
+      '#theme' => 'token_tree',
+      '#token_types' => array('all', 'donation'),
+      '#global_types' => TRUE,
+      '#click_insert' => TRUE,
+    );
+
+  }
+
+  // Let submodules add settings.
+  drupal_alter('upsell_node_settings', $form);
+
+  $form['#validate'][] = 'fundraiser_upsell_node_form_validate';
+}
+
+/**
+ * Additional validation for the fundraiser_upsell node settings.
+ */
+function fundraiser_upsell_node_form_validate($form, &$form_state) {
+  $modal_width = $form_state['values']['fundraiser_upsell']['modal_theme']['width'];
+  $modal_height = $form_state['values']['fundraiser_upsell']['modal_theme']['height'];
+  if (empty($modal_width) || !is_numeric($modal_width)) {
+    form_set_error('fundraiser_upsell][modal_theming][upsell_modal_width',
+      t('The fundraiser upsell modal width must be a number.'));
+  }
+  if (empty($modal_height) || !is_numeric($modal_height)) {
+    form_set_error('fundraiser_upsell][modal_theming][upsell_modal_height',
+      t('The fundraiser upsell modal height must be a number.'));
+  }
+
+  // @todo Maybe get email wrappers validate happening.
+}
+
+/**
+ * Save the email wrapper settings for a node.
+ *
+ * @param int $nid
+ *   Node ID.
+ * @param array $values
+ *   The values from
+ *   $form_state['values']['fundraiser_upsell']['email_wrappers'].
+ */
+function fundraiser_upsell_save_email_wrapper_settings($nid, $values) {
+  $form = array();
+  $delta = 'nid_' . $nid;
+  // Need to fake a form state in order to save the mail settings.
+  $email_wrappers_form_state = array(
+    'values' => $values,
+  );
+  $email_wrappers_form_state['values']['delta'] = $delta;
+  $headers = $values['headers'];
+  $message = $values['message'];
+  $email_wrappers_form_state['values']['from_name'] = $headers['from_name'];
+  $email_wrappers_form_state['values']['from_mail'] = $headers['from_mail'];
+  $email_wrappers_form_state['values']['recipients'] = '';
+  $email_wrappers_form_state['values']['cc'] = '';
+  $email_wrappers_form_state['values']['bcc'] = '';
+  $email_wrappers_form_state['values']['subject'] = $message['subject'];
+  $email_wrappers_form_state['values']['html_body'] = $message['html_body'];
+  $email_wrappers_form_state['values']['text_body'] = $message['text_body'];
+
+  module_load_include('inc', 'email_wrappers', 'email_wrappers.api');
+  email_wrappers_mail_form_submit($form, $email_wrappers_form_state);
+}
+
+/**
+ * Extra donation form submit function to attach the upsell process.
+ */
+function fundraiser_upsell_webform_submit($form, &$form_state) {
+  // If it's not successful (no submission ID), don't show upsell and skip
+  // checking for the recurring setting.
+  if (empty($form_state['values']['details']['sid'])) {
+    return;
+  }
+
+  // Don't show upsell if the donor is already recurring.
+  $recurring = FALSE;
+
+  // First get the component ID of the recurring component.
+  $recurring_cid = fundraiser_sustainers_get_recurring_cid_by_node($form['#node']);
+
+  // Then determine if that component value is recurring.
+  // !== because a cid could be 0.
+  if ($recurring_cid !== FALSE) {
+    $recurring_value = $form_state['values']['submitted'][$recurring_cid];
+    $recurring = fundraiser_sustainers_component_value_is_recurring($recurring_value);
+  }
+
+  if (!$recurring) {
+    // Add the upsell sid to the session data so the modal can
+    // be added to the page later in another hook.
+    $_SESSION['upsell'] = array(
+      'sid' => $form_state['values']['details']['sid'],
+    );
+  }
+}
+
+/**
+ * Implements hook_page_alter().
+ *
+ * Adds the modal to the page if needed.
+ */
+function fundraiser_upsell_page_alter(&$page) {
+  $add_modal = FALSE;
+  // Check for upsell trigger.
+  // Added by upsell's webform submit handler.
+  // Also make sure we're on the confirmation page.
+  if (!empty($_SESSION['upsell']) && arg(0) == 'node' && arg(2) == 'done') {
+    // Add the upsell to the page.
+    $did = fundraiser_donation_get_did_by_sid($_SESSION['upsell']['sid']);
+    // !== because we could get a did of 0.
+    if ($did !== FALSE) {
+      $donation = fundraiser_donation_get_donation($did);
+      if (!empty($donation->status) && $donation->status == 'payment_received') {
+        // Make sure the payment method used supports upsell.
+        $info = _fundraiser_get_donation_gateway($donation->did);
+        if (fundraiser_upsell_gateway_supports_upsell($info, $donation->donation['payment_method'])) {
+          // Hide the modal if the donation amount matches no brackets:
+          if (!isset($donation->donation['amount'])
+            || !fundraiser_upsell_find_suggested_amount($donation->donation['amount'])) {
+            return;
+          }
+
+          // If the donation is offsite recurring && charge time set to
+          // one month, don't show modal.
+          if (fundraiser_upsell_donation_is_offsite_recurring($donation)
+            && $donation->node->fundraiser_upsell['charge_time'] == 'one_month') {
+            $_SESSION['upsell'] = NULL;
+            watchdog('fundraiser_upsell', 'The node nid ' . $donation->nid . ' received a donation through an offsite recurring payment gateway but upsell is configured to charge later, so no upsell modal was shown.');
+            return;
+          }
+
+          // Check that the payment method doesn't expire this month.
+          if (isset($info['expire callback'])) {
+            $expiration_func = $info['expire callback'];
+            if (function_exists($expiration_func)) {
+              $expires = $expiration_func($donation->donation);
+              if (isset($expires['month']) && isset($expires['year'])) {
+                // Expiration must not happen in this month.
+                if ($expires['month'] != date('m') || $expires['year'] != date('Y')) {
+                  $add_modal = TRUE;
+                }
+              }
+            }
+            // The expire callback function does not exist.
+            else {
+              $add_modal = TRUE;
+            }
+          }
+          // There is no expire callback defined.
+          else {
+            $add_modal = TRUE;
+          }
+        }
+      }
+    }
+
+    if ($add_modal && isset($donation)) {
+
+      // Add the modal to the bottom of the page.
+      $page['page_bottom']['fundraiser_upsell'] = array(
+        '#markup' => fundraiser_upsell_modal_link($donation->node, $did),
+      );
+    }
+
+    // Remove the upsell session data.
+    $_SESSION['upsell'] = NULL;
+  }
+}
+
+/**
+ * Upsell donation form for the modal.
+ */
+function fundraiser_upsell_donation_form($form, &$form_state) {
+  $did = $form_state['did'];
+  $nid = $form_state['nid'];
+  $preview = $form_state['preview'];
+  if (!is_null($did) && $donation = fundraiser_donation_get_donation($did)) {
+    if (!empty($donation->donation['quantity'])) {
+      $amount = $donation->amount / $donation->donation['quantity'];
+    }
+    else {
+      $amount = $donation->amount;
+    }
+    $suggested_amount = fundraiser_upsell_find_suggested_amount($amount);
+    $nid = $donation->nid;
+  }
+  else {
+    $suggested_amount = 'preview';
+    $did = '';
+    $donation = NULL;
+  }
+
+  $node = node_load($nid);
+  $currency = fundraiser_get_currency_from_node($node);
+
+  // Replace tokens in the content.
+  $content = token_replace($node->fundraiser_upsell['content'], array('donation' => $donation));
+  $form['content'] = array(
+    '#markup' => $content,
+    '#weight' => 0,
+  );
+
+  $form['amount'] = array(
+    '#title' => t('Monthly donation'),
+    '#type' => 'textfield',
+    '#size' => 5,
+    '#field_prefix' => $currency['symbol'],
+    '#default_value' => $suggested_amount,
+    '#weight' => 10,
+  );
+
+  $form['nid'] = array(
+    '#type' => 'value',
+    '#value' => $nid,
+  );
+
+  $form['did'] = array(
+    '#type' => 'value',
+    '#value' => $did,
+  );
+
+  $form['preview'] = array(
+    '#type' => 'value',
+    '#value' => $preview,
+  );
+
+  $form['actions'] = array(
+    '#type' => 'actions',
+    '#weight' => 50,
+  );
+
+  $form['actions']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Yes, Sign Me Up!'),
+  );
+
+  $modal_class = $preview ? 'preview' : 'rejection';
+
+  $form['actions']['cancel'] = array(
+    '#prefix' => '<div class="close-modal-wrapper">',
+    '#suffix' => '</div>',
+    '#markup' => l(t('No thanks.'), '#',
+      array(
+        'attributes' => array(
+          'class' => array(
+            'ctools-close-modal',
+            $modal_class,
+          ),
+        ),
+        'external' => TRUE,
+      )
+    ),
+  );
+
+  $form['footer'] = array(
+    '#markup' => $node->fundraiser_upsell['footer'],
+    '#weight' => 100,
+  );
+
+  return $form;
+}
+
+/**
+ * Validate function for the upsell donation form.
+ */
+function fundraiser_upsell_donation_form_validate($form, &$form_state) {
+  if (!is_numeric($form_state['values']['amount'])) {
+    form_set_error('amount', t('Amount must be numeric.'));
+  }
+  $node = node_load($form_state['values']['nid']);
+  $currency = fundraiser_get_currency_from_node($node);
+  if ($form_state['values']['amount'] < $node->minimum_donation_amount) {
+    form_set_error('amount', t('Amount must not be less than @amount.', array('@amount' => $currency['symbol'] . number_format($node->minimum_donation_amount, 2))));
+  }
+}
+
+/**
+ * Submit function for the upsell donation form.
+ */
+function fundraiser_upsell_donation_form_submit($form, &$form_state) {
+
+  if ($form_state['values']['preview']) {
+    $node = node_load($form_state['values']['nid']);
+    $form_state['storage']['thankyou_message'] = $node->fundraiser_upsell['thankyou'];
+  }
+  else {
+    $form_state['storage']['thankyou_message'] = fundraiser_upsell_upsell_ajax_submit($form_state['values']['did'], $form_state['values']['amount']);
+  }
+}
+
+/**
+ * Submission callback function for the modal upsell form.
+ *
+ * Does some error checking, clones the original donation, uses the cloned
+ * donation to create a sustainer series, sets acceptance cookie,
+ * sends thankyou email, and returns the content for the thankyou modal.
+ *
+ * @param int $did
+ *   The donation ID of the original donation.
+ * @param float $amount
+ *   The amount to for the new donation series.
+ *
+ * @return string
+ *   Thank you content.
+ */
+function fundraiser_upsell_upsell_ajax_submit($did, $amount) {
+  // Set the default values.
+  global $user;
+  $upsold_donation = fundraiser_donation_get_donation($did);
+  $is_recurring = fundraiser_upsell_check_recurring($did);
+  $different_user = ($user->uid != $upsold_donation->uid) ? TRUE : FALSE;
+  // If the donation is already recurring, then stop.
+  if ($is_recurring) {
+    watchdog('fundraiser_upsell', 'Upsell failed - Donation %did is already part of a recurring series.', array('%did' => $upsold_donation->did), WATCHDOG_NOTICE);
+    return 'This is already a recurring donation. Thank you.';
+  }
+
+  // If the user is different then stop - skip anon users because we don't know.
+  if ($different_user && $user->uid != 0) {
+    $replacements = array(
+      '%did' => $upsold_donation->did,
+      '%upsell_uid' => $user->uid,
+      '%donation_uid' => $upsold_donation->uid,
+    );
+    watchdog('fundraiser_upsell', 'Upsell user doesn\'t match the donation %did user. Upsell uid is %upsell_uid and Donation uid is %donation_uid', $replacements, WATCHDOG_NOTICE);
+    return 'There was a problem processing your Donation. Please try again.';
+  }
+
+  // Here we need to copy the original donation but with a future next_charge
+  // date and a different amount.
+  // Then use that as the master donation to create a recurring series.
+  $master_donation = fundraiser_upsell_create_master_donation($upsold_donation, $amount);
+
+  // Add info about the master donation to the upsold donation.
+  $upsold_donation->fundraiser_upsell = new stdClass();
+  $upsold_donation->fundraiser_upsell->type = 'upsold_donation';
+  $upsold_donation->fundraiser_upsell->related_did = $master_donation->did;
+  fundraiser_donation_update($upsold_donation);
+
+  // Allow modules to modify the original upsold donation.
+  drupal_alter('upsold_donation', $upsold_donation);
+
+  // Create the recurring donation series.
+  $success = fundraiser_upsell_create_recurring_series($master_donation);
+
+  // Grab and process the thank you content if successful.
+  if ($success) {
+    fundraiser_upsell_set_acceptance_cookie();
+
+    // Send the thank you message.
+    module_load_include('inc', 'fundraiser_upsell', 'includes/fundraiser_upsell.mail');
+
+    fundraiser_upsell_send_thank_you($master_donation);
+
+    // Generate the thank you content.
+    $raw_content = $master_donation->node->fundraiser_upsell['thankyou'];
+    $content = token_replace($raw_content, array('donation' => $master_donation), array('clear' => TRUE));
+
+  }
+  else {
+    watchdog('fundraiser_upsell', 'Upsell failed for the original donation %did.', array('%did' => $upsold_donation->did), WATCHDOG_NOTICE);
+    return 'There was a problem processing your donation. Please try again.';
+  }
+
+  return $content;
+}
+
+/**
+ * Implements hook_fundraiser_donation_create().
+ *
+ * Saves fundraiser_upsell donation information.
+ */
+function fundraiser_upsell_fundraiser_donation_create($donation) {
+  if (isset($donation->fundraiser_upsell)) {
+    $record = $donation->fundraiser_upsell;
+    $record->did = $donation->did;
+    fundraiser_upsell_donation_record_save($record);
+  }
+}
+
+/**
+ * Implements hook_fundraiser_donation_update().
+ *
+ * Saves fundraiser_upsell donation information.
+ */
+function fundraiser_upsell_fundraiser_donation_update($donation) {
+  if (isset($donation->fundraiser_upsell)) {
+    $record = $donation->fundraiser_upsell;
+    $record->did = $donation->did;
+    fundraiser_upsell_donation_record_save($record);
+  }
+}
+
+/**
+ * Inserts or updates the fundraiser_upsell data into the DB.
+ *
+ * Adds missing values to the $record on insert.
+ *
+ * @param object $record
+ *   The donation->fundraiser_upsell object.
+ *
+ * @return bool|int
+ *   SAVED_NEW, SAVED_UPDATED, or FALSE.
+ */
+function fundraiser_upsell_donation_record_save(&$record) {
+  if (fundraiser_upsell_donation_record_exists($record->did)) {
+    return drupal_write_record('fundraiser_upsell_donation', $record, 'did');
+  }
+  else {
+    return drupal_write_record('fundraiser_upsell_donation', $record);
+  }
+}
+
+/**
+ * Determine if an upsell donation record with the given donation ID exists.
+ *
+ * @param int $did
+ *   Donation ID we're looking for.
+ *
+ * @return bool
+ *   TRUE if the record exists.
+ */
+function fundraiser_upsell_donation_record_exists($did) {
+  $count = db_query("SELECT count(did) from {fundraiser_upsell_donation} WHERE did = :did", array(':did' => $did))->fetchField();
+  return ($count > 0);
+}
+
+/**
+ * Implements hook_fundraiser_donation_get_donation().
+ *
+ * Adds fundraiser_upsell information to the donation object.
+ */
+function fundraiser_upsell_fundraiser_donation_get_donation($donation) {
+  $query = db_query("SELECT * FROM {fundraiser_upsell_donation} WHERE did = :did", array(':did' => $donation->did));
+  $record = $query->fetchObject();
+
+  if ($record) {
+    unset($record->did);
+    $donation->fundraiser_upsell = $record;
+  }
+}
+
+/**
+ * Convert the single donation into a recurring donation.
+ *
+ * @param object $donation
+ *   The donation that will become the master donation in the sustainer series.
+ *
+ * @return bool
+ *   TRUE on successful creation of sustainers in the series.
+ */
+function fundraiser_upsell_create_recurring_series($donation) {
+  $gateway_info = _fundraiser_get_donation_gateway($donation->did);
+  // Allows recurring.
+  if (_fundraiser_sustainers_supports_recurring($gateway_info['allow_recurring'], $donation->donation['payment_method'])) {
+    // Is not an offline recurring.
+    if (!_fundraiser_sustainers_offsite_recurring($gateway_info['offsite_recurring'], $donation->donation['payment_method'])) {
+      if (isset($gateway_info['expire callback'])) {
+        $expiration_func = $gateway_info['expire callback'];
+        if (function_exists($expiration_func)) {
+          $expires = $expiration_func($donation->donation);
+          if (isset($expires['month']) && isset($expires['year'])) {
+            // Need to temporarily change this while the series is being
+            // created.
+            $old_type = $donation->fundraiser_upsell->type;
+            $donation->fundraiser_upsell->type = 'slave_donation';
+
+            // We need to set the start date to ensure that we
+            // advance the future donations by one month.
+            $date_to_start = $donation->recurring->next_charge;
+
+            _fundraiser_sustainers_create_future_orders($donation, $expires['month'], $expires['year'], NULL, $date_to_start);
+
+            // Set the old type back.
+            $donation->fundraiser_upsell->type = $old_type;
+
+            // Create the fundraiser sustainers series entity.
+            $fundraiser_sustainers_series_data = array(
+              'did' => $donation->did,
+              'uid' => $donation->uid,
+              'amount' => $donation->donation['amount'],
+              'installments' => _fundraiser_sustainers_calculate_installments($donation),
+            );
+
+            $fundraiser_sustainers_series = entity_create('fundraiser_sustainers_series', $fundraiser_sustainers_series_data);
+            $fundraiser_sustainers_series->save();
+
+            if (fundraiser_upsell_check_recurring($donation->did)) {
+              module_invoke_all('fundraiser_upsell_create_recurring_success', $donation);
+              return TRUE;
+            }
+          }
+        }
+      }
+    }
+    else {
+      // ALERT: This gateway does its own recurring stuff, so we skipped it
+      // here. But we should probably tell someone this was attempted.
+      watchdog('fundraiser_upsell', 'An offsite recurring donation was created, for master donation id @did',
+        array('@did' => $donation->did));
+
+      return TRUE;
+    }
+  }
+  else {
+    // ALERT: This gateway does not support recurring stuff, so we skipped it
+    // here. But we should probably tell someone this was attempted.
+    watchdog('fundraiser_upsell', 'A recurring donation for a non-recurring gateway was attempted, for master donation id @did',
+      array('@did' => $donation->did));
+  }
+
+  return FALSE;
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function fundraiser_upsell_node_insert($node) {
+  if (fundraiser_upsell_is_available($node)) {
+    // Insert the record.
+    $record = fundraiser_upsell_node_record($node);
+    drupal_write_record('fundraiser_upsell', $record);
+
+    // If we have email templates settings then we're coming from a form,
+    // so we need to save them.
+    if (isset($node->fundraiser_upsell['email_wrappers']) && is_array($node->fundraiser_upsell['email_wrappers'])) {
+      fundraiser_upsell_save_email_wrapper_settings($node->nid, $node->fundraiser_upsell['email_wrappers']);
+    }
+    // Cloning another node.
+    elseif (isset($node->clone_from_original_nid)) {
+      module_load_include('inc', 'email_wrappers', 'email_wrappers.api');
+      $params = array(
+        'name' => 'fundraiser_upsell',
+        'module' => 'fundraiser_upsell',
+        'delta' => 'nid_' . $node->clone_from_original_nid,
+      );
+      $settings = email_wrappers_mail_load($params);
+      if ($settings != FALSE) {
+        unset($settings->mid);
+        $settings->delta = 'nid_' . $node->nid;
+        email_wrappers_save($settings);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function fundraiser_upsell_node_update($node) {
+  // If this isn't a fundraiser type, ignore it.
+  if (fundraiser_upsell_is_available($node)) {
+    // Check if the upsell data already exists.
+    $exists = db_query('SELECT nid FROM {fundraiser_upsell} WHERE nid = :nid',
+      array(':nid' => $node->nid)
+    )->fetchField();
+    $record = fundraiser_upsell_node_record($node);
+    // If upsell is enabled and the record doesn't exist then insert new row.
+    if (empty($exists)) {
+      drupal_write_record('fundraiser_upsell', $record);
+    }
+    // If the record does exist, then update it.
+    elseif (!empty($exists)) {
+      drupal_write_record('fundraiser_upsell', $record, 'nid');
+    }
+
+    // If we have email wrappers settings then we're coming from a form,
+    // so we need to save them.
+    if (isset($node->fundraiser_upsell['email_wrappers']) && is_array($node->fundraiser_upsell['email_wrappers'])) {
+      fundraiser_upsell_save_email_wrapper_settings($node->nid, $node->fundraiser_upsell['email_wrappers']);
+    }
+  }
+}
+
+/**
+ * Implements hook_node_load().
+ */
+function fundraiser_upsell_node_load($nodes, $types) {
+  foreach ($nodes as $node) {
+    // If this isn't a fundraiser type, ignore it.
+    if (fundraiser_upsell_is_available($node)) {
+      $upsell = db_query('
+        SELECT * FROM {fundraiser_upsell} WHERE nid = :nid',
+        array(':nid' => $node->nid)
+      )->fetchAssoc();
+      // Merge data from upsell settings with node.
+      $upsell = fundraiser_upsell_unflatten_record($upsell);
+      $nodes[$node->nid]->fundraiser_upsell = $upsell;
+    }
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function fundraiser_upsell_node_delete($node) {
+  // Delete the email template settings.
+  $params = array(
+    'module' => 'fundraiser_upsell',
+    'delta' => 'nid_' . $node->nid,
+  );
+  email_wrappers_mail_delete($params);
+
+  db_delete('fundraiser_upsell')
+    ->condition('nid', $node->nid)
+    ->execute();
+}
+
+/**
+ * Output an array of the DB structure mapped to the $node object.
+ */
+function fundraiser_upsell_node_record($node) {
+  return array(
+    'nid' => $node->nid,
+    'enabled' => $node->fundraiser_upsell['enabled'],
+    'charge_time' => $node->fundraiser_upsell['charge_time'],
+    'content' => $node->fundraiser_upsell['content'],
+    'footer' => $node->fundraiser_upsell['footer'],
+    'thankyou' => $node->fundraiser_upsell['thankyou'],
+    'class' => $node->fundraiser_upsell['modal_theme']['class'],
+    'modal_width' => $node->fundraiser_upsell['modal_theme']['width'],
+    'modal_height' => $node->fundraiser_upsell['modal_theme']['height'],
+  );
+}
+
+/**
+ * Takes the result from the upsell DB query and turns it into a tree.
+ *
+ * @param array $upsell
+ *   Associative array from a db_query result.
+ *
+ * @return array
+ *   Associative array with modal_theme as a sub array.
+ */
+function fundraiser_upsell_unflatten_record($upsell) {
+  $unflat = array(
+    'enabled' => $upsell['enabled'],
+    'charge_time' => $upsell['charge_time'],
+    'content' => $upsell['content'],
+    'footer' => $upsell['footer'],
+    'thankyou' => $upsell['thankyou'],
+    'modal_theme' => array(
+      'class' => $upsell['class'],
+      'width' => $upsell['modal_width'],
+      'height' => $upsell['modal_height'],
+    ),
+  );
+
+  return $unflat;
+}
+
+/**
+ * Page callback for the upsell preview.
+ *
+ * @param object $node
+ *   The webform donation node object.
+ *
+ * @return string
+ *   A string with the preview warning message and the html for the modal.
+ */
+function fundraiser_upsell_modal_preview($node) {
+  $message = t('Note that tokens will not be replaced in preview mode and no donations will be created.');
+  return $message . fundraiser_upsell_modal_link($node, 'preview');
+}
+
+/**
+ * Adds all of the CSS and JS and settings for the modal.
+ *
+ * @param object $node
+ *   The node that this modal applies to.
+ * @param int|string $did
+ *   The donation ID, or 'preview' if this is the preview.
+ *
+ * @return string
+ *   The html anchor tag that gets clicked on document ready.
+ */
+function fundraiser_upsell_modal_link($node, $did) {
+
+  // Load the modal library and add the modal javascript.
+  ctools_include('modal');
+  ctools_modal_add_js();
+  ctools_add_js('ajax-responder');
+  ctools_add_js('fundraiser_upsell', 'fundraiser_upsell');
+  $path = drupal_get_path('module', 'fundraiser_upsell');
+  drupal_add_css($path . '/css/fundraiser_upsell.css');
+
+  drupal_add_js(array(
+      'fundraiser-upsell' => array(
+        'rejectionDays' => (int) variable_get('fundraiser_upsell_rejection_lifetime', 180),
+        'modalClass' => $node->fundraiser_upsell['modal_theme']['class'],
+        'modalSize' => array(
+          'type' => 'fixed',
+          'width' => (int) $node->fundraiser_upsell['modal_theme']['width'],
+          'height' => (int) $node->fundraiser_upsell['modal_theme']['height'],
+          'contentRight' => 25,
+          'contentBottom' => 0,
+        ),
+        'modalTheme' => 'fundraiserUpsellModal',
+        'modalOptions' => array(
+          'opacity' => .7,
+          'background' => '#000',
+        ),
+        'animation' => 'fadeIn',
+        'animationSpeed' => 'slow',
+        'closeText' => '',
+        'closeImage' => '',
+        'loadingText' => t('Please Wait'),
+        'throbber' => theme('image', array(
+          'path' => ctools_image_path('throbber.gif', 'fundraiser_upsell'),
+          'title' => t('Loading...'),
+          'alt' => t('Loading'),
+        )),
+      ),
+    ), 'setting');
+
+  $options = array(
+    'attributes' => array(
+      'class' => array(
+        'ctools-use-modal',
+        'ctools-modal-fundraiser-upsell',
+        'hidden',
+      ),
+    ),
+  );
+
+  return l('', 'node/' . $node->nid . '/fundraiser_upsell/' . $did . '/nojs', $options);
+}
+
+/**
+ * Modal page callback.
+ *
+ * This prints out the ajax commands for pages in the modal.
+ *
+ * @param object $node
+ *   The node that the modal applies to.
+ * @param int|string $did
+ *   Either the donation ID, or 'preview' if this is a preview.
+ * @param string $ajax
+ *   Only out stuff if this ajax is supported.
+ */
+function fundraiser_upsell_modal($node, $did, $ajax) {
+  if ($ajax) {
+    ctools_include('ajax');
+    ctools_include('modal');
+
+    $preview = FALSE;
+    if ($did == 'preview') {
+      $did = NULL;
+      $preview = TRUE;
+    }
+
+    $form_state = array(
+      'ajax' => TRUE,
+      // 'title' => '',
+      'did' => $did,
+      'nid' => $node->nid,
+      'preview' => $preview,
+    );
+
+    // Use ctools to generate ajax instructions for the browser to create
+    // a form in a modal popup.
+    $output = ctools_modal_form_wrapper('fundraiser_upsell_donation_form', $form_state);
+
+    // Create a better close button for the preview.
+    if($form_state['preview'] == TRUE) {
+      $output[0]['output'] .= '<div class="close-modal-wrapper" style="background-color:#000; padding: .2em; color: #000; position: absolute; top: -13px; right: -10px; opacity: .4;"><a href="#" class="ctools-close-modal" style="color: #fff;">Close Preview</a></div>';
+    }
+    // Slightly different close button for the real modal.
+    else {
+      $output[0]['output'] .= '<div class="close-modal-wrapper top-close"><a href="#" class="ctools-close-modal">Close</a></div>';
+    }
+
+    if (!empty($form_state['executed'])) {
+      $content = '';
+      // If there are messages for the form, render them.
+      if ($messages = theme('status_messages')) {
+        $content = $messages;
+      }
+
+      $content .= '<div>';
+
+      // This comes from the form submit handler.
+      $content .= $form_state['storage']['thankyou_message'];
+
+      $content .= '</div>';
+
+      $content .= '<div class="close-modal-wrapper"><a href="#" class="ctools-close-modal">Close</a></div>';
+      $output = array();
+
+      $output[] = ctools_modal_command_display('', $content);
+    }
+
+    // Return the ajax instructions to the browser via ajax_render().
+    print ajax_render($output);
+  }
+}
+
+/**
+ * Determine if we should display the upsell preview for a node.
+ *
+ * Upsell must be enabled for the node and the user must have
+ * the upsell permission.
+ */
+function fundraiser_upsell_preview_access($node) {
+  return (
+    fundraiser_upsell_is_enabled($node) && (
+      user_access('administer fundraiser upsells') || user_access('administer fundraiser upsell node settings')
+    )
+  );
+}
+
+/**
+ * Access check that the user can use the upsell ajax callback for the node.
+ *
+ * This makes sure the upsell process call won't happen if the node doesn't
+ * have upsell enabled.
+ */
+function fundraiser_upsell_access($node) {
+  return fundraiser_upsell_is_enabled($node) && user_access('access content');
+}
+
+/**
+ * Check the cookies and settings to see if upsell modal should be displayed.
+ *
+ * @return bool
+ *   TRUE if the modal should be displayed.
+ */
+function fundraiser_upsell_should_display_modal() {
+  if (!variable_get('fundraiser_upsell_debug', FALSE)) {
+    foreach (array('acceptance', 'rejection') as $item) {
+      $key = 'fundraiser_upsell_' . $item;
+      $cookie = !empty($_COOKIE[$key]) ? $_COOKIE[$key] : FALSE;
+      // If the cookie is present and the cookie checking is enabled,
+      // then don't show the modal.
+      if ($cookie && variable_get($key . '_enabled', FALSE)) {
+        return FALSE;
+      }
+    }
+  }
+
+  // Either we're in debug mode, or no cookies are present
+  // or no cookie checking enabled, so default to TRUE.
+  return TRUE;
+}
+
+/**
+ * Determine if the node has upsell enabled.
+ *
+ * @return bool
+ *   TRUE is upsell is enabled on this node.
+ */
+function fundraiser_upsell_is_enabled($node) {
+  return (
+    !empty($node->type)
+    && fundraiser_is_donation_type($node->type)
+    && !empty($node->fundraiser_upsell['enabled'])
+    && $node->fundraiser_upsell['enabled']
+  );
+}
+
+/**
+ * Get the suggested amount from the admin bracket settings.
+ *
+ * @param float $amount
+ *   The given amount.
+ *
+ * @return float
+ *   The suggested amount to upsell to or 0 if no amount is found.
+ */
+function fundraiser_upsell_find_suggested_amount($amount) {
+  $default_upsell = 10;
+  $brackets = variable_get('fundraiser_upsell_brackets', array());
+  if (count($brackets) < 1) {
+    return $default_upsell;
+  }
+
+  foreach ($brackets as $i => $bracket) {
+    // If the amount is within the brackets, then use this upsell setting.
+    if (($amount >= $bracket['low']) && ($amount <= $bracket['high'])) {
+      return $bracket['upsell'];
+    }
+    // If this is the last loop and we don't have an upsell yet,
+    // return 0.
+    if ($i == count($brackets) - 1) {
+      return 0;
+    }
+  }
+  return $default_upsell;
+}
+
+/**
+ * Creates a master donation from the original upsold donation.
+ *
+ * Copy the original donation to a new did and update the status and amount.
+ *
+ * @param object $upsold_donation
+ *   The original one time donation to use as the basis for the master.
+ * @param string $new_amount
+ *   The amount for the master donation.
+ *
+ * @return object
+ *   The new donation object.
+ */
+function fundraiser_upsell_create_master_donation($upsold_donation, $new_amount) {
+
+  // Remember clone is a shallow copy.
+  $master_donation = clone $upsold_donation;
+
+  // Reset transaction info.
+  $master_donation->data['txn_id'] = '';
+  $master_donation->data['remote_id'] = '';
+  $master_donation->data['transaction_id'] = '';
+  $master_donation->data['status'] = '';
+  $master_donation->data['remote_status'] = '';
+
+  // Set the proper order status and amount.
+  $master_donation->status = 'pending_future_payment';
+  $master_donation->amount = $new_amount;
+  // Always set the quantity to 1 because the new amount will get multiplied
+  // by the quantity.
+  $master_donation->donation['quantity'] = 1;
+
+  // Add the upsold did and upsell type.
+  $master_donation->fundraiser_upsell = new stdClass();
+  $master_donation->fundraiser_upsell->type = 'master_donation';
+  $master_donation->fundraiser_upsell->related_did = $upsold_donation->did;
+
+  // Create the new donation object, but do not process it.
+  // New donation has all of the old donation information already loaded.
+  // Also creates a new order to go along with the donation.
+  fundraiser_donation_create($master_donation);
+
+  $charge_time = $upsold_donation->node->fundraiser_upsell['charge_time'];
+
+  // If we're charging in a month, save a sustainers record and add a comment.
+  if ($charge_time == 'one_month') {
+    // Use the monthly schedule to get the next payment date.
+    $schedule = new sustainersMonthlySchedule();
+    $next = $schedule->advanceDate(1);
+    $next_charge = $next->format('U');
+
+    // At this point, the donation did and donation data is set.
+    // Now we need to create a recurring record for it as the master donation.
+    $recurring_donation_record = array(
+      'master_did' => $master_donation->did,
+      'did' => $master_donation->did,
+      'next_charge' => $next_charge,
+      'sustainer_key' => fundraiser_sustainers_get_sustainer_key_value(),
+    );
+
+    // Pass next charge timestamp through alter hook in case it needs to be
+    // adjusted by other modules, such as fundraiser_date_mode.
+    drupal_alter('fundraiser_sustainers_recurring_next_charge', $next_charge, $recurring_donation_record);
+
+    $recurring_donation_record['next_charge'] = $next_charge;
+
+    fundraiser_donation_comment($master_donation, 'Initial Upsell donation scheduled to be charged at @next_charge',
+      array('@next_charge' => $next->format(variable_get('date_format_medium', 'D, m/d/Y - H:i'))));
+
+    // Update the recurring table.
+    _fundraiser_sustainers_create_recurring($recurring_donation_record);
+  }
+  // If charging immediately, run through the normal process.
+  elseif ($charge_time == 'immediately') {
+
+    $next_charge = strtotime('now');
+    fundraiser_donation_comment($master_donation, 'Initial Upsell donation scheduled to be charged at @next_charge',
+      array('@next_charge' => format_date($next_charge)));
+
+    // At this point, the donation did and donation data is set.
+    // Now we need to create a recurring record for it as the master donation.
+    $recurring_donation_record = array(
+      'master_did' => $master_donation->did,
+      'did' => $master_donation->did,
+      'next_charge' => $next_charge,
+      'sustainer_key' => fundraiser_sustainers_get_sustainer_key_value(),
+    );
+    // Update the recurring table.
+    _fundraiser_sustainers_create_recurring($recurring_donation_record);
+
+    // Reload the donation before processing it so the recurring property
+    // gets added.
+    $master_donation = fundraiser_donation_get_donation($master_donation->did, TRUE);
+
+    // Process the donation.  Since it references the original donation,
+    // we don't need payment info.
+    $master_donation->reference_charge = TRUE;
+    fundraiser_donation_process($master_donation);
+    if (!isset($master_donation->result['message'])) {
+      $master_donation->result['message'] = '';
+    }
+    // The results should be at $donation->result.
+    if (isset($master_donation->result['success']) && $master_donation->result['success']) {
+      fundraiser_donation_success($master_donation);
+    }
+    else {
+      fundraiser_donation_decline($master_donation);
+    }
+  }
+
+  // Reload the donation so the amount and other donation stuff gets refreshed.
+  // Also this will cause it to get the recurring record.
+  $master_donation = fundraiser_donation_get_donation($master_donation->did, TRUE);
+
+  // Allow modules to modify the upsell master donation.
+  drupal_alter('upsell_master_donation', $master_donation);
+
+  // Reload the donation one more time so altered stuff will get updated.
+  return fundraiser_donation_get_donation($master_donation->did, TRUE);
+}
+
+/**
+ * Check to see if a donation was successfully added as a recurring.
+ *
+ * This means we should have a record for the master donation and then one
+ *   or more sustainer donations.
+ *
+ * @param int $did
+ *   The donation ID of the master donation.
+ *
+ * @return bool
+ *   Whether the donation has sustainer records (is recurring).
+ */
+function fundraiser_upsell_check_recurring($did) {
+  return (fundraiser_sustainers_count_donations_in_series($did) > 1);
+}
+
+/**
+ * Determines if upsell should be available on this node.
+ */
+function fundraiser_upsell_is_available($node) {
+  return (!empty($node->type) && fundraiser_is_donation_type($node->type));
+}
+
+/**
+ * Set the fundraiser recurring acceptance cookie.
+ */
+function fundraiser_upsell_set_acceptance_cookie() {
+  $cookie_lifetime = variable_get('fundraiser_upsell_acceptance_lifetime', 0);
+  setcookie('fundraiser_upsell_acceptance', 1, REQUEST_TIME + 3600 * 24 * $cookie_lifetime, ini_get('session.cookie_path'));
+}
+
+/**
+ * Get the donation ID of the upsold donation given the master donation ID.
+ *
+ * @param int $upsell_did
+ *   The donation ID of the master donation in the upsell sustainer series.
+ *
+ * @return int|bool
+ *   The donation ID of the original upsold donation, or FALSE.
+ */
+function fundraiser_upsell_get_upsold_did($upsell_did) {
+  return db_query("SELECT related_did FROM fundraiser_upsell_donation WHERE did = :upsell_did", array(':upsell_did' => $upsell_did))
+    ->fetchField();
+}
+
+/**
+ * Determine if a given donation is using an offiste recurring payment gateway.
+ *
+ * @param object $donation
+ *   The donation to check.
+ *
+ * @return bool
+ *   Whether this donation's payment method supports offsite recurring.
+ */
+function fundraiser_upsell_donation_is_offsite_recurring($donation) {
+  $info = _fundraiser_get_donation_gateway($donation->did);
+  if (_fundraiser_sustainers_offsite_recurring($info['offsite_recurring'], $donation->donation['payment_method'])) {
+
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * Determine if a fundraiser gateway supports upsell for a given payment method.
+ *
+ * @param array $info
+ *   Fundraiser gateway info array.
+ * @param string $payment_method
+ *   Payment method, such as "credit".
+ *
+ * @return bool
+ *   TRUE if gateway supports upsell for the payment method.
+ */
+function fundraiser_upsell_gateway_supports_upsell($info, $payment_method) {
+  // Gateway supports upsell if it supports recurring and is not offsite
+  // recurring for the payment method.
+  $supports_recurring = _fundraiser_sustainers_supports_recurring($info['allow_recurring'], $payment_method);
+  $is_offsite_recurring = _fundraiser_sustainers_offsite_recurring($info['offsite_recurring'], $payment_method);
+
+  if ($supports_recurring && !$is_offsite_recurring) {
+    return TRUE;
+  }
+
+  return FALSE;
+}

@@ -1,0 +1,138 @@
+# Springboard Salesforce Suite
+
+Provides an overview of the relationship between the modules provided in the
+Drupal contributed `salesforce` module and those provided in the salesforce
+subset of the `springboard` suite of modules.    See the documentation provided
+for each module for specifics about a given module.
+
+Of the modules provided in the Drupal contributed `salesforce` module, the
+following modules are **not** used and should not be enabled when using
+`springboard`: `salesforce_pull`, `salesforce_push`.
+
+
+## Connecting to Salesforce
+
+Required modules: `salesforce`
+
+Supporting modules: `salesforce_soap`
+
+This aspect of the Salesforce suite is entirely handled by the contributed
+module.  The initial connection to Salesforce is handled by the primary
+`salesforce` module provided by the using an OAuth connection.
+
+The `salesforce` module uses a REST interface by default.  REST calls do not
+allow batch operations, while SOAP calls will allow up to 200 records to be
+operated upon simultaneously.  The `springboard` suite places a priority to
+minimize individual calls to Salesforce and therefore all modules that
+communicate with Salesforce that are provided in the `springboard` suite require
+the `salesforce_soap` module.
+
+
+## Communicating with Salesforce
+
+Required modules: `salesforce`, `salesforce_soap`, `salesforce_sync`
+
+Supporting modules: `salesforce_queue`, `salesforce_log`
+
+Deprecated modules: `salesforce_pull`, `salesforce_push`
+
+The `springboard` suite provides a `salesforce_sync` module which is the primary
+means of communicating with Salesforce and manipulating records prior to the
+export to or import from Salesforce.  In addition, it keeps track of all records
+it has synced and which Drupal records are matched with which Salesforce
+records.
+
+The `salesforce_sync` module will execute its commands at the moment it is
+requested.  The `salesforce_queue` module was designed to offload the storing of
+sync requests until a given time comes to finally execute the requests, which it
+does by passing the requests to `salesforce_sync`.  The `salesforce_sync` module
+expects that you will tell it the best way and order to execute the sync
+requests -- in that case, it is "dumb" requiring explicit instructions.  The
+`salesforce_queue` module, on the other hand, will sort through the requests,
+group them into logical batches in a logical order and filter out requests that
+have obvious errors.
+
+As a support to `salesforce_queue`, the `salesforce_log` module is a default
+means provided to review the history of what has occurred during the processing
+of the queue and what is currently in the queue.
+
+The contributed `salesforce` suite has provided the `salesforce_pull` and
+`salesforce_push` modules which have been deprecated by the `salesforce_sync`
+and `salesforce_queue` modules provided in the `springboard` suite.  The pull
+and push modules implemented their own sync and queue systems combined, but as
+two separate modules one for importing and one for exporting.  The `springboard`
+suite has divided the tasks in a different direction, separating them by syncing
+and queuing, leaving both sync and queue systems capable of both importing and
+exporting.
+
+**NOTE:** At this time the `springboard` suite has not implemented a way to send
+sync requests instantaneously.  Therefore, in order for sync requests to occur
+automatically the `salesforce_queue` module will need to be enabled, or a custom
+module created.
+
+**NOTE:** At this time, importing content from Salesforce has not been
+implemented.
+
+
+## Mapping Drupal records to Salesforce Records
+
+Required modules: `salesforce`, `salesforce_mapping`, `salesforce_genmap`
+
+Supporting modules: `salesforce_donation`
+
+The `salesforce` contributed suite provides a `salesforce_mapping` module which
+focuses on providing the ability to map Drupal entities to Salesforce objects.
+The `springboard` suite has provided additional mapping capabilities through the
+`salesforce_genmap` module which has a goal to be agnostic about what type of
+Drupal "thing" is being mapped.  Specifically, the `salesforce_genmap` module
+provides support for mapping webforms and is the base upon which
+`salesforce_donation` is built.
+
+The `salesforce_genmap` module also greatly extends the `salesforce_mapping`
+module to provide integration with `salesforce_sync` and `salesforce_queue`, as
+well as streamline the mapping form to optimize it for the `springboard` suite.
+
+The `salesforce_donation` module is built using the tools provided by
+`salesforce_genmap` and focuses on the complexity of mapping donation
+information between various Drupal records and Salesforce.
+
+**NOTE:** The `springboard` suite has a goal to ultimately merge
+`salesforce_mapping` and `salesforce_genmap` so that there is a common base of
+mapping that can be used for any Drupal "thing" that needs to be mapped.  This
+merged module would still directly support mapping entities and webforms in the
+same manner that `salesforce_genmap` currently supports mapping webforms.
+
+
+### Patches
+
+_All patches are automatically applied when a `springboard` instance is built
+using [Springboard Build](https://github.com/JacksonRiver/Springboard-Build)._
+
+**Fix issue where validation not failing when it should (node/1951700):**
+  * http://drupal.org/files/key_validation-1951700_0.patch
+
+
+**Fix ajax validation issue (node/1951722):**
+  * http://drupal.org/files/salesforce_mapping-01-extract_default_values-1951722_0.patch
+  * http://drupal.org/files/salesforce_mapping-02-extract_default_values-1951722.patch
+
+This is considered a critical issue because the issue prevented the ability to
+build tests on the form. The issue was caused by having each ajax request
+validate the entire form, which would cause simpletest to abort.
+
+
+**Salesforce Mapping form enhancements:**
+  * (node/1951728): http://drupal.org/files/salesforce-externalId_to_idLookup-1951728.patch
+  * (node/1951730): http://drupal.org/files/salesforce_mapping-flexible_table_alter.patch
+  * (node/1951734): http://drupal.org/files/salesforce_mapping-descriptive_select-1951734.patch
+
+These are not strictly considered bugs, however, 1951728 is considered required
+because the usage of `externalId` is too restrictive, and 1951730 allows an
+easier ability to modify the form through the use of hook_alters.
+
+
+**Add simpletests to Salesforce Mapping:**
+  * (node/1951744): http://drupal.org/files/salesforce_mapping-tests-1951744.patch
+
+This is considered critical in order to provide a streamlined development
+environment.

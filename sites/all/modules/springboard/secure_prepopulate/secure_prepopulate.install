@@ -1,0 +1,77 @@
+<?php
+/**
+ * @file
+ * Secure pre-populate install/schema hooks.
+ */
+
+/**
+ * Implements hook_requirements().
+ */
+function secure_prepopulate_requirements($phase) {
+  $severity = REQUIREMENT_ERROR;
+  $status = 'missing';
+  // Check for mcrypt extension.
+  if (extension_loaded("mcrypt")) {
+    $severity = REQUIREMENT_OK;
+    $status = 'installed';
+  }
+  $requirements = array(
+    array(
+      'title' => 'Secure Pre-populate',
+      'description' => t('Secure Pre-populate requires that PHP Mcrypt extension be installed on the web server.'),
+      'severity' => $severity,
+      'value' => 'PHP Mcrypt extension ' . $status,
+    ),
+  );
+  return $requirements;
+}
+
+/**
+ * Implements hook_schema().
+ */
+function secure_prepopulate_schema() {
+  $schema = array();
+  $schema['secure_prepopulate_expired'] = array(
+    'description' => 'Expired pre-populate strings',
+    'fields' => array(
+      'hash' => array(
+        'description' => 'The hashed qs string',
+        'type' => 'varchar',
+        'length' => '40',
+        'not null' => FALSE,
+      ),
+      'expire_date' => array(
+        'description' => 'When it expired',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+    ),
+    'indexes' => array(
+      'hash' => array('hash'),
+      'expired' => array('expire_date'),
+    ),
+  );
+  $schema['secure_prepopulate_synonyms'] = array(
+    'description' => 'Token string keys and their associated webform component form_keys',
+    'fields' => array(
+      'token_key' => array(
+        'type' => 'varchar',
+        'length' => 40,
+        'not null' => FALSE,
+      ),
+      'synonyms' => array(
+        'type' => 'text',
+      ),
+    ),
+    'primary key' => array('token_key'),
+  );
+  return $schema;
+}
+
+/**
+ * Add indexes to tables.
+ */
+function secure_prepopulate_update_7001() {
+  db_add_index('secure_prepopulate_expired', 'hash', array('hash'));
+  db_add_index('secure_prepopulate_expired', 'expired', array('expire_date'));
+}

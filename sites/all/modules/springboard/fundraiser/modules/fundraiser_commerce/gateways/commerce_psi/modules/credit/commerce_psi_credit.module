@@ -1,0 +1,210 @@
+<?php
+
+/**
+ * Implements hook_commerce_payment_method_info().
+ */
+function commerce_psi_credit_commerce_payment_method_info() {
+  $payment_methods = array();
+
+  $payment_methods['commerce_psi_credit'] = array(
+    'base' => 'commerce_psi_credit',
+    'title' => t('Payment Solutions Inc. - Credit Card'),
+    'short_title' => t('PSI Credit'),
+    'display_title' => t('Credit card'),
+    'description' => t('Payment Solutions Inc. credit card processor.'),
+  );
+
+  return $payment_methods;
+}
+
+/**
+ * Returns the default settings for the Payment Solutions Inc. payment method.
+ */
+function commerce_psi_credit_default_settings() {
+  return _commerce_psi_default_settings() + array('card_types' => array());
+}
+
+/**
+ * Payment method callback: settings form.
+ */
+function commerce_psi_credit_settings_form($settings = array()) {
+  module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+  // Merge default settings into the stored settings array.
+  $settings = (array) $settings + commerce_psi_credit_default_settings();
+  $form = _commerce_psi_settings_form($settings);
+
+  // Add the card types config for the credit form
+  $form['card_types'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Limit accepted credit cards to the following types'),
+    '#options' => array_intersect_key(commerce_payment_credit_card_types(), drupal_map_assoc(array('visa', 'mastercard', 'amex', 'discover'))),
+    '#default_value' => $settings['card_types'],
+    '#required' => TRUE,
+  );
+
+  return $form;
+}
+
+/**
+ * Payment method callback: checkout form.
+ */
+function commerce_psi_credit_submit_form($payment_method, $pane_values = array(), $checkout_pane = NULL, $order = NULL) {
+  module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+
+  // Prepare the fields to include on the credit card form.
+  $fields = array(
+    'code' => '',
+  );
+
+  // Add the credit card types array if necessary.
+  $card_types = array_diff(array_values($payment_method['settings']['card_types']), array(0));
+
+  if (!empty($card_types)) {
+    $fields['type'] = $card_types;
+  }
+
+  return commerce_payment_credit_card_form($fields);
+}
+
+/**
+ * Payment method callback: checkout form submission.
+ */
+function commerce_psi_credit_submit_form_submit($payment_method, $pane_form, $pane_values, $order, $charge) {
+  // Determine the credit card type if possible for use in later code.
+  module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+  $card_type = commerce_payment_validate_credit_card_type($pane_values['credit_card']['number'], array_keys(commerce_payment_credit_card_types()));
+  $all_types = commerce_payment_credit_card_types();
+  // PSI api uses the pretty name for the card type, need to customize a few
+  $all_types['amex'] = t('AmericanExpress');
+  $all_types['discover'] = t('Discover');
+  $pretty_card_type = !empty($all_types[$card_type]) ? $all_types[$card_type] : NULL;
+
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  // Build a name-value pair array for this transaction.
+  $nvp['Amount'] = commerce_currency_amount_to_decimal($charge['amount'], $charge['currency_code']);
+
+  $nvp['CreditCard'] = array(
+    'CardNo' => $pane_values['credit_card']['number'],
+    'ExpMonth' => $pane_values['credit_card']['exp_month'],
+    'ExpYear' => $pane_values['credit_card']['exp_year'],
+    'Type' => $pretty_card_type,
+  );
+
+  if (isset($pane_values['credit_card']['code'])) {
+    $nvp['CreditCard']['Cvv'] = $pane_values['credit_card']['code'];
+  }
+
+  // Build a description for the order.
+  $description = array();
+
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    if (in_array($line_item_wrapper->type->value(), commerce_product_line_item_types())) {
+      $description[] = round($line_item_wrapper->quantity->value(), 2) . 'x ' . $line_item_wrapper->line_item_label->value();
+    }
+  }
+
+  // Prepare the billing address for use in the request.
+  $nvp['Donor'] = _commerce_psi_build_donor($order, $payment_method);
+  if (empty($nvp['Donor'])) {
+    drupal_set_message(t('There was an error processing this payment. Please try again.'), 'error');
+    return FALSE;
+  }
+
+  // Set the frequency if that value has been passed
+  $nvp['PayType'] = 'OneTime';
+  if (!empty($pane_values['frequency'])) {
+    $nvp['Frequency'] = $pane_values['frequency'];
+    $nvp['PayType'] = 'Sustainer';
+  }
+
+  $nvp['ProcessDateTime'] = date('c');
+  $nvp['PayCode'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['pay_code'], $order), 0, 20);
+  $nvp['ProgramCode'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['program_code'], $order), 0, 12);
+  $nvp['SourceCode'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['source_code'], $order), 0, 12);
+  $nvp['MarketSource'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['market_source'], $order), 0, 100);
+  $nvp['ClientTransactionId'] = $order->order_id;
+
+  // Allow modules to alter the values sent to PSI
+  $context = array(
+    'payment_method' => $payment_method,
+    'type' => 'credit',
+  );
+  drupal_alter('commerce_psi_request', $nvp, $context);
+
+  // Log the request if specified.
+  if ($payment_method['settings']['log']['request'] === 'request') {
+    // Mask the credit card number and CVV.
+    $log_nvp = $nvp;
+    if (!empty($log_nvp['CreditCard']['CardNo'])) {
+      $log_nvp['CreditCard']['CardNo'] = str_repeat('X', strlen($log_nvp['CreditCard']['CardNo']) - 4) . substr($log_nvp['CreditCard']['CardNo'], -4);
+    }
+
+    if (!empty($log_nvp['CreditCard']['Cvv'])) {
+      $log_nvp['CreditCard']['Cvv'] = str_repeat('X', strlen($log_nvp['CreditCard']['Cvv']));
+    }
+
+    watchdog('commerce_psi', 'PSI request: !param', array('!param' => '<pre>' . check_plain(print_r($log_nvp, TRUE)) . '</pre>'), WATCHDOG_DEBUG);
+  }
+
+  // Prepare a transaction object
+  $transaction = commerce_payment_transaction_new('commerce_psi_credit', $order->order_id);
+  $transaction->instance_id = $payment_method['instance_id'];
+  $transaction->amount = $charge['amount'];
+  $transaction->currency_code = $charge['currency_code'];
+  $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
+
+  // Submit the request to PSI
+  $response = _commerce_psi_request($payment_method, $nvp);
+
+  // If no response bail out and ask them to try again
+  if (empty($response)) {
+    $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
+    $transaction->message = 'The PSI API did not respond.';
+    commerce_payment_transaction_save($transaction);
+    drupal_set_message(t('There was an error processing this payment. Please try again.'), 'error');
+    return FALSE;
+  }
+
+  $transaction->payload[REQUEST_TIME] = $response;
+  $transaction->remote_id = $response->ClientTransactionId;
+
+  // Mark as success if we get back a 1 or 4
+  if (in_array((int) $response->ResponseCode, array(1, 4))) {
+    $success = TRUE;
+  }
+  else {
+    $success = FALSE;
+  }
+
+  $transaction->status  = $success ? COMMERCE_PAYMENT_STATUS_SUCCESS : COMMERCE_PAYMENT_STATUS_FAILURE;
+  $transaction->remote_status = $response->Approved;
+
+  // Build the response message.
+  $transaction->message = '<b>!status:</b> !response_message Response code: !response_code; Reason code: !reason_code';
+  $transaction->message_variables = array(
+    '!status' => $success ? t('APPROVED') : t('FAILED'),
+    '!response_message' => check_plain($response->ResponseMessage),
+    '!response_code' => $response->ResponseCode,
+    '!reason_code' => $response->ReasonCode,
+  );
+
+  if ($success) {
+    $transaction->message .= '; Authorization code: !auth_code';
+    $transaction->message_variables['!auth_code'] = $response->AuthorizationCode;
+  }
+
+  // Save the transaction information.
+  commerce_payment_transaction_save($transaction);
+
+  // Log the response if specified.
+  if ($payment_method['settings']['log']['response'] === 'response') {
+    watchdog('commerce_psi', 'PSI response: !param', array('!param' => '<pre>' . check_plain(print_r($response, TRUE)) . '</pre>', WATCHDOG_DEBUG));
+  }
+
+  // If the payment failed, display an error and rebuild the form.
+  if (!$success) {
+    drupal_set_message(t('We received the following error processing your card. Please enter your information again or try a different card.'), 'error');
+    drupal_set_message(check_plain($response->ResponseMessage), 'error');
+    return FALSE;
+  }
+}

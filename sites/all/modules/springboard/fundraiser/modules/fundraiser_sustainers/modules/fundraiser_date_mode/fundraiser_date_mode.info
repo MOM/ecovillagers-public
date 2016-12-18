@@ -1,0 +1,10 @@
+name = Fundraiser Date Mode
+description = Makes sustainer series charge dates configurable.
+core = 7.x
+package = Jackson River Springboard
+version = 7.x-4.x-dev
+configure = admin/config/system/fundraiser/date-mode
+dependencies[] = fundraiser_sustainers
+;Testing files
+files[] = tests/fundraiser_date_mode.test
+

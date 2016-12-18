@@ -1,0 +1,390 @@
+<?php
+
+/**
+ * @file
+ * Primary test class for Springboard API module
+ */
+
+/**
+ * Functional tests for Springboard API endpoint functions.
+ */
+class SpringboardAPITestCase extends DrupalWebTestCase {
+
+  /**
+   * Implementation of getIfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Springboard API',
+      'description' => 'Springboard API functional tests.',
+      'group' => 'Springboard API',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(array(
+      'webform',
+      'ctools',
+      'services',
+      'rest_server',
+      'springboard_api'));
+    $this->privileged_user = $this->drupalCreateUser(array(
+      'administer site configuration',
+      'create webform content',
+      'edit own webform content',
+      'access all webform results',
+      'administer springboard api',
+      'administer services',
+    ));
+    $this->drupalLogin($this->privileged_user);
+
+    // Create service configuration.
+    $record = array(
+      'eid' => '',
+      'name' => 'springboard',
+      'server' => 'rest_server',
+      'path' => 'springboard',
+      'authentication' => array(),
+      'server_settings' => array(
+        'formatters' => array(
+          'bencode' => 1,
+          'json' => 1,
+          'jsonp' => 1,
+          'php' => 1,
+          'xml' => 1,
+        ),
+        'parsers' => array(
+          'application/json' => 1,
+          'application/vnd.php.serialized' => 1,
+          'application/x-www-form-urlencoded' => 1,
+          'multipart/form-data' => 1,
+          'text/xml' => 1,
+        ),
+      ),
+      'resources' => array(
+        'springboard-forms' => array(
+          'operations' => array(
+            'retrieve' => array(
+              'enabled' => 1,
+            ),
+            'index' => array(
+              'enabled' => 1,
+            ),
+          ),
+          'actions' => array(
+            'submit' => array(
+              'enabled' => 1,
+            ),
+          ),
+        ),
+      ),
+      'debug' => 1,
+    );
+    drupal_write_record('services_endpoint', $record);
+  }
+
+  /**
+   * Test form endpoints.
+   */
+  public function testSpringboardApi() {
+    $this->drupalLogin($this->privileged_user);
+    $this->webform = $this->_springboard_api_create_webform();
+
+    $form_types = variable_get('webform_node_types_primary', array('webform'));
+    module_load_include('inc', 'springboard_api', 'resources/springboard_api.form_resources');
+    // List webforms.
+    $list = springboard_api_form_resource_index();
+    $this->assertTrue(count($list) == 1, t('Single record returned by list endpoint'));
+    $item = (array) $list[0];
+    $keys = array_keys($item);
+    // Confirm output.
+    $this->assertTrue((in_array('nid', $keys) && $item['nid'] == 1), t('node id correctly listed in index'));
+    $this->assertTrue((in_array('type', $keys) && $item['type'] == 'webform'), t('node type correctly listed in index'));
+    $this->assertTrue((in_array('title', $keys) && $item['title'] == t('Test Webform')), t('node title correctly listed in index'));
+
+    // Retrieve details for webform.
+    $details = springboard_api_form_resource_retrieve(1);
+    // Confirm output.
+    // $this->assertTrue(TRUE, print_r($details, TRUE));
+    $keys = array_keys($details);
+    $this->assertTrue((in_array('nid', $keys) && $details['nid'] == 1), t('node id correctly listed in retrieved details'));
+    $this->assertTrue((in_array('title', $keys) && $details['title'] == t('Test Webform')), t('node title correctly listed in retreived details'));
+    $this->assertTrue((in_array('internal_name', $keys) && $details['internal_name'] == ''), t('internal name correctly listed in retreived details'));
+    $this->assertTrue((in_array('type', $keys) && $details['type'] == 'webform'), t('node type correctly listed in retreived details'));
+    $this->assertTrue((in_array('fields', $keys) && count($details['fields']) == 7), t('field count is correct'));
+
+    if (is_array($details['fields'])) {
+      $webform_components = $this->_springboard_api_webform_components();
+      // $this->assertTrue(TRUE, print_r($webform_components, TRUE));
+      $this->_springboard_api_validate_fields($details['fields'], $webform_components);
+    }
+    // Submit webform.
+    module_load_include('inc', 'services', 'includes/services.runtime');
+    $this->submission = $this->_springboard_api_submit_webform();
+    // $this->assertTrue(TRUE, print_r($this->submission, TRUE));
+    // Confirm data save.
+    $this->assertTrue(isset($this->submission->sid) && isset($this->submission->nid), t('Submission record created'));
+    // Confirm submission field values.
+    $this->assertTrue($this->submission->data['1']['value'][0] == '2014-01-25', t('Date field set correctly'));
+    $this->assertTrue($this->submission->data['2']['value'][0] == 'one', t('Checkboxes field set correctly'));
+    $this->assertTrue($this->submission->data['3']['value'][0] == 'one', t('Radios field set correctly'));
+    $this->assertTrue($this->submission->data['4']['value'][0] == 'one', t('Select field set correctly'));
+    $this->assertTrue($this->submission->data['5']['value'][0] == 'test@example.com', t('E-mail field set correctly'));
+    $this->assertTrue($this->submission->data['6']['value'][0] == 'hidden value', t('Hidden field set correctly'));
+    $this->assertTrue($this->submission->data['7']['value'][0] == 'textfield value', t('Textfield field set correctly'));
+  }
+
+  /**
+   * Validate field information output by retrieve endpoint.
+   *
+   * @param array $fields
+   *   Field info array.
+   *
+   * @param mixed $webform_components
+   *   Webform components associated with the retrieved node.
+   */
+  function _springboard_api_validate_fields($fields, $webform_components) {
+    $standard_keys = array(
+      'label',
+      'type',
+      'default value',
+      'accepted values',
+      'required'
+    );
+    foreach ($fields as $form_key => $field_info) {
+      $component = isset($webform_components[$form_key]) ? $webform_components[$form_key] : FALSE;
+      if (!$component) {
+        // Component form key not present in the master list of components,
+        // this shouldn't be possible.
+        $this->assertTrue(FALSE, t('Bogus webform component detected: !form_key', array('!form_key' => $form_key)));
+      }
+      else {
+        // Spot check the field label.
+        $this->assertTrue((isset($field_info['label']) && $field_info['label'] == $webform_components[$form_key]['component']['name']), t('Component label correct for !form_key', array('!form_key' => $form_key)));
+        // Required.
+        $mandatory = isset($webform_components[$form_key]['component']['mandatory']) ? $webform_components[$form_key]['component']['mandatory'] : 0;
+        if ($mandatory !== NULL) {
+          $this->assertTrue((int) $field_info['required'] == (int) $mandatory, t('"Mandatory" field settings correct for !form_key', array('!form_key' => $form_key)));
+        }
+      }
+    }
+  }
+
+  /**
+   * Submit the test webform via the submission endpoint callback.
+   *
+   * @return mixed
+   *   returns the webform submission object that was created.
+   */
+  function _springboard_api_submit_webform() {
+    $values = array(
+      'date' => array(
+        'month' => '1',
+        'day' => '25',
+        'year' => '2014',
+      ),
+      'checkboxes' => array(
+        'one' => 'one',
+      ),
+      'radios' => 'one',
+      'select' => 'one',
+      'email' => 'test@example.com',
+      'hidden' => 'hidden value',
+      'textfield_test' => 'textfield value',
+    );
+    springboard_api_form_action_submit(1, NULL, $values);
+    module_load_include('inc', 'webform', 'includes/webform.submissions');
+    return webform_get_submission(1, 1);
+  }
+
+  /**
+   * Webform component details.
+   */
+  function _springboard_api_webform_components() {
+    $webform_components = array(
+      // Test date components.
+      'date' => array(
+        'component' => array(
+          'form_key' => 'date',
+          'name' => 'Date',
+          'type' => 'date',
+          'value' => '19 Nov 1978',
+          'extra' => array(
+            'timezone' => 'site',
+            'start_date' => '-2 years',
+            'end_date' => '+2 years',
+          ),
+          'mandatory' => '0',
+          'pid' => '0',
+          'weight' => '-15',
+        ),
+        'sample values' => '2014-02-25',
+        'database values' => array('1982-09-30'),
+        'database default values' => array('1978-11-19'),
+      ),
+      // Test select components.
+      'checkboxes' => array(
+        'component' => array(
+          'form_key' => 'checkboxes',
+          'name' => 'Checkboxes',
+          'type' => 'select',
+          'value' => 'two',
+          'extra' => array(
+            'items' => "one|one\ntwo|two\nthree|three",
+            'multiple' => 1,
+          ),
+          'mandatory' => '1',
+          'pid' => '0',
+          'weight' => '-15',
+        ),
+        'sample values' => 'one',
+        'database values' => array('one', 'three'),
+        'database default values' => array('two'),
+      ),
+      'radios' => array(
+        'component' => array(
+          'form_key' => 'radios',
+          'name' => 'Radios',
+          'type' => 'select',
+          'value' => 'two',
+          'extra' => array(
+            'items' => "one|one\ntwo|two\nthree|three",
+          ),
+          'mandatory' => '1',
+          'pid' => '0',
+          'weight' => '-9',
+        ),
+        'sample values' => 'one',
+        'database values' => array('one'),
+        'database default values' => array('two'),
+      ),
+      'select' => array(
+        'component' => array(
+          'form_key' => 'select',
+          'name' => 'Select',
+          'type' => 'select',
+          'value' => 'one',
+          'extra' => array(
+            'description' => 'Description here',
+            'items' => "one|one\ntwo|two\nthree|three\nfour|four\nfive|five\nsix|six",
+            'aslist' => 1,
+          ),
+          'mandatory' => '1',
+          'pid' => '0',
+          'weight' => '-15',
+        ),
+        'sample values' => 'two',
+        'database values' => array('two'),
+        'database default values' => array('one'),
+      ),
+      // Test email components.
+      'email' => array(
+        'component' => array(
+          'form_key' => 'email',
+          'name' => 'E-mail',
+          'type' => 'email',
+          'value' => '%useremail',
+          'mandatory' => '0',
+          'extra' => array(
+            // SimpleTest does not support type="email" input fields.
+            'attributes' => array('type' => 'text'),
+          ),
+          'pid' => '0',
+          'weight' => '-5',
+        ),
+        'sample values' => 'admin@localhost.localhost',
+        'database values' => array('admin@localhost.localhost'),
+        'database default values' => array(),
+      ),
+      // Test hidden components.
+      'hidden' => array(
+        'component' => array(
+          'form_key' => 'hidden',
+          'name' => 'Hidden',
+          'type' => 'hidden',
+          'value' => 'hidden value',
+          'mandatory' => '0',
+          'pid' => '0',
+          'weight' => '-4',
+        ),
+        'sample values' => NULL,
+        'database values' => array('hidden value'),
+        'database default values' => array('hidden value'),
+      ),
+      'textfield_test' => array(
+        'component' => array(
+          'form_key' => 'textfield_test',
+          'name' => 'Textfield',
+          'type' => 'textfield',
+          'value' => '',
+          'extra' => array(
+            'width' => '20',
+          ),
+          'mandatory' => '1',
+          'pid' => '0',
+          'weight' => '-6',
+        ),
+        'sample values' => 'test value',
+        'database values' => array(),
+        'database default values' => array(),
+      ),
+    );
+    return $webform_components;
+  }
+
+  /**
+   * Create a webform for use in testing.
+   *
+   * @return mixed
+   *   Returns the created node object.
+   */
+  function _springboard_api_create_webform() {
+    $webform_components = $this->_springboard_api_webform_components();
+
+    $settings = array(
+      'type' => 'webform',
+      'language'  => LANGUAGE_NONE,
+      'uid' => '1',
+      'status' => '1',
+      'promote' => '1',
+      'moderate' => '0',
+      'sticky' => '0',
+      'tnid' => '0',
+      'translate' => '0',
+      'title' => 'Test Webform',
+      'body' => array(LANGUAGE_NONE => array(array('value' => 'Donec placerat. Nullam nibh dolor.'))),
+      'teaser' => array(LANGUAGE_NONE => array(array('value' => 'Donec placerat.'))),
+      'log' => '',
+      'format' => '1',
+      'webform' => array(
+        'confirmation' => 'Thanks!',
+        'confirmation_format' => filter_default_format(),
+        'redirect_url' => '<confirmation>',
+        'teaser' => '0',
+        'allow_draft' => '0',
+        'submit_text' => '',
+        'submit_limit' => '-1',
+        'submit_interval' => '-1',
+        'submit_notice' => '1',
+        'roles' => array('1', '2'),
+        'components' => array(),
+        'emails' => array(),
+      ),
+    );
+    $cid = 0;
+    foreach ($webform_components as $key => $component_info) {
+      $cid++;
+      $settings['webform']['components'][$cid] = $component_info['component'];
+      $settings['webform']['components'][$cid]['cid'] = $cid;
+      $settings['webform']['components'][$cid]['pid'] = 0;
+    }
+
+    $webform_node = $this->drupalCreateNode($settings);
+
+    return $webform_node;
+
+  }
+}

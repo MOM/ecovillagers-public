@@ -1,0 +1,13 @@
+name = Fundraiser Recent Donors 
+description = "Per node, allows recent donations above a specific amount to be displayed when an opt-in box is checked on donation.'
+core = 7.x
+version = 7.x-4.x
+dependencies[] = fundraiser
+dependencies[] = views
+dependencies[] = form_layouts
+
+;Views:
+files[] = includes/fundraiser_recent_donors.views_default.inc
+files[] = includes/fundraiser_recent_donors.views.inc
+
+package = Jackson River Springboard

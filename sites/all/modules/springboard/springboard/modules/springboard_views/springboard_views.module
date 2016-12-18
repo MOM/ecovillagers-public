@@ -1,0 +1,484 @@
+<?php
+
+/**
+ * Implements hook_views_api().
+ */
+function springboard_views_views_api() {
+  return array('api' => 2);
+}
+
+/**
+ * Implements hook_views_pre_render().
+ * When rendering one of our own views, insert a count into the header.
+ */
+function springboard_views_views_pre_render(&$view) {
+  // An array of view names and a pretty name for the status of the items
+  $sbv_views = array(
+    'sbv_batch' => 'Batched',
+    'sbv_queue' => 'Queued',
+    'sbv_retry_queue' => 'Retry',
+    'sbv_permanent_failure' => 'Failed',
+  );
+  if (!array_key_exists($view->name, $sbv_views)) {
+    return;
+  }
+  $view->attachment_before .= t('!status Items: !count items',
+    array('!status' => $sbv_views[$view->name], '!count' => $view->total_rows));
+}
+
+/**
+ * Implements hook_date_api_tables().
+ * Tell Date which tables to look for date fields in.
+ */
+function springboard_views_date_api_tables() {
+  return array('sf_queue', 'sf_retry_queue', 'sf_permanent_failure', 'sf_batch');
+}
+
+/**
+ * Implements hook_date_api_fields().
+ * Tell Date about our date fields.
+ */
+function springboard_views_date_api_fields($field) {
+  $sf_queue_created = array(
+    // The type of date: DATE_UNIX, DATE_ISO, DATE_DATETIME.
+    'sql_type' => DATE_UNIX,
+    // Timezone handling options: 'none', 'site', 'date', 'utc'.
+    'tz_handling' => 'site',
+    // Granularity of this date field's db data.
+    'granularity' => array('year', 'month', 'day', 'hour', 'minute'),
+  );
+  $sf_retry_queue_created = array(
+    'sql_type' => DATE_UNIX,
+    'tz_handling' => 'site',
+    'granularity' => array('year', 'month', 'day', 'hour', 'minute'),
+  );
+  $sf_retry_queue_retry_date = array(
+    'sql_type' => DATE_UNIX,
+    'tz_handling' => 'site',
+    'granularity' => array('year', 'month', 'day', 'hour', 'minute'),
+  );
+  $sf_permanent_failure_date_added = array(
+    'sql_type' => DATE_UNIX,
+    'tz_handling' => 'site',
+    'granularity' => array('year', 'month', 'day', 'hour', 'minute'),
+  );
+  $sf_batch_created = array(
+    'sql_type' => DATE_UNIX,
+    'tz_handling' => 'site',
+    // Array of "table.field" values for related fields that should be loaded automatically in the Views SQL.
+    'related_fields' => array('sf_batch.start_time', 'sf_batch.end_time'),
+    'granularity' => array('year', 'month', 'day', 'hour', 'minute'),
+  );
+  $sf_batch_start_time = array(
+    'sql_type' => DATE_UNIX,
+    'tz_handling' => 'site',
+    'fromto' => array('sf_batch_start_time', 'sf_batch_end_time'),
+    'granularity' => array('year', 'month', 'day', 'hour', 'minute'),
+  );
+  // END FIELD : just tell Date how to read from db, and how to handle TZ
+  $sf_batch_end_time = array(
+    'sql_type' => DATE_UNIX,
+    'tz_handling' => 'site',
+  );
+  switch ($field) {
+    case 'sf_queue.created':
+      return $sf_queue_created;
+      break;
+    case 'sf_retry_queue.created':
+      return $sf_retry_queue_created;
+      break;
+    case 'sf_retry_queue.retry_date':
+      return $sf_retry_queue_retry_date;
+      break;
+    case 'sf_permanent_failure.date_added':
+      return $sf_permanent_failure_date_added;
+      break;
+    case 'sf_batch.created':
+      return $sf_batch_created;
+      break;
+    case 'sf_batch.start_time':
+      return $sf_batch_start_time;
+      break;
+    case 'sf_batch.end_time':
+      return $sf_batch_end_time;
+      break;
+  }
+}
+
+/**
+ * Implements hook_views_bulk_operations_object_info().
+ */
+function springboard_views_views_bulk_operations_object_info() {
+  $object_info = array(
+    'sf_permanent_failure' => array(
+      'type' => 'sf_permanent_failure',
+      'base_table' => 'sf_permanent_failure',
+      'load' => '_springboard_views_sf_permanent_failure_load',
+      'oid' => 'id',
+      'title' => 'oid',
+    ),
+    'sf_retry_queue' => array(
+      'type' => 'sf_retry_queue',
+      'base_table' => 'sf_retry_queue',
+      'load' => '_springboard_views_sf_retry_queue_load',
+      'oid' => 'id',
+      'title' => 'oid',
+    ),
+  );
+  return $object_info;
+}
+
+/**
+ * Implements hook_action_info().
+ */
+function springboard_views_action_info() {
+  return array(
+    'springboard_views_sf_permanent_failure_retry_action' => array(
+      'label' => t('Retry'),
+      'type' => 'sf_permanent_failure',
+      'configurable' => FALSE,
+      'triggers' => array(
+        'sf_permanent_failure_retry',
+      ),
+    ),
+    'springboard_views_sf_permanent_failure_delete_action' => array(
+      'label' => t('Delete'),
+      'type' => 'sf_permanent_failure',
+      'configurable' => FALSE,
+      'triggers' => array(
+        'sf_permanent_failure_delete',
+      ),
+    ),
+    'springboard_views_sf_retry_queue_retry_action' => array(
+      'label' => t('Retry'),
+      'type' => 'sf_retry_queue',
+      'configurable' => FALSE,
+      'triggers' => array(
+        'sf_retry_queue_retry',
+      ),
+    ),
+    'springboard_views_sf_retry_queue_delete_action' => array(
+      'label' => t('Delete'),
+      'type' => 'sf_retry_queue',
+      'configurable' => FALSE,
+      'triggers' => array(
+        'sf_retry_queue_delete',
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_springboard_admin_alias_patterns().
+ */
+function springboard_views_springboard_admin_alias_patterns() {
+    return array(
+    'admin/springboard/reports/contacts' => array(
+      'path' => array(
+        'regex' => '|^/admin/springboard/reports/contacts$|',
+        'replacement' => 'admin/springboard/reports/contacts',
+      ),
+      'alias' => array(
+        'regex' => '|^springboard/reports/contacts$|',
+        'replacement' => 'springboard/reports/contacts',
+      ),
+    ),
+    // Salesforce reports.
+    'admin/springboard/reports/integration-reports' => array(
+      'path' => array(
+        'regex' => '|^/admin/springboard/reports/integration-reports(/.*)?$|',
+        'replacement' => 'admin/springboard/reports/integration-reports$1',
+      ),
+      'alias' => array(
+        'regex' => '|^springboard/reports/integration-reports(/.*)?$|',
+        'replacement' => 'springboard/reports/integration-reports$1',
+      ),
+    ),
+  );
+}
+
+function springboard_views_springboard_admin_admin_menu_items_alter(&$items) {
+  // Top Level: Reports.
+  $items['admin/springboard/reports'] = array(
+    'link_path' => 'admin/springboard/reports',
+    'link_title' => t('Reports'),
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 5,
+    '_children' => array(),
+  );
+
+  // Reports > Contacts.
+  $items['admin/springboard/reports']['_children']['admin/springboard/reports/contacts'] = array(
+    'link_path' => 'admin/springboard/reports/contacts',
+    'link_title' => 'Contacts',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 1,
+  );
+
+  // Reports > Donations.
+  $items['admin/springboard/reports']['_children']['admin/reports/salesforce/donations'] = array(
+    'link_path' => 'admin/reports/salesforce/donations',
+    'link_title' => 'Donations',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 0,
+  );
+
+  // Reports > Contacts.
+  $items['admin/springboard/reports']['_children']['admin/springboard/reports/contacts'] = array(
+    'link_path' => 'admin/springboard/reports/contacts',
+    'link_title' => 'Contacts',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 0,
+  );
+  // Reports > Silverpop Transact.
+  if (module_exists('silverpop_transact')) {
+    $items['admin/springboard/reports']['_children']['admin/springboard/reports/silverpop-transact-log'] = array(
+      'link_path' => 'admin/springboard/reports/silverpop-transact-log',
+      'link_title' => 'Silverpop Transact',
+      'menu_name' => 'springboard_admin_menu',
+      'expanded' => 1,
+      'customized' => 1,
+      'weight' => 4,
+    );
+  }
+  // Reports > Integration Reports.
+  $items['admin/springboard/reports']['_children']['admin/springboard/reports/integration-reports'] = array(
+    'link_path' => 'admin/springboard/reports/integration-reports',
+    'link_title' => 'Integration Reports',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 0,
+    'customized' => 1,
+    'weight' => 2,
+    '_children' => array(),
+  );
+  // Reports > Integration Reports > Batch Log.
+  $items['admin/springboard/reports']['_children']['admin/springboard/reports/integration-reports']['_children']['admin/springboard/reports/integration-reports/batch'] = array(
+    'link_path' => 'admin/springboard/reports/integration-reports/batch',
+    'link_title' => 'Batch Log',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 0,
+    'customized' => 1,
+    'weight' => 0,
+  );
+  // Reports > Integration Reports > Batch Item Log.
+  $items['admin/springboard/reports']['_children']['admin/springboard/reports/integration-reports']['_children']['admin/springboard/reports/integration-reports/item'] = array(
+    'link_path' => 'admin/springboard/reports/integration-reports/item',
+    'link_title' => 'Item Log',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 0,
+    'customized' => 1,
+    'weight' => 1,
+  );
+
+  // Reports > Integration Reports > Queue.
+  $items['admin/springboard/reports']['_children']['admin/springboard/reports/integration-reports']['_children']['admin/springboard/reports/integration-reports/queue'] = array(
+    'link_path' => 'admin/springboard/reports/integration-reports/queue',
+    'link_title' => 'Queue',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 0,
+    'customized' => 1,
+    'weight' => 2,
+  );
+}
+
+/**
+ * Helper function, returns a list of the available 'drupal_type' field values.
+ */
+function springboard_views_sf_drupal_types() {
+  static $drupal_types = array();
+  if (empty($drupal_types)) {
+    $result = db_query('SELECT DISTINCT drupal_type FROM {salesforce_management_object_map} ' .
+      'WHERE drupal_type IS NOT NULL');
+    while ($drupal_type = $result->fetchField()) {
+      $drupal_types[$drupal_type] = $drupal_type;
+    }
+  }
+  return $drupal_types;
+}
+
+/**
+ * Helper function, returns a list of the possible gateway responses.
+ *
+ * @deprecated Used to be an options callback for sustainers views data.
+ *             Doesn't appear to be used anywhere else.
+ */
+function springboard_views_gateway_response_options() {
+  return array(
+    'success' => t('Success'),
+    'canceled' => t('Canceled'),
+    'failed' => t('Failed'),
+    'skipped' => t('Skipped'),
+  );
+}
+
+/**
+ * Load object from the sf_permanent_failure table
+ */
+function _springboard_views_sf_permanent_failure_load($id) {
+  return db_fetch_object(db_query('SELECT * FROM {sf_permanent_failure} ' .
+    'WHERE id = :id', array(':id' => $id)));
+}
+
+/**
+ * Load object from the sf_retry_queue table
+ */
+function _springboard_views_sf_retry_queue_load($id) {
+  return db_fetch_object(db_query('SELECT * FROM {sf_retry_queue} WHERE ' .
+    'id = :id', array(':id' => $id)));
+}
+
+/**
+ * Action to move an object back into the queue from the sf_permanent_failure table
+ */
+function springboard_views_sf_permanent_failure_retry_action($object, $context) {
+  sf_queue_insert($object->oid, $object->type, $object->action);
+  db_delete('sf_permanent_failure')
+  ->condition('id', $context['row']->id)
+  ->execute();
+}
+
+/**
+ * Action to delete an item from the sf_permanent_failure table
+ */
+function springboard_views_sf_permanent_failure_delete_action($object, $context) {
+  db_delete('sf_permanent_failure')
+  ->condition('id', $context['row']->id)
+  ->execute();
+}
+
+/**
+ * Action to move an object back into the queue from the sf_retry_queue table
+ */
+function springboard_views_sf_retry_queue_retry_action($object, $context) {
+  sf_queue_insert($object->oid, $object->type, $object->action);
+  db_delete('sf_retry_queue')
+  ->condition('id', $context['row']->id)
+  ->execute();
+}
+
+/**
+ * Action to delete an item from the sf_retry_queue table
+ */
+function springboard_views_sf_retry_queue_delete_action($object, $context) {
+  db_delete('sf_retry_queue')
+  ->condition('id', $context['row']->id)
+  ->execute();
+}
+
+/**
+ * Implements hook_springboard_dashboard_panes().
+ *
+ * Add available views as options on the Springboard dashboard.
+ */
+function springboard_views_springboard_dashboard_panes() {
+  global $base_url;
+  $panes['springboard_notes_feed'] = array(
+    'label' => t('Springboard Notes'),
+    'description' => t('XML feed view from jr.com'),
+    'content' => '' .
+      (module_exists('views') ? views_embed_view('sbv_notes', 'block') : t('Please enable the Views module to improve your Springboard experience.')),
+    'position' => 'column_right',
+    'weight' => 3,
+  );
+  // Create Form listing panes grouping the views argument by Fundraiser or webform node types.
+  $node_types = node_type_get_types();
+  $fundraiser_types = array();
+  $webform_types = array();
+  foreach($node_types as $type) {
+    if (fundraiser_is_donation_type($type->type)) {
+      $fundraiser_types[] = $type->type;
+    } else if (_webform_user_is_webform_user_node_type($type->type) && !fundraiser_is_donation_type($type->type)) {
+      $webform_types[] = $type->type;
+    }
+  }
+
+  drupal_alter('springboard_views_springboard_dashboard_panes', $webform_types);
+
+  $panes['springboard_recent_donation_forms'] = array(
+   'label' => t('Recent donation forms'),
+   'description' => t('Configuration and submissions summary for recently created or updated springboard donation forms.'),
+   'content' => '<h2>' . t('Recent donation forms ') .  '</h2>' .
+     (module_exists('webform') ? l(t('Create donation form'), $base_url . '/node/add/donation-form', array('attributes' => array('class' => array('button', 'add-button')))) : '' ) .
+     (module_exists('views') ? views_embed_view('sbv_forms', 'block_4', implode('+', $fundraiser_types)) : t('Please enable the Views module to improve your Springboard experience.')) .
+     l(t('View All Donation Forms'), 'admin/springboard/donation-forms/all', array('attributes' => array('class' => array('more-link button more-button')))),
+   'position' => 'column_left',
+   'weight' => 0,
+  );
+  $panes['springboard_recent_forms'] = array(
+    'label' => t('Recent forms'),
+    'description' => t('Configuration and submissions summary for recently created or updated springboard forms.'),
+    'content' => '<h2>' . t('Recent forms ') .   '</h2>' .
+      (module_exists('fundraiser') ? l(t('Create form'), $base_url . '/node/add/webform', array('attributes' => array('class' => array('button', 'add-button')))) : '')  .
+      (module_exists('views') ? views_embed_view('sbv_forms', 'block_3', implode('+', $webform_types)) : t('Please enable the Views module to improve your Springboard experience.')) .
+      l(t('View All Forms'), 'admin/springboard/forms/all', array('attributes' => array('class' => array('more-link button more-button')))),
+    'position' => 'column_left',
+    'weight' => 2,
+  );
+  return $panes;
+}
+
+/**
+ * Implements hook_views_pre_view().
+ *
+ * Remove the exposed date popup filter from the file export display to
+ * eliminate a conflict between the popup and views_data_export:
+ */
+function springboard_views_views_pre_view(&$view, &$display_id, &$args) {
+  if ($view->name != 'sbv_donations' || $display_id != 'views_data_export_1') {
+    return;
+  }
+
+  // Unset the date filter form both the default and export displays in case
+  // the default date filter is overwritten within the data export's display:
+  unset($view->display['default']->handler->options['filters']['date_filter']);
+  unset($view->display['views_data_export_1']->handler->options['filters']['date_filter']);
+}
+
+/**
+ * Implements hook_views_query_alter().
+ *
+ * Apply date_popup-based filtering to the donations report's data export display, as filtering
+ * by date can result in date formatting errors depending on the site's current, short date format.
+ */
+function springboard_views_views_query_alter(&$view, &$query) {
+  if ($view->name != 'sbv_donations' || $view->current_display != 'views_data_export_1') {
+    return;
+  }
+  $min_date = ''; $max_date = '';
+  if (isset($view->exposed_input['date_filter']['min']['date'])) {
+    $min_date = date('Y-m-d', strtotime($view->exposed_input['date_filter']['min']['date']));
+  }
+  if (isset($view->exposed_input['date_filter']['max']['date'])) {
+    $max_date = date('Y-m-d', strtotime($view->exposed_input['date_filter']['max']['date']));
+  }
+
+  if (!isset($min_date) || !isset($max_date) || empty($min_date) || empty($max_date)) {
+    return;
+  }
+
+  // Add the date filter to the WHERE clause:
+  $query->where[] = array(
+    'conditions' => array(
+      array(
+        'field' =>
+          "DATE_FORMAT(ADDTIME(FROM_UNIXTIME(commerce_order_fundraiser_donation.created), SEC_TO_TIME(-14400)), '%Y-%m-%d') >= :commerce_order_date_filter " .
+          "AND DATE_FORMAT(ADDTIME(FROM_UNIXTIME(commerce_order_fundraiser_donation.created), SEC_TO_TIME(-14400)), '%Y-%m-%d') <= :commerce_order_date_filter1",
+        'value' => array(
+          ':commerce_order_date_filter' => $min_date,
+          ':commerce_order_date_filter1' => $max_date,
+        ),
+        'operator' => 'formula',
+      ),
+    ),
+    'args' => array(),
+    'type' => 'AND',
+  );
+}

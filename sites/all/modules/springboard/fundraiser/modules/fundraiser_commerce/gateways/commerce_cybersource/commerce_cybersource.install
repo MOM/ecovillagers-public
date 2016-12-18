@@ -1,0 +1,94 @@
+<?php
+
+/**
+ * @file
+ * Ensures sites have SOAP, libxml, and openssl enabled.
+ */
+
+
+/**
+ * Implements hook_schema().
+ */
+function commerce_cybersource_schema() {
+  $schema = array();
+
+  $schema['cache_commerce_cybersource_taxes'] = drupal_get_schema_unprocessed('system', 'cache');
+  $schema['cache_commerce_cybersource_taxes']['description'] = 'Cache table for the temporary storage of CyberSource calculated taxes for orders.';
+  $schema['cache_commerce_cybersource_taxes']['fields']['cid']['description'] = 'Primary Key: Order ID the rates are for.';
+
+  return $schema;
+}
+
+/**
+ * Implements of hook_requirements().
+ */
+function commerce_cybersource_requirements($phase) {
+  $t = get_t();
+
+  $has_soap = class_exists('SoapClient');
+  $has_libxml = class_exists('libXMLError');
+  $has_openssl = defined('OPENSSL_VERSION_TEXT');
+
+  $requirements['commerce_cybersource_soap'] = array(
+    'title' => $t('SOAP'),
+    'value' => $has_soap ? $t('Enabled') : $t('Not found'),
+  );
+
+  if (!$has_soap) {
+    $requirements['commerce_cybersource_soap'] += array(
+      'severity' => REQUIREMENT_ERROR,
+      'description' => $t('CyberSource requires the PHP <a href="!soap_url">SOAP extension</a>.', array('!soap_url' => 'http://php.net/manual/en/book.soap.php')),
+    );
+  }
+
+  $requirements['commerce_cybersource_libxml'] = array(
+    'title' => $t('libxml'),
+    'value' => $has_libxml ? $t('Enabled (@version)', array('@version' => LIBXML_DOTTED_VERSION)) : $t('Not found'),
+  );
+
+  if (!$has_libxml) {
+    $requirements['commerce_cybersource_libxml'] += array(
+      'severity' => REQUIREMENT_ERROR,
+      'description' => $t('CyberSource requires the PHP <a href="!libxml_url">libxml extension</a>.', array('!libxml_url' => 'http://php.net/manual/en/book.libxml.php')),
+    );
+  }
+
+  $requirements['commerce_cybersource_openssl'] = array(
+    'title' => $t('OpenSSL'),
+    'value' => $has_openssl ? $t('Enablied (@version)', array('@version' => OPENSSL_VERSION_TEXT)) : $t('Not found'),
+  );
+
+  if (!$has_openssl) {
+    $requirements['commerce_cybersource_openssl'] += array(
+      'severity' => REQUIREMENT_ERROR,
+      'description' => $t('CyberSource requires the PHP <a href="!openssl_url">OpenSSL extension</a>.', array('!openssl_url' => 'http://php.net/manual/en/book.openssl.php')),
+    );
+  }
+
+  return $requirements;
+}
+
+/**
+ * Moves the cardonfile setting to the appropriate place.
+ */
+function commerce_cybersource_update_7100() {
+  $query = db_select('rules_config', 'rc')
+    ->fields('rc', array('data'))
+    ->condition('rc.name', 'commerce_payment_cybersource_soap_cc', '=')
+    ->execute();
+  if (!$query->rowCount()) {
+    return;
+  }
+
+  $data = $query->fetchField();
+  $data = preg_replace_callback('/(payment_method.*)("settings";a:)([0-9]+)(.*)(s:11:"credit_card";a:)([0-9]+)(.*)(s:10:"cardonfile";i:[01];)/', function($matches) {
+    return $matches[1] . $matches[2] . (intval($matches[3]) + 1) . $matches[4] . $matches[8] . $matches[5] . (intval($matches[6]) - 1) . $matches[7];
+  }, $data);
+
+  db_merge('rules_config')
+    ->key(array('name' => 'commerce_payment_cybersource_soap_cc'))
+    ->fields(array(
+      'data' => $data,
+    ))
+    ->execute();
+}

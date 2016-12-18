@@ -1,0 +1,290 @@
+<?php
+
+/**
+ * @file
+ * Tracks Springboard version against installed Springboard and Contrib modules.
+ * Allowing for easy notice if a module drops below minimum requirements.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function springboard_version_permission() {
+  return array(
+    'access springboard version' => array(
+      'title' => t('access springboard version'),
+      'description' => t('Access the Springboard version report page.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_version_menu() {
+  $items = array();
+  $items['admin/springboard/version'] = array(
+    'title' => 'Springboard version',
+    'description' => 'Access Springboard version report.',
+    'access arguments' => array('access springboard version'),
+    'page callback' => 'springboard_version_report',
+    'type' => MENU_LOCAL_TASK,
+  );
+  return $items;
+}
+
+/**
+ * Menu callback, display a table of Springboard versioned modules, with red flag if update needed.
+ */
+function springboard_version_report() {
+  $headers = array(
+    t('Name'),
+    t('Installed Version'),
+    t('Current Hash'),
+    t('Installed Hash'),
+  );
+  $rows = array();
+  $modules = springboard_version_info();
+  foreach ($modules as $module_name => $module_info) {
+    // $module_info as info returned from drupal_parse_info_file();
+    $row = array(
+      t('<strong>@name</strong> (@package) </br> %description',
+        array(
+        '@name' => $module_info['name'],
+        '@package' => $module_info['package'],
+        '%description' => $module_info['description'],
+        )
+      ),
+      $module_info['version'],
+      $module_info['hash'],
+      $module_info['springboard_hash'],
+    );
+    $class = '';
+    if (!_springboard_version_ok_version($module_info['springboard_version'], $module_info['version'])) {
+      $class = 'error';
+    }
+    if (!_springboard_version_ok_hash($module_info['springboard_hash'], $module_info['hash'])) {
+      $class = 'error';
+    }
+    $rows[] = array(
+      'data' => $row,
+      'class' => array($class),
+    );
+  }
+  return theme('table', array('header' => $headers, 'rows' => $rows));
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function springboard_version_requirements($phase) {
+  if ($phase == 'runtime') {
+    $modules = springboard_version_info();
+    $requirement = array(
+      'title' => t('Springboard version requirements'),
+      'value' => t('All modules installed are compatible with this version of Springboard.'),
+      'severity' => REQUIREMENT_OK,
+    );
+    $out_of_version = array();
+    $out_of_hash = array();
+    foreach ($modules as $module_name => $module_info) {
+      if (module_exists($module_name) && !_springboard_version_ok_version($module_info['springboard_version'], $module_info['version'])) {
+        $out_of_version[] = $module_name;
+        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['description']['version'] = t('Not all modules installed are compatible with this version of Springboard.');
+      }
+      if (module_exists($module_name) && !_springboard_version_ok_hash($module_info['springboard_hash'], $module_info['hash'])) {
+        $out_of_hash[] = $module_name;
+        $requirement['severity'] = REQUIREMENT_ERROR;
+        $requirement['description']['hash'] = t('Some Springboard tracked modules have been modified since installation.');
+      }
+    }
+    if ($requirement['severity'] == REQUIREMENT_ERROR) {
+      $requirement['description'] = implode(' ', $requirement['description']);
+      $error_modules = array_merge($out_of_version, $out_of_hash);
+      $requirement['value'] = t('The following modules need to be reviewed: %module_list', array('%module_list' => implode(', ', $error_modules)));
+    }
+    $requirements['springboard_version'] = $requirement;
+    return $requirements;
+  }
+}
+
+/**
+ * Implements hook_update_status_alter().
+ */
+function springboard_version_update_status_alter(&$projects) {
+  $modules = springboard_version_info();
+  foreach ($modules as $module_name => $module_info) {
+    if (isset($projects[$module_name]) && !_springboard_version_ok_version($module_info['springboard_version'], $module_info['version'])) {
+      $projects[$module_name]['status'] = UPDATE_NOT_SUPPORTED;
+      $projects[$module_name]['reason'] = t('Not compatible with current version of Springboard. Please upgrade to at least @update.',
+        array('@update' => $module_info['springboard_version']));
+      $projects[$module_name]['extra'][] = array(
+        'class' => 'release-not-supported',
+        'label' => t('Incompatible with Springboard'),
+        'data' => $projects[$module_name]['reason'],
+      );
+    }
+    if (isset($projects[$module_name]) && !_springboard_version_ok_hash($module_info['springboard_hash'], $module_info['hash'])) {
+      $projects[$module_name]['status'] = UPDATE_NOT_SUPPORTED;
+      $projects[$module_name]['reason'] = t('This module has been modified since Springboard was installed or last updated. Please review.');
+      $projects[$module_name]['extra'][] = array(
+        'class' => 'release-not-supported',
+        'label' => t('Modified module'),
+        'data' => $projects[$module_name]['reason'],
+      );
+    }
+  }
+}
+
+/**
+ * Helper function, return the drupal_parse_info_file() info and Springboard version for all modules listed.
+ */
+function springboard_version_info() {
+  $modules = array();
+  // Get version information.
+  $version_file = drupal_get_path('module', 'springboard_version') . '/springboard_version.data';
+  if (is_file($version_file) && is_readable($version_file)) {
+    // The file uses the same format as drupal_parse_info_file;
+    // See: http://api.drupal.org/api/drupal/includes!common.inc/function/drupal_parse_info_file/6
+    // Generally key = value, where key is module project name, and value is the min version that
+    // this version of Springboard requires.
+    $modules = drupal_parse_info_file($version_file);
+    foreach ($modules as $module_name => $springboard_version) {
+      $modules[$module_name] = drupal_parse_info_file(drupal_get_path('module', $module_name) . '/' . $module_name . '.info');
+      $modules[$module_name]['springboard_version'] = $springboard_version;
+      if (!isset($modules[$module_name]['version'])) {
+        $modules[$module_name]['version'] = '';
+      }
+    }
+  }
+  // Allow other modules to modify version information.
+  drupal_alter('springboard_version_info', $modules);
+  // Get hash information. Generated on install or last update hook.
+  $directory = file_default_scheme() . '://springboard_version';
+  $hashes_file = drupal_realpath( $directory . '/springboard_version.hashes' );
+  if (is_file($hashes_file) && is_readable($hashes_file)) {
+    $hashes = drupal_parse_info_file($hashes_file);
+    foreach ($hashes as $module_name => $springboard_hash) {
+      $modules[$module_name]['springboard_hash'] = $springboard_hash;
+      $modules[$module_name]['hash'] = _springboard_version_hash_module($module_name);
+    }
+  }
+  // Loop over all of the modules and make sure we have set values where needed.
+  foreach ($modules as $module => $values) {
+    $modules[$module]['springboard_version'] = !empty($values['springboard_version']) ? $values['springboard_version'] : '';
+    $modules[$module]['version'] = !empty($values['version']) ? $values['version'] : '';
+    $modules[$module]['springboard_hash'] = !empty($values['springboard_hash']) ? $values['springboard_hash'] : '';
+    $modules[$module]['hash'] = !empty($values['hash']) ? $values['hash'] : '';
+  }
+  return $modules;
+}
+
+/**
+ * Implements hook_springboard_dashboard_panes().
+ */
+function springboard_version_springboard_dashboard_panes() {
+  $version_info = springboard_version_info();
+  $panes['springboard_sb_version'] = array(
+    'label' => t('Springboard Version'),
+    'description' => t('Displays the current version of the Springboard codebase.'),
+    'content' => '<p class="sb-version-info"><strong>' . t('Springboard Version') . ': </strong>' . ltrim($version_info['springboard_version']['version'], $version_info['springboard_version']['core'] . '-') . '</p>',
+    'position' => 'column_right',
+    'weight' => 2,
+  );
+  return $panes;
+}
+
+/**
+ * Helper function, compare versions to determine if the version given is compatible.
+ * Springboard version is the min, so if installed is lesser return FALSE.
+ */
+function _springboard_version_ok_version($springboard_version, $installed_version) {
+  $springboard_version = _springboard_version_read_version($springboard_version);
+  $installed_version = _springboard_version_read_version($installed_version);
+  if ($installed_version['core'] != $springboard_version['core']) {
+    return FALSE;
+  }
+  if ($installed_version['core'] == $springboard_version['core']) {
+    if ($installed_version['major'] < $springboard_version['major']) {
+      return FALSE;
+    }
+    if ($installed_version['major'] == $springboard_version['major']) {
+      if ($installed_version['minor'] < $springboard_version['minor']) {
+        return FALSE;
+      }
+    }
+  }
+  return TRUE;
+}
+
+/**
+ * Helper function, compare versions to determine if the version given is compatible.
+ * Springboard version is the min, so if installed is lesser return FALSE.
+ */
+function _springboard_version_ok_hash($springboard_hash, $installed_hash) {
+  return $springboard_hash == $installed_hash;
+}
+
+/**
+ * Helper function, interpret normal version strings.
+ * See: http://api.drupal.org/api/drupal/modules!update!update.compare.inc/function/update_process_project_info/6
+ */
+function _springboard_version_read_version($version) {
+  // No version info available at all.
+  $info['install_type'] = 'unknown';
+  $info['core'] = -1;
+  $info['major'] = -1;
+  $info['minor'] = -1;
+  if (isset($version) && !empty($version)) {
+    // Check for development snapshots.
+    $info['install_type'] = 'official';
+    if (preg_match('@(dev|HEAD)@', $version)) {
+      $info['install_type'] = 'dev';
+    }
+    if (preg_match('@(rc)@', $version)) {
+      $info['install_type'] = 'rc';
+    }
+    // Handle standard contrib module strings: "5.x-1.3" or "5.x-1.3-dev"
+    $matches = array();
+    if (preg_match('/^(\d+)\.x-(\d+)\.(\d+).*$/', $version, $matches)) {
+      // $matches[0] will contain the text that matched the full pattern.
+      $info['core'] = $matches[1];
+      $info['major'] = $matches[2];
+      $info['minor'] = $matches[3];
+    }
+  }
+  return $info;
+}
+
+/**
+ * Helper function, given a module determine the hash of it.
+ */
+function _springboard_version_hash_module($module) {
+  // Load up the dir for each, create hash of all contained.
+  return _springboard_version_hash_path(drupal_get_path('module', $module));
+}
+
+/**
+ * Helper function, recursive MD5 generation.
+ */
+function _springboard_version_hash_path($path) {
+  if (is_dir($path)) {
+    $file_hashes = array();
+    $dir = opendir($path);
+    while (($entry = readdir($dir)) !== FALSE) {
+      // Ignore the hash record.
+      if ($entry != '.' && $entry != '..'   && $entry != '.DS_Store' && $entry != 'springboard_version.hashes') {
+        if (is_dir($path . '/' . $entry)) {
+          $filemd5s[] = _springboard_version_hash_path($path . '/' . $entry);
+        }
+        else {
+          $filemd5s[] = md5_file($path . '/' . $entry);
+        }
+      }
+    }
+    closedir($dir);
+    return md5(implode('', $filemd5s));
+  }
+  return;
+}

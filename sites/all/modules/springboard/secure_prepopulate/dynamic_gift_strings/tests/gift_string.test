@@ -1,0 +1,43 @@
+<?php
+
+/**
+ * @file
+ * Dynamic Gift Strings standard test.
+ */
+
+/**
+ * Tests decrypting a gift string into the ask amounts on the page.
+ */
+class GiftStringTestCase extends DynamicGiftStringsTestSetup {
+
+  /**
+   * Test info.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Dynamic Gift String standard string test',
+      'description' => 'Tests the gift string decyrption and amount field updates.',
+      'group' => 'Secure Prepopulate',
+    );
+  }
+
+  /**
+   * Test the decryption of a string.
+   */
+  public function testGiftString() {
+    $this->drupalGet(
+      'node/' . $this->donationForm->nid,
+      array(
+        'query' => array(
+          'af' => $this->encryptedAF,
+          'gs' => $this->encryptedGSNoDefault,
+        ),
+      )
+    );
+
+    $this->assertText('333', t('The gs 333 amount appears.'));
+    $this->assertText('666', t('The gs 666 amount appears.'));
+    $this->assertText('999', t('The gs 999 amount appears.'));
+    $this->assertText('1,313', t('The gs 1,313 amount appears.'));
+  }
+}

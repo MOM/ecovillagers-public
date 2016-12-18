@@ -1,0 +1,2989 @@
+<?php
+
+/**
+ * @file
+ * Commerce based hook implementations for the fundraiser module donations.
+ */
+
+/**
+ * Implements hook_views_api().
+ */
+function fundraiser_commerce_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'fundraiser_commerce') . '/views',
+  );
+}
+
+// Commerce mail rules can / should be turned off on installation, so no need to implement hook_mail_alter().
+
+/**
+ * Implements hook_menu
+ */
+function fundraiser_commerce_menu() {
+  $items = array();
+  $items['node/%node/fundraiser-redirect/%'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('_fundraiser_commerce_fundraiser_donation_process_external_form', 3),
+    'access callback' => TRUE,
+  );
+  $items['node/%node/fundraiser-cancel/%'] = array(
+    'page callback' => '_fundraiser_commerce_fundraiser_donation_process_external_form_cancel',
+    'page arguments' => array(3), // Pass the donation ID along.
+    'access callback' => TRUE,
+  );
+  $items['node/%node/fundraiser-return/%'] = array(
+    'page callback' => '_fundraiser_commerce_fundraiser_donation_process_external_form_return',
+    'page arguments' => array(3), // Pass the donation ID along.
+    'access callback' => TRUE,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function fundraiser_commerce_menu_alter(&$items) {
+  // Deny access to the the void and credit forms provided by the gateways
+  foreach ($items as $path => $item) {
+    if (strpos($path, 'admin/commerce/orders/%commerce_order/payment/%commerce_payment_transaction/') !== FALSE) {
+      // If not view or delete change the access callback to deny access
+      if (($path != 'admin/commerce/orders/%commerce_order/payment/%commerce_payment_transaction/view') &&
+        ($path != 'admin/commerce/orders/%commerce_order/payment/%commerce_payment_transaction/delete')) {
+        $items[$path]['access callback'] = '_fundraiser_commerce_deny_gateway_credit_form_access';
+      }
+    }
+  }
+
+  // Custom refund form for fundraiser
+  $items['admin/commerce/orders/%commerce_order/payment/%commerce_payment_transaction/refund'] = array(
+    'title' => 'Refund',
+    'page callback' => 'fundraiser_commerce_refund_form',
+    'page arguments' => array(3, 5),
+    'access callback' => 'fundraiser_commerce_refund_form_access',
+    'access arguments' => array(3, 5),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'context' => MENU_CONTEXT_INLINE,
+  );
+}
+
+/**
+ * Menu access for the gateway credit and void forms
+ */
+function _fundraiser_commerce_deny_gateway_credit_form_access($order, $transaction) {
+  return FALSE;
+}
+
+/**
+ * Menu access for refund operation.
+ */
+function fundraiser_commerce_refund_form_access($order, $transaction) {
+  // Return FALSE if the transaction doesn't have a
+  // success status or has an amount of 0 or less.
+  if ($transaction->status != 'success' || $transaction->amount <= 0) {
+    return FALSE;
+  }
+  // Return FALSE if it is more than 120 days past the original capture.
+  if (time() - $transaction->created > 86400 * 120) {
+    return FALSE;
+  }
+  // Allow access if the user can update this transaction.
+  return commerce_payment_transaction_access('update', $transaction);
+}
+
+/**
+ * Form callback, override Commerce provided refund forms with our own.
+ * This is just a wrapper, to get the rest of the goodies in place.
+ */
+function fundraiser_commerce_refund_form($order, $transaction) {
+  return drupal_get_form('_fundraiser_refund_form', $order->order_id);
+}
+
+/**
+ * Implements hook_entity_view().
+ */
+function fundraiser_commerce_entity_view($entity, $type, $view_mode, $langcode) {
+  switch ($type) {
+    case 'commerce_order':
+      if (($view_mode == 'administrator' || $view_mode == 'full') && fundraiser_donation_get_donation($entity->order_id)) {
+        $entity->content['fundraiser_donation'] = array(
+          '#prefix' => '<div class="field field-name-fundraiser-donation field-type-fundraiser-donation field-label-above">' .
+            '<div class="field-label">' . t('Fundraiser information') . ': </div>' .
+            '<div class="field-items"><div class="field-item even">',
+          '#markup' => fundraiser_donation_information_table($entity->order_id), // Table format.
+          '#suffix' => '</div></div></div>',
+        );
+      }
+      break;
+    default:
+  }
+}
+
+/**
+ * Implements hook_token_info_alter
+ */
+function fundraiser_commerce_token_info_alter(&$data) {
+  if (!empty($data['tokens']['donation'])) {
+    // Add Commerce related tokens
+    $data['tokens']['donation']['order'] = array(
+      'name' => t('Donation Order'),
+      'description' => t('Ther order used to process the donation.'),
+      'type' => 'commerce-order',
+    );
+    $data['tokens']['donation']['payment-transaction'] = array(
+      'name' => t('Donation Order Transaction'),
+      'description' => t('The transaction data from the payment processor.'),
+      'type' => 'commerce-payment-transaction',
+    );
+  }
+}
+
+/**
+ * Implements hook_tokens_alter
+ *
+ * Add support for order and transaction tokens from a donation
+ */
+function fundraiser_commerce_tokens_alter(&$replacements, $context) {
+  // Make sure we have a donation to work with
+  if ($context['type'] == 'donation' && !empty($context['data']['donation'])) {
+    $donation = $context['data']['donation'];
+
+    // Load the order and do token replacement on the order and transaction tokens
+    $order = !empty($donation->order) ? $donation->order : commerce_order_load($donation->did);
+
+    // Replace the order tokens
+    if (!empty($order) && $order_tokens = token_find_with_prefix($context['tokens'], 'order')) {
+      $replacements += token_generate('commerce-order', $order_tokens, array('commerce-order' => $order), $context['options']);
+    }
+
+    // Replace the transaction tokens using the latest transaction
+    if (!empty($order) && $transaction_tokens = token_find_with_prefix($context['tokens'], 'payment-transaction')) {
+      $transactions = commerce_payment_transaction_load_multiple(array(), array('order_id' => $order->order_id));
+      $transaction = reset($transactions);
+      $replacements += token_generate('commerce-payment-transaction', $transaction_tokens, array('commerce-payment-transaction' => $transaction), $context['options']);
+    }
+  }
+}
+
+/**
+ * Implements fundraiser_donation_information_table_alter().
+ */
+function fundraiser_commerce_fundraiser_donation_information_table_alter(&$variables, $donation) {
+  // Add refund information to the display table.
+  if (!empty($donation->refund) && $donation->refund != FALSE) {
+    $refunded_donation = fundraiser_donation_get_donation($donation->refund['refunded_donation']);
+    $variables['rows'][] = array('Refund for donation', t('Donation #!did on Form #@nid - !title',
+      array(
+        '!did' => l($refunded_donation->did, 'admin/commerce/orders/' . $refunded_donation->did . '/view'),
+        '@nid' => $refunded_donation->nid,
+        '!title' => l($refunded_donation->node->title, 'node/' . $refunded_donation->node->nid),
+      )
+    ));
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ * Adds the admin form to fundraiser's admin form.
+ */
+function fundraiser_commerce_form_fundraiser_admin_settings_alter(&$form, &$form_state) {
+  $countries = _fundraiser_commerce_get_countries();
+  $options = array('' => t('-- No default --'));
+  foreach ($countries as $country) {
+    $options[$country->country_id] = $country->country_name;
+  }
+  $form['fundraiser']['fundraiser_default_country'] = array(
+    '#type' => 'select',
+    '#title' => t('Default country'),
+    '#options' => $options,
+    '#default_value' => variable_get('fundraiser_default_country', 'US'),
+    '#description' => t('Enter the default initial country to be used on donation forms.'),
+  );
+}
+
+/**
+ * Implements hook_commerce_line_item_type_info().
+ */
+function fundraiser_commerce_commerce_line_item_type_info() {
+  $line_item_types = array();
+  $line_item_types['donation'] = array(
+    'type' => 'donation',
+    'name' => t('Donation'),
+    'description' => t('A donation charge, no product referenced here just the amount.'),
+    'product' => FALSE,
+    'add_form_submit_value' => t('Add donation'),
+    'base' => 'commerce_donation_line_item',
+  );
+  return $line_item_types;
+}
+
+/**
+ * Implements hook_LINE_ITEM_BASE_title().
+ * Returns an appropriate title for this line item.
+ */
+function commerce_donation_line_item_title($line_item) {
+  $donation = fundraiser_donation_get_donation($line_item->order_id);
+  return t('Donation for Fundraiser #%nid %title', array(
+    '%nid' => $donation->nid,
+    '%title' => isset($donation->node->title) ? $donation->node->title : '',
+  ));
+}
+
+/**
+ * Implements hook_LINE_ITEM_BASE_add_form().
+ *
+ * Returns the elements necessary to add a product line item through a
+ * line item manager widget.
+ */
+function commerce_donation_line_item_add_form($element, &$form_state) {
+  $form = array();
+  $form['amount'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Amount'),
+    '#description' => t('Enter the amount of the donation to add to the order.'),
+    '#size' => 60,
+    '#maxlength' => 255,
+  );
+
+  // Add a currency element.
+  $multi_currancy = commerce_currencies(TRUE, TRUE);
+  $available_currency = array();
+  foreach ($multi_currancy as $currency_code => $currency) {
+    $available_currency[$currency_code] = $currency['name'];
+  }
+
+  // This default value isn't great but it's what we have at this point.
+  // Ideally it should be the currency of the other
+  // line items or original donation.
+  $form['currency'] = array(
+    '#type' => 'select',
+    '#title' => t('Currency'),
+    '#description' => t('Enter the currency of the donation to add to the order.'),
+    '#options' => $available_currency,
+    '#default_value' => commerce_default_currency(),
+  );
+
+  // TODO - select a fundraiser to associate this with.
+  // AND add support when a donation is submitted via this order form,
+  // to update a donation obj and submission with the given amount.
+  // All this for later.
+  // For now, display a 'not from here' message.
+  $form['fundraiser_donation'] = array(
+    '#markup' => '<div class="commerce-donation-line-item-warning">' .
+      t('Warning: Donation line items added through this interface do not generate an additional donation object in the Fundraiser system, or update a donation associated with this order to the new amount. Please do not use this to update donations on orders.') .
+      '</div>',
+  );
+
+  return $form;
+}
+
+/**
+ * Submit handler for commerce_donation_line_item_add_form().
+ */
+function commerce_donation_line_item_add_form_submit(&$line_item, $element, &$form_state, $form) {
+  $values = $element['actions'];
+  if (!empty($values['amount']['#value']) && is_numeric($values['amount']['#value'])) {
+    $values['currency']['#value'] = isset($values['currency']['#value']) ? $values['currency']['#value'] : commerce_default_currency();
+    // Create a line item for this order. Contains order amount info.
+    $line_item->line_item_label = t('Donation');
+    $line_item->quantity = 1;
+    $line_item->commerce_unit_price[LANGUAGE_NONE][0] = array(
+      'amount' => commerce_currency_decimal_to_amount($values['amount']['#value'], $values['currency']['#value']),
+      'currency_code' => $values['currency']['#value'],
+    );
+    // Make sure the line item will be included in the update for order total.
+    $line_item->commerce_unit_price[LANGUAGE_NONE][0]['data'] = commerce_price_component_add(
+      $line_item->commerce_unit_price[LANGUAGE_NONE][0],
+      'base_price',
+      array(
+      'amount' => commerce_currency_decimal_to_amount($values['amount']['#value'], $values['currency']['#value']),
+      'currency_code' => $values['currency']['#value'],
+      'data' => array(),
+    ),
+      TRUE
+    );
+  }
+  else {
+    return t('You have entered an invalid amount.');
+  }
+}
+
+/**
+ * Implements hook_commerce_order_status_info().
+ */
+function fundraiser_commerce_commerce_order_status_info() {
+  $fundraiser_statuses = array(
+    'pending_future_payment' => array(
+      'name' => 'pending_future_payment',
+      'title' => 'Pending Future Payment',
+      'state' => 'pending',
+    ),
+    'failed' => array(
+      'name' => 'failed',
+      'title' => 'Failed',
+      'state' => 'canceled',
+    ),
+    'failed_refund' => array(
+      'name' => 'failed_refund',
+      'title' => 'Failed refund',
+      'state' => 'canceled',
+    ),
+    'void' => array(
+      'name' => 'void',
+      'title' => 'Void',
+      'state' => 'canceled',
+    ),
+    'skipped' => array(
+      'name' => 'skipped',
+      'title' => 'Skipped',
+      'state' => 'canceled',
+    ),
+    'refunded' => array(
+      'name' => 'refunded',
+      'title' => 'Refunded',
+      'state' => 'completed',
+    ),
+    'payment_received' => array(
+      'name' => 'payment_received',
+      'title' => 'Payment Received',
+      'state' => 'completed',
+    ),
+    'partially_refunded' => array(
+      'name' => 'partially_refunded',
+      'title' => 'Partially Refunded',
+      'state' => 'completed',
+    ),
+    'auto_canceled' => array(
+      'name' => 'auto_canceled',
+      'title' => 'Auto canceled',
+      'state' => 'canceled',
+    ),
+    'authorized' => array(
+      'name' => 'authorized',
+      'title' => 'Authorized',
+      'state' => 'pending',
+    ),
+  );
+  return $fundraiser_statuses;
+}
+
+/**
+ * Implements hook_commerce_order_status_info_alter().
+ */
+function fundraiser_commerce_commerce_order_status_info_alter(&$order_statuses) {
+  // Loop through the statuses and flag the one's fundraiser uses.
+  $fundraiser_statuses = _fundraiser_commerce_commerce_order_statuses_used();
+  foreach ($order_statuses as $status => $properties) {
+    if (in_array($status, $fundraiser_statuses)) {
+      $order_statuses[$status]['fundraiser_status'] = TRUE;
+    }
+    else {
+      $order_statuses[$status]['fundraiser_status'] = FALSE;
+    }
+  }
+}
+
+/**
+ * Returns an array of the commerce statuses used by fundraiser.
+ */
+function _fundraiser_commerce_commerce_order_statuses_used() {
+  return array(
+    'failed_refund',
+    'failed',
+    'canceled',
+    'pending_future_payment',
+    'auto_canceled',
+    'refunded',
+    'partially_refunded',
+    'payment_received',
+    'skipped',
+    'void',
+    'authorized',
+  );
+}
+
+/**
+ * Implements hook_fundraiser_gateway_info().
+ */
+function fundraiser_commerce_fundraiser_gateway_info() {
+  /// Load all the methods available.
+  $methods = new stdClass();
+  $methods->payment_methods = array();
+  rules_invoke_all('commerce_payment_methods', $methods);
+  $fundraiser_gateways = array();
+  foreach ($methods->payment_methods as $id => $info) {
+    $this_gateway = array();
+    $method_instance = commerce_payment_method_instance_load($id); // From commerce_payment.module.
+    list($method_id, $rule_name) = explode('|', $method_instance['instance_id']);
+    // Load the rule configuration
+    if (!empty($method_id) && !empty($rule_name)) {
+      $rule_config = rules_config_load($rule_name);
+      $this_gateway['id'] = $method_instance['instance_id'];
+      $this_gateway['module'] = 'fundraiser_commerce';
+      $this_gateway['module_name'] = t('Commerce');
+      $this_gateway['title'] = $rule_config->label;
+      $this_gateway['description'] = $method_instance['description'];
+
+      // Gather additional details per our specific implementation.
+      // Re: type of fieldset, and available recurring features.
+      // By including the plugin code here, we insure that all available functions are available for all other code.
+      // When referencing gateway info gathered under gateway_info hooks.
+      module_load_include('inc', 'fundraiser_commerce', '/gateways/' . $method_instance['module']);
+      $gateway_options = module_invoke($method_instance['module'], 'fundraiser_commerce_fundraiser_gateway_info');
+      // If nothing is returned this gateway is not configured to work with fundraiser
+      if (empty($gateway_options)) {
+        continue;
+      }
+
+      // Some gateways support multiple payment methods and multiple
+      // payment processors.
+      // Check if it specifies support for each in the payment method array.
+      foreach ($gateway_options['payment_method'] as $key => $type) {
+        if (!is_numeric($key) && $key == $method_id) {
+          $gateway_options['payment_method'] = array($type);
+        }
+      }
+      $this_gateway += $gateway_options;
+
+      // Make sure defaults are in place if not set in the plugin.
+      if (empty($this_gateway['allow_recurring'])) {
+        $this_gateway['allow_recurring'] = array();
+      }
+      if (empty($this_gateway['offsite_recurring'])
+         || empty($method_instance['settings']['offsite_recurring'])
+         || $method_instance['settings']['offsite_recurring'] == 0) {
+        $this_gateway['offsite_recurring'] = array();
+      }
+      if (empty($this_gateway['offsite_processing'])) {
+        $this_gateway['offsite_processing'] = array();
+      }
+      if (empty($this_gateway['allow_refund'])) {
+        $this_gateway['allow_refund'] = array();
+      }
+      // Error check, disallow members of recurring that are offsite processing.
+      $this_gateway['allow_recurring'] = array_diff($this_gateway['allow_recurring'], $this_gateway['offsite_processing']);
+      // Save the original data declared.
+      $this_gateway['gateway_details'] = $method_instance;
+      $fundraiser_gateways[$this_gateway['id']] = $this_gateway;
+    }
+  }
+
+  return $fundraiser_gateways;
+}
+
+/**
+ * Provide a forms api options array of countries.
+ *
+ * @param array $countries
+ *   An array of country objects with ios and country_name properties.
+ * @param array $default_available
+ *   The ISO codes of countries to include.
+ *   Set to an empty array to include all countries.
+ *
+ * @return array
+ *   An array of options suitable for #options.
+ */
+function fundraiser_commerce_get_country_options(array $countries, array $default_available = array()) {
+  $options = array();
+
+  // Include all countries.
+  if (count($default_available) == 0) {
+    foreach ($countries as $country) {
+      if (!empty($country->iso) && !in_array($country->iso, array_keys($options))) {
+        $options[$country->iso] = $country->country_name;
+      }
+    }
+  }
+  // Only include some countries.
+  else {
+    foreach ($countries as $country) {
+      if (in_array($country->iso, $default_available)) {
+        $options[$country->iso] = $country->country_name;
+      }
+    }
+  }
+
+  return $options;
+}
+
+/**
+ * Create a forms api array for zones.
+ *
+ * @param array $zones
+ *   The zones to display.
+ *
+ * @return array
+ *   A forms api array suitable for #options.
+ */
+function fundraiser_commerce_get_zones_options(array $zones) {
+  $options = array();
+  foreach ($zones as $zone) {
+    if (!empty($zone->iso) && !in_array($zone->iso, array_keys($options))) {
+      $options[$zone->iso] = $zone->zone_name;
+    }
+  }
+
+  return $options;
+}
+
+/**
+ * Convert an options array from forms api to webform options.
+ *
+ * From:
+ *   array('US' => 'United States', 'CA' => 'Canada')
+ * To:
+ *   "US|United States\nCA|Canada"
+ *
+ * @param array $options
+ *   The forms api options array.
+ *
+ * @return string
+ *   A pipe delimited string in the form of key|value per line.
+ */
+function fundraiser_commerce_convert_form_options_to_webform_options(array $options) {
+  $options_string = '';
+  foreach ($options as $key => $value) {
+    $options_string .= $key . '|' . $value . "\n";
+  }
+
+  return $options_string;
+}
+
+/**
+ * Implements hook_fundraiser_field_info_alter().
+ *
+ * Adds state and country fields to the billing info fieldset, plus a
+ * validation callback..
+ */
+function fundraiser_commerce_fundraiser_field_info_alter(&$fields) {
+  // @todo Review this code, perhaps we can push it further up into
+  //   fundraiser proper.
+  // That would also avoid the weird ajaxy stuff we have to do to get
+  // reference back working.
+  $countries = fundraiser_commerce_get_countries();
+  $include_all_countries = variable_get('fundraiser_all_countries', 0);
+
+  if ($include_all_countries) {
+    $default_available = array();
+  }
+  else {
+    $default_available = array('US', 'CA');
+  }
+
+  $options = fundraiser_commerce_get_country_options($countries->countries, $default_available);
+  $options = fundraiser_commerce_convert_form_options_to_webform_options($options);
+
+  // Set the default to a global default if set.
+  $fields['billing_information']['country'] = array(
+    '#title' => t('Country'),
+    '#type' => 'select',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'items' => $options,
+      'multiple' => 0,
+      'aslist' => 1,
+    ),
+    '#display_callback' => '_fundraiser_commerce_country_field_display',
+  );
+
+  $default_country = variable_get('fundraiser_default_country', 'US');
+  if (!empty($default_country)) {
+    $fields['billing_information']['country']['#value'] = $default_country;
+  }
+
+  $options = fundraiser_commerce_get_zones_options($countries->zones);
+  $options = fundraiser_commerce_convert_form_options_to_webform_options($options);
+
+  $fields['billing_information']['state'] = array(
+    '#title' => t('State/Province'),
+    '#type' => 'select',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'items' => $options,
+      'multiple' => 0,
+      'aslist' => 1,
+    ),
+    '#display_callback' => '_fundraiser_commerce_zone_field_display',
+  );
+
+  // Add our own validation routines to the billing fields for credit cards.
+  $fields['payment_information']['payment_fields']['#validate_callback'] = '_fundraiser_commerce_payment_fields_validate';
+  return $fields;
+}
+
+/**
+ * Validation callback for field payment_fields.
+ */
+function _fundraiser_commerce_payment_fields_validate($form, $form_state, $submission_fields, $value) {
+  if (empty($form['#node'])) {
+    $form['#node'] = $form['#donation']->node;
+  }
+  $payment_method = $submission_fields['payment_method'];
+  $payment_method_component = _fundraiser_webform_get_component_by_nid_key($form['#node']->nid, array('payment_method'));
+  $payment_method_field = $form['#node']->webform['components'][$payment_method_component->cid];
+  $gateway_info = _fundraiser_gateway_info($payment_method_field['extra']['payment_methods'][$payment_method]['id']);
+  // If the payment method has its own validate function don't validate here.
+  if (isset($gateway_info['validate callback'])) {
+    return;
+  }
+
+  // If we don't have a gateway validate callback, use generic credit card
+  // validation.
+  if ($payment_method == 'credit') {
+    return fundraiser_commerce_generic_credit_card_validate($value);
+  }
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_field_info_alter().
+ */
+function fundraiser_commerce_salesforce_genmap_map_field_info_alter(&$fields, $node, $module) {
+  // We're only concerned with credit card methods.
+  if (empty($node->gateways['credit'])) return;
+  $gateway_info = _fundraiser_gateway_info($node->gateways['credit']['id']);
+
+  // If the credit card method has mappable response fields, add them to the mapping form.
+  if (!empty($gateway_info['response fields callback'])) {
+    $response_fields = $gateway_info['response fields callback']($gateway_info);
+    if (!empty($response_fields)) {
+      $fields['gateway_response_fields_map'] = array(
+        '#type' => 'fundraiser_commerce',
+        '#label' => t('Credit Card Gateway Response Field'),
+        '#dedupe' => FALSE,
+        '#fields' => array(),
+      );
+      foreach ($response_fields as $machine_name => $field_info) {
+        $fields['gateway_response_fields_map']['#fields'][$machine_name] = t($field_info['name']) . '<br />'
+          . '<small class="fundraiser-admin-description">' . t($field_info['description']) . '</small>';
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_fields_alter().
+ */
+function fundraiser_commerce_salesforce_genmap_map_fields_alter(&$fields, $context) {
+  // Are any gateway response fields mapped to Salesforce?
+  if (!empty($context['map']->field_map['gateway_response_fields_map'])) {
+    $donation = $context['object'];
+    $field_map = $context['map']->field_map['gateway_response_fields_map'];
+    $field_values = db_query(
+      "SELECT field_name, value FROM {fundraiser_commerce_gateway_response}
+        WHERE did=:did AND gateway_id=:gateway_id AND field_name IN (:field_names);",
+      array(':did' => $donation->did, ':gateway_id' => $donation->gateway['id'], ':field_names' => array_keys($field_map))
+    );
+    while ($field_value = $field_values->fetchAssoc()) {
+      $fields[ $field_map[$field_value['field_name']] ] = $field_value['value'];
+    }
+  }
+}
+
+/**
+ * Does some basic credit card validation.
+ *
+ * @param array $value
+ *   The credit card data in the following format.
+ *   array('credit' =>
+ *     'card_number' => 1234,
+ *     'card_cvv' => 123,
+ *     'card_expiration_month' => 1,
+ *     'card_expiration_year' => 2014,
+ *   )
+ *
+ * @return array
+ *   An array with form key and error message.
+ */
+function fundraiser_commerce_generic_credit_card_validate($value) {
+  // @todo This should probably be driven down to the gateway level.
+  // Include the file with the validation info.
+  module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+  $number = $value['credit']['card_number'];
+  if ($number != '0000000000000000') {
+    $valid = commerce_payment_validate_credit_card_number($number);
+    if ($valid !== TRUE || !ctype_digit($number) || drupal_strlen($number) < 10) {
+      return array('card_number' => t('You have entered an invalid credit card number.'));
+    }
+    $cvv = $value['credit']['card_cvv'];
+    $valid = commerce_payment_validate_credit_card_security_code($number, $cvv);
+    if ($valid !== TRUE && !empty($cvv)) {
+      return array('card_cvv' => t('You have entered an invalid CVV number.'));
+    }
+    $cc_expiration_month = $value['credit']['card_expiration_month'];
+    $cc_expiration_year = $value['credit']['card_expiration_year'];
+    $valid = commerce_payment_validate_credit_card_exp_date($cc_expiration_month, $cc_expiration_year);
+    if ($valid !== TRUE && !empty($cc_expiration_month) && !empty($cc_expiration_year)) {
+      return array(
+        'card_expiration_month' => t('The credit card you entered has expired.'),
+        'card_expiration_year' => '',
+      );
+    }
+  }
+}
+
+/**
+ * Display callback for field country. Set the defaults if the country has it.
+ */
+function _fundraiser_commerce_country_field_display($form, $form_state, $field) {
+  // Set the default to a user default if set.
+
+  // Look for the value passed from the form_state first
+  if (!empty($form_state['values']['submitted'])) {
+    // Flatten form state array
+    $fields = _fundraiser_commerce_submission_flatten($form_state['values']['submitted']);
+    // Set the default country if form_state has it.
+    if (array_key_exists('country', $fields)) {
+      $field['#default_value'] = $fields['country'];
+    }
+  }
+
+  // If no default value yet, get it from the field
+  if (empty($field['#default_value'])) {
+    // Provide a default based on the form values.
+    $country_field = fundraiser_get_form_field($form['#calling_module'], $form, 'country');
+    // Filter options down to just the zones available for this country.
+    if (isset($country_field['#default_value']) && !empty($country_field['#default_value'])) {
+      $field['#default_value'] = $country_field['#default_value'];
+    }
+    elseif(isset($country_field['#webform_component']['value'])) {
+      $field['#default_value'] = $country_field['#webform_component']['value'];
+    }
+  }
+
+  // Add interface elements to the field display.
+  $field['#ajax'] = array(
+    'callback' => '_fundraiser_commerce_client_state_ajax_submit',
+    'wrapper' => 'zone-select-wrapper',
+    'method' => 'replace',
+    'effect' => 'fade',
+  );
+  return $field;
+}
+
+/**
+ * Helper function, flatten webforms submitted tree into an array mapping fields to values.
+ */
+function _fundraiser_commerce_submission_flatten($submit_tree) {
+  $flat_array = array();
+  foreach ($submit_tree as $key => $value) {
+    if (!is_array($submit_tree[$key])) {
+      $flat_array[$key] = $value;
+    }
+    else {
+      $flat_array = array_merge($flat_array, _fundraiser_commerce_submission_flatten($value));
+    }
+  }
+  return $flat_array;
+}
+
+/**
+ * AJAX callback for dealing with changes to the donation form.
+ */
+function _fundraiser_commerce_client_state_ajax_submit($form, $form_state, &$mess = '') {
+  // Replace the state field with an updated version with the state list for the
+  // selected country.
+  // After the replace event add focus to the state field. This makes for a smooth transition
+  // in some browsers for users who tab between fields.
+  $build_array = fundraiser_get_form_field($form['#calling_module'], $form, 'state');
+
+  return array(
+    '#type' => 'ajax',
+    '#commands' => array(
+      ajax_command_replace('#zone-select-wrapper', render($build_array)),
+      // Focus on the state field and remove the current value.
+      ajax_command_invoke(':input[name="' . $build_array['#name'] . '"]', 'focus'),
+      ajax_command_invoke(':input[name="' . $build_array['#name'] . '"]', 'val', array('')),
+
+      // Force the zip code field to re-validate.
+      ajax_command_invoke(':input[name*="[zip]"]', 'trigger', array('keyup')),
+    ),
+  );
+}
+
+/**
+ * Display callback for field zone, to set the default based on the country given.
+ */
+function _fundraiser_commerce_zone_field_display($form, $form_state, $field) {
+  // Get countries.
+  $countries = fundraiser_commerce_get_countries();
+
+  // Look for the value passed from the form_state first
+  if (!empty($form_state['values']['submitted'])) {
+    // Flatten form state array
+    $fields = _fundraiser_commerce_submission_flatten($form_state['values']['submitted']);
+    // Country/state dependant drop down code
+    $available_zones = isset($countries->zones) ? $countries->zones : array();
+    // Filter the available zones by the set country.
+    if (array_key_exists('country', $fields)) {
+      $country_id = $fields['country'];
+      // Filter options down to just the zones available for this country.
+      if (isset($countries->countries[$country_id])) {
+        $available_zones = $countries->countries[$country_id]->zones;
+      }
+    }
+  }
+
+  // If no zones yet, load from the field settings
+  if (empty($available_zones)) {
+    // Provide a default based on the form values.
+    $country_field = fundraiser_get_form_field($form['#calling_module'], $form, 'country');
+    // Filter options down to just the zones available for this country.
+    if (!empty($country_id)) {
+      $default = $country_id;
+    }
+    elseif (isset($country_field['#default_value'])) {
+      $default = $country_field['#default_value'];
+    }
+    elseif(isset($country_field['#webform_component']['value'])) {
+      $default = $country_field['#webform_component']['value'];
+    }
+    if (isset($default) && isset($countries->countries[$default])) {
+      $available_zones = $countries->countries[$default]->zones;
+    }
+  }
+  // Given available zones, filter the dropdown to match.
+  if (!empty($available_zones)) {
+    $new_zone_options = array();
+    foreach ($available_zones as $zone_id => $zone) {
+      $new_zone_options[$zone->iso] = $zone->zone_name;
+    }
+    $field['#options'] = $new_zone_options;
+  }
+  else {
+    // If there are no zones to match, then fall back on a non-select solution.
+    $field['#type'] = 'textfield';
+
+    // Unset the options to avoid validation errors
+    unset($field['#options']);
+  }
+  $field['#prefix'] = '<div id="zone-select-wrapper">';
+  $field['#suffix'] = '</div>';
+  return $field;
+}
+
+/**
+ * Implements hook_fundraiser_get_credit_encryption_path().
+ * This is called by modules that need to check for processing availablity outside of normal.
+ * Such as sustainer.
+ *
+ * @deprecated This hook has been removed because it's only used by one module.
+ */
+function fundraiser_commerce_fundraiser_get_credit_encryption_path() {
+  return variable_get('encrypt_secure_key_path', t('Not configured, see below.')); // From the encrypt module.
+}
+
+/**
+ * Implements hook_fundraiser_donation_get_donation().
+ */
+function fundraiser_commerce_fundraiser_donation_get_donation($donation) {
+  // Load the order object, line items and profile.
+  $order = commerce_order_load($donation->did);
+  if ($order) {
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+    // Data from order.
+    $donation->donation['mail'] = isset($order->mail) ? $order->mail : '';
+
+    $order_total = $order_wrapper->commerce_order_total->value();
+
+    // Reverse the work done by commerce_currency_decimal_to_amount($donation->donation['amount'], $donation->donation['currency'])
+    // So we have the correct decimaled value.
+    // Note that commerce_currency_amount_to_decimal() does not pad the decimal
+    // places, but commerce_currency_format() does. (ie. 10.5 vs $10.50).
+    // Also note that this number_format does not include a comma.
+    // The number_format won't play nicely with other currencies that use
+    // difference separators.
+    // This should later be fixed to not use the numbeer_format, and for display
+    // tokens use amount_formatted for display and amount for math and backend
+    // things.
+    $donation->donation['amount'] = number_format(commerce_currency_amount_to_decimal($order_total['amount'], $order_total['currency_code']), 2, '.', '');
+    $donation->donation['currency'] = commerce_currency_load($order_total['currency_code']);
+    $donation->donation['amount_formatted'] = commerce_currency_format($order_total['amount'], $order_total['currency_code']);
+
+    $donation->donation['quantity'] = 1;
+    $donation->donation['hostname'] = $order->hostname;
+
+    // Check for a donation line item that may contain a quantity
+    foreach ($order_wrapper->commerce_line_items as $line_item_wrapper) {
+      if ($line_item_wrapper->type->value() == 'donation' && $line_item_wrapper->quantity->value() > 1) {
+        // Reset the donation amount and quantity from this line item
+        $donation->donation['quantity'] = $line_item_wrapper->quantity->value();
+        $donation->donation['amount'] = number_format(commerce_currency_amount_to_decimal(
+          $line_item_wrapper->commerce_unit_price->amount->value() * $line_item_wrapper->quantity->value(),
+          $line_item_wrapper->commerce_unit_price->currency_code->value()
+        ), 2, '.', '');
+        $donation->donation['currency'] = commerce_currency_load($line_item_wrapper->commerce_unit_price->currency_code->value());
+      }
+    }
+
+    // Data from profile.
+    if (isset($order->commerce_customer_billing[LANGUAGE_NONE][0]['profile_id'])) {
+      $profile = commerce_customer_profile_load($order->commerce_customer_billing[LANGUAGE_NONE][0]['profile_id']);
+      $map = array(
+        'first_name' => 'first_name',
+        'last_name' => 'last_name',
+        'address' => 'thoroughfare',
+        'address_line_2' => 'premise',
+        'city' => 'locality',
+        'country' => 'country',
+        'state' => 'administrative_area',
+        'zip' => 'postal_code',
+      );
+      $field_info = _fundraiser_get_field_keys();
+      foreach ($field_info as $field_name) {
+        if (isset($map[$field_name])) {
+          $order_name = $map[$field_name];
+          $donation->donation[$field_name] = isset($profile->data[$order_name]) ?
+            $profile->data[$order_name] : $profile->commerce_customer_address[LANGUAGE_NONE][0][$order_name];
+        }
+      }
+    }
+    // Time of last update / charge.
+    $donation->last_changed = $order->changed;
+    // Add the order status data.
+    $donation->status = $donation->status_label = isset($order->status) ? $order->status : 'unknown';
+    if (!empty($order->status)) {
+      $donation->status_label = _fundraiser_commerce_get_label_by_status($order->status);
+      $donation->status_charged = _fundraiser_commerce_get_charged_by_status($order->status) ? 1 : 0;
+      if ($donation->status_charged) {
+        $donation->close_date = date('Y-m-d H:i:s', $donation->last_changed);
+        $donation->transaction_date = date('Y-m-d H:i:s', $donation->last_changed);
+      }
+    }
+    // This order data was stored during hook_fundraiser_donation_process(), and scrubbed by the gateway.
+    if (!empty($order->data)) {
+      $data = _fundraiser_commerce_order_data_retrieve($order->data['fundraiser_commerce']);
+      // Put data stored data into the right places.
+      $donation->donation['payment_method'] = isset($data['payment_method']) ? $data['payment_method'] : '';
+      $donation->donation['payment_fields'] = isset($data['payment_fields']) ? $data['payment_fields'] : array();
+      // Put data on the donation object for reference later.
+      $donation->data = $data; // Data will contain any gateway payment processing information.
+    }
+  }
+}
+
+/**
+ * Implements hook_fundraiser_donation_create().
+ */
+function fundraiser_commerce_fundraiser_donation_create($donation) {
+  /**
+   * Commerce checkout is usually what creates an account.
+   * If we don't have that turned on (and there's no other reason to)
+   * Then WE are responsible for linking the user id to the correct submitted account.
+   * If commerce_checkout is enabled, then:
+   * Creating the new user comes as part of the checkout rules.
+   * Which is set to the end of the checkout process, and sets the order->uid to the new account.
+   * And is triggered on form submission of the checkout panel. This means: It doesn't get run.
+   * So for our needs, we need to make out own user and add him to the donation on a success.
+   */
+
+  // Go by the logged in user first, unless user is anon or not set.
+  $user = $donation->user;
+  if ($user->uid < 1) {
+    // Check by email, see if this account is already in existance.
+    $user = user_load_by_mail( $donation->donation['mail'] );
+    if (empty($user->uid)) {
+      // If not, create a new user account, and add it to the donation.
+      $donation->donation['mail'] = trim($donation->donation['mail']);
+      $fields = array(
+        'name' => _fundraiser_commerce_email_to_username($donation->donation['mail']),
+        'mail' => $donation->donation['mail'],
+        'init' => $donation->donation['mail'],
+        'pass' => user_password(12),
+        'roles' => array(),
+        'status' => 1,
+      );
+      $user = user_save('', $fields);
+    }
+  }
+  // Set the new information on the donation.
+  $donation->user = $user;
+  $donation->uid = $user->uid;
+
+  // Set the node.
+  $node = $donation->node;
+  // Pick out the values we need to generate an order.
+  if ($donation->donation['amount'] == 'other') {
+    $donation->donation['amount'] = _fundraiser_amount_value_sanitize($donation->donation['other_amount']);
+  }
+
+  // If not set, set the donation amount on the main donation object.
+  $donation->amount = isset($donation->amount) ? $donation->amount : _fundraiser_amount_value_sanitize($donation->donation['amount']);
+
+  // Set or convert the $donation->donation currency value to an array of currency values.
+  if (!isset($donation->donation['currency'])) {
+    $currency_code = !empty($donation->currency) ? $donation->currency : commerce_default_currency();
+    $donation->donation['currency'] = commerce_currency_load($currency_code);
+  }
+  elseif (is_string($donation->donation['currency']))  {
+    $donation->donation['currency'] = commerce_currency_load($donation->donation['currency']);
+  }
+
+  // Set the currency code on the root donation object.
+  $donation->currency = $donation->donation['currency']['code'];
+
+  // Determine quantity and data from donation values.
+  $quantity = isset($donation->donation['quantity']) && !empty($donation->donation['quantity']) ? $donation->donation['quantity'] : 1;
+
+  // Give other modules an opportunity to generate the order entity.
+  foreach (module_implements('fundraiser_commerce_generate_order') as $module) {
+    $function = $module . '_fundraiser_commerce_generate_order';
+    $order = $function($donation);
+    if (!empty($order)) {
+      break;
+    }
+  }
+
+  // No order was generated by another module, create a new order.
+  if (empty($order)) {
+    $order = commerce_order_new($user->uid, 'pending', 'commerce_order');
+    commerce_order_save($order);
+  }
+
+  // Give other modules an opportunity to create the line items.
+  $line_items_created = FALSE;
+  foreach (module_implements('fundraiser_commerce_generate_line_items') as $module) {
+    $function = $module . '_fundraiser_commerce_generate_line_items';
+    $line_items_created = $function($donation, $order);
+    if ($line_items_created == TRUE){
+      break;
+    }
+  }
+
+  if (!$line_items_created) {
+    // If no other module has, create a line item for this order.
+    $line_item = commerce_line_item_new('donation', $order->order_id);
+    $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+    $line_item_wrapper->quantity = $quantity;
+    $line_item_wrapper->commerce_unit_price->amount = commerce_currency_decimal_to_amount($donation->amount, $donation->donation['currency']['code']);
+    $line_item_wrapper->commerce_unit_price->currency_code = $donation->donation['currency']['code'];
+
+    $line_item_wrapper->commerce_unit_price->data = commerce_price_component_add(
+      $line_item_wrapper->commerce_unit_price->value(),
+      'base_price',
+      $line_item_wrapper->commerce_unit_price->value(),
+      TRUE
+    );
+
+    // Save the donation line item
+    commerce_line_item_save($line_item_wrapper->value());
+
+    // Add the line item to the order.
+    $order->commerce_line_items[LANGUAGE_NONE][0]['line_item_id'] = $line_item->line_item_id;
+  }
+
+  // Save the customer information. Contains billing info.
+  // Look up the profile by user id or email, then if not found make a new profile.
+  $found = commerce_customer_profile_load_multiple(array(), array('uid' => $user->uid));
+  $profile_id = -1;
+  foreach ($found as $id => $found) {
+    $profile_id = $id;
+  }
+  if ($profile_id != -1) {
+    $profile = commerce_customer_profile_load($profile_id);
+  }
+  else {
+    $profile = commerce_customer_profile_new('billing', $user->uid); // Billing type comes with Commerce by default.
+  }
+  // Update profile with the billing information.
+  $field = field_info_field('commerce_customer_address');
+  $instance = field_info_instance('commerce_customer_profile', 'commerce_customer_address', 'billing');
+  if (module_exists('strip_utf8mb4')) {
+    $strip_fields = array(
+      'country',
+      'first_name',
+      'last_name',
+      'state',
+      'address',
+      'address_line_2',
+      'city',
+      'zip',
+    );
+    foreach ($strip_fields as $field) {
+      $donation->donation[$field] = _strip_utf8mb4_for_text_fields($donation->donation[$field], variable_get('strip_utf8mb4_replace_string', '--'));
+    }
+  }
+
+  // Assigning this to the data property will allow this to be saved correctly
+  // to the data field schema.
+  $profile->data = addressfield_default_values($field, $instance);
+  $profile->data['country'] = $donation->donation['country'];
+  $profile->data['name_line'] = $donation->donation['first_name'] . ' ' . $donation->donation['last_name'];
+  $profile->data['first_name'] = $donation->donation['first_name'];
+  $profile->data['last_name'] = $donation->donation['last_name'];
+  $profile->data['administrative_area'] = $donation->donation['state'];
+  $profile->data['thoroughfare'] = $donation->donation['address'];
+  $profile->data['premise'] = $donation->donation['address_line_2'];
+  $profile->data['locality'] = $donation->donation['city'];
+  $profile->data['postal_code'] = $donation->donation['zip'];
+  // Since some modules rely on the `commerce_customer_address` property being
+  // set (looking at you commerce_authnet), need to assign the same value in
+  // $profile->data.
+  $profile->commerce_customer_address[LANGUAGE_NONE][0] = $profile->data;
+  commerce_customer_profile_save($profile);
+  $order->commerce_customer_billing[LANGUAGE_NONE][0]['profile_id'] = $profile->profile_id;
+
+  // Gather the payment fields for storage, and scrub them.
+  if (!empty($donation->gateway)) {
+    $method_instance = is_string($donation->gateway) ? _fundraiser_gateway_info($donation->gateway) : $donation->gateway;
+  }
+  else {
+    $info = _fundraiser_get_donation_gateway($donation->did);
+    $method_instance = _fundraiser_gateway_info($info['id']);
+  }
+
+  $scrubbed_fields = isset($donation->donation['payment_fields']) ? $donation->donation['payment_fields'] : array();
+  if (isset($method_instance['scrub callback']) && function_exists($method_instance['scrub callback'])) {
+    $callback = $method_instance['scrub callback'];
+    $scrubbed_fields = $callback($scrubbed_fields, $donation->donation['payment_method']);
+  }
+  $data = array(
+    'payment_method' => $donation->donation['payment_method'],
+    'payment_fields' => $scrubbed_fields,
+  );
+
+  // There may be information already in the donation->data in the case of sustainer duplication.
+  // We want to make sure this information propogates if it's available on the donation object already.
+  if (isset($donation->data) && is_array($donation->data) && !empty($donation->data)) {
+    $data = array_merge($donation->data, $data);
+  }
+
+  // Then set the data for storage on the order object to be ecrypted.
+  // This data array contains: method choosen, fields for the method, card handler id info.
+  // Since Card On File stores data unencrypted we can't use it here.
+  // And any other additional information we need to track for the donation object.
+  $donation->data = $data;
+
+  // If this is a sustainer create process clear the data array of the master order values
+  if (!empty($donation->sustainer_create)) {
+    $donation->data['txn_id'] = '';
+    $donation->data['remote_id'] = '';
+    $donation->data['transaction_id'] = '';
+    $donation->data['status'] = '';
+    $donation->data['remote_status'] = '';
+  }
+
+  $order->data['fundraiser_commerce'] = _fundraiser_commerce_order_data_prepare($donation->data);
+
+  // Save the order.
+  $order->uid = $user->uid; // Make sure we have the right user. The one we want.
+  commerce_order_save($order);
+
+  // Set the order id to the donation to carry forward.
+  $donation->did = $order->order_id;
+  // Set the order status to fundraiser_commerce's status.
+  _fundraiser_commerce_update_order_status('pending_future_payment', $donation->did);
+  $donation->status = 'pending_future_payment';
+  $donation->status_label = _fundraiser_commerce_get_label_by_status('pending_future_payment');
+  $donation->status_charged = _fundraiser_commerce_get_charged_by_status('pending_future_payment');
+}
+
+/**
+ * Implements hook_fundraiser_donation_process().
+ * Could be called immediately after creation, or recurring months later using a cc handler profile id.
+ * The donation could then be processed internally, or be a redirection handler.
+ * So all in all - we'll need to account for a bunch of paths here.
+ */
+function fundraiser_commerce_fundraiser_donation_process($donation) {
+  // Grab the gateway configuration from fundraisers data.
+  $info = _fundraiser_get_donation_gateway($donation->did);
+  $method_instance = commerce_payment_method_instance_load($info['id']); // From commerce_payment.module.
+  // Choose which of two ways to process this.
+  if (in_array($donation->donation['payment_method'], $info['offsite_processing'])) {
+    // If external processing, we cannot execute a recurring charge against it. So we're ok.
+    // Load up additional data as needed for this donation, from Fundraiser and Commerce.
+    // If the function to build the redirect form exists.
+    if (empty($info['redirect callback'])) {
+      // Alert the administrator that the module does not provide a required form.
+      drupal_set_message(t('The %title payment method indicates it is offsite but does not define the form to process the redirect.',
+        array('%title' => $method_instance['title'])), 'error');
+      // We can't find the gateway and we should tell someone about it.
+      watchdog('fundraiser', 'Cannot determine the redirect form for donation @id. Node id of donation form is @nid',
+        array('@id' => $donation->did, '@nid' => $donation->nid), WATCHDOG_CRITICAL);
+      watchdog('fundraiser_commerce', 'Redirect hook is empty.');
+      $donation->result = array(
+        'success' => FALSE,
+        'message' => 'Cannot determine the redirect hook for this donation.',
+      );
+      return; // At this point, the original form will reload with error.
+    }
+    // If external, check for paths to be available.
+    _fundraiser_commerce_fundraiser_donation_process_external($donation, $info);
+  }
+  else {
+    // If internal processing, then it may be a sustainer charge or newly declared.
+    // The gateway is responsible for that call.
+    if (empty($info['charge callback'])) {
+      // Alert the administrator that the module does not provide a required form.
+      drupal_set_message(t('The %title payment method does not provide a gateway charge function.',
+        array('%title' => $method_instance['title'])), 'error');
+      // We can't find the gateway and we should tell someone about it.
+      watchdog('fundraiser', 'Cannot determine the payment gateway for donation @id. Node id of donation form is @nid',
+        array('@id' => $donation->did, '@nid' => $donation->nid), WATCHDOG_CRITICAL);
+      watchdog('fundraiser_commerce', 'Charge function :function is empty.', array(':function' => $info['charge callback']));
+      $donation->result = array(
+        'success' => FALSE,
+        'message' => 'Cannot determine the payment gateway for this donation.',
+      );
+      return; // Return the failure.
+    }
+    // And process.
+    _fundraiser_commerce_fundraiser_donation_process_internal($donation, $info);
+  }
+}
+
+/**
+ * Helper function, after process for redirected processes to update status etc in one line.
+ * Pulled out to make it easier for redirect processes to update the donation on return.
+ */
+function fundraiser_commerce_fundraiser_donation_after_process($donation) {
+  if (isset($donation->result['success']) && $donation->result['success']) {
+    // Set the values donation needs for the rest of the system.
+    $order = commerce_order_load($donation->did);
+    // If a user was created in the midst of that it should be on the order object. If so, add here.
+    $donation->uid = $order->uid;
+    $donation->user = user_load($order->uid);
+    // Add the status data.
+    $donation->status = $donation->status_label = isset($order->status) ? $order->status : 'unknown';
+    if (!empty($order->status)) {
+      $donation->status_label = _fundraiser_commerce_get_label_by_status($order->status);
+      $donation->status_charged = _fundraiser_commerce_get_charged_by_status($order->status);
+    }
+  }
+}
+
+/**
+ * Helper function, provides internal processing for supported gateways.
+ *
+ * Drupal Commerce doesn’t maintain Ubercart’s separation of payment methods from payment gateways but rather
+ * defines payment methods as any single way of collecting payment from a customer per payment provider. This
+ * means there will not be a single Credit Card payment method with plugin modules for CyberSource, Authorize.Net,
+ * etc. but a separate CC payment method for each payment provider with a common base set of code for building
+ * credit card forms and handling the data securely.
+ * See: http://dcorgdev.devcloud.acquia-sites.com/developer-guide/core-architecture/info-hooks/payment-info-hooks
+ * The Rules configuration for a specific gateway instance contains all of the additional configuration needed.
+ * Essentially Commerce replicates the behavior of Gateway Manager.
+ * The problem is when you do this programatically - you don't have a predictable map of values in the form to use.
+ * Each gateway has a custom form, and so we need to add a plugin to Fundraiser Commerce to wrap donation submissions
+ * per gateway supported. To avoid module proloferation, we'll use plugins here based on the type of gateway.
+ * The gateway module itself should handle transaction creation and order updates as if the form were actually submitted.
+ */
+function _fundraiser_commerce_fundraiser_donation_process_internal($donation, $info) {
+  // Now execute the custom charge, keeping in mind for Commerce, the charge function is a submit handler.
+  $method_instance = commerce_payment_method_instance_load($info['id']); // From commerce_payment.module.
+  // This gets us: The payment method instance object with the addition of the settings array. Settings are per Rule.
+  // Since the plugin is only relevant in one situation, and then it's Not optional, no need to make it a module.
+  // Call the function with donation, this will handle internal translation for the specific gateway.
+  // A specific gateway may implement more than one form of charging (credit and PP for example) so leave that choice
+  // to the execution function. All the information needed is on the donation object.
+  if (isset($info['charge callback']) && function_exists($info['charge callback'])) {
+    $charge_function = $info['charge callback'];
+    $success = $charge_function($method_instance, $donation);
+  }
+  // Update the donation and order data and result values based on the success.
+  _fundraiser_commerce_update_donation_result_data($donation, $success);
+  // Finish up any last cleanup for this transaction.
+  fundraiser_commerce_fundraiser_donation_after_process($donation);
+}
+
+/**
+ * Helper function, provides external processing for supported gateways.
+ * NOTE: This function includes a drupal_goto, which uses exit().
+ * THIS INTERRUPTS FORM PROCESSING.
+ * While we attempt to pick up form processing when the user returns, there is no gurantee.
+ */
+function _fundraiser_commerce_fundraiser_donation_process_external($donation, $info) {
+  // Load up additional data as needed for this donation, from Fundraiser and Commerce.
+  $method_instance = commerce_payment_method_instance_load($info['id']); // From commerce_payment.module.
+  // Generate a key to use in the return URL from the redirected service.
+  $order = commerce_order_load($donation->did);
+  $order->data['payment_redirect_key'] = drupal_hash_base64(time());
+  commerce_order_save($order);
+  // And kick out to the export form interrupting the usual submission process.
+  // drupal_goto kills the processing of the existing form. We will need to pick it back up later.
+  drupal_goto('node/' . $donation->nid . '/fundraiser-redirect/' . $donation->did);
+}
+
+/**
+ * Menu callback for the redirect form page.
+ */
+function _fundraiser_commerce_fundraiser_donation_process_external_form($form, $form_state, $did) {
+  $log = t('No available redirection form.');
+  // If we don't have a donation id, we can't go anywhere so we bail early.
+  if (!empty($did)) {
+    // Load up additional data as needed for this donation, from Fundraiser and Commerce.
+    $donation = fundraiser_donation_get_donation($did);
+    $order = commerce_order_load($donation->did);
+    $info = _fundraiser_get_donation_gateway($donation->did);
+    $method_instance = commerce_payment_method_instance_load($info['id']); // From commerce_payment.module.
+
+    // Check if we're in the wrong spot.
+    if (!$method_instance || !$method_instance['offsite']) {
+      if (!$method_instance) {
+        $log = t('No payment required on this donation.');
+      }
+      else {
+        $log = t('Payment was already submitted on this donation.');
+      }
+    }
+    // Present the form, or start the JS redirect as needed.
+    // If the function to build the redirect form exists.
+    if (isset($info['redirect callback']) && function_exists($info['redirect callback'])) {
+      $redirect_function = $info['redirect callback'];
+      // Merge the new form into the current form array, preserving the help text
+      // if it exists. We also add a wrapper so the form can be easily submitted.
+      // Provide common settings, the redirect function can modify these as needed before sending onwards.
+      $settings = array(
+        'cancel_return' => url(
+          'node/' . $donation->nid . '/fundraiser-cancel/' . $order->order_id . '/' . $order->data['payment_redirect_key'],
+          array('absolute' => TRUE)
+        ),
+        'return' => url(
+          'node/' . $donation->nid . '/fundraiser-return/' .  $order->order_id . '/' . $order->data['payment_redirect_key'],
+          array('absolute' => TRUE)
+        ),
+        'payment_method' => $method_instance['instance_id'],
+      );
+      $form = $redirect_function($method_instance, $donation, $order, $settings);
+
+      // If the payment method has the 'offsite_autoredirect' option enabled, add the redirection behavior.
+      if (!empty($method_instance['offsite_autoredirect'])) {
+        $form['#attached']['js'][] = drupal_get_path('module', 'commerce_payment') . '/commerce_payment.js';
+        $form['help']['#markup'] = '<div class="checkout-help">' . t('Please wait while you are redirected to the payment server. ' .
+          'If nothing happens within 10 seconds, please click on the button above.') . '</div>';
+      }
+
+      $form['#prefix'] = '<div class="payment-redirect-form">';
+      $form['#suffix'] = '</div>';
+      return $form;
+    }
+  }
+  $form['message'] = array(
+    '#markup' => '<div class="fundraiser-commerce-failed-to-redirect">' . $log . '</div>',
+  );
+  return $form;
+}
+
+/**
+ * Callback for processing a cancel on the redirect.
+ */
+function _fundraiser_commerce_fundraiser_donation_process_external_form_cancel($did, $redirect_key) {
+  // Load up additional data as needed for this donation, from Fundraiser and Commerce.
+  $donation = fundraiser_donation_get_donation($did);
+  $order = commerce_order_load($donation->did);
+  $info = _fundraiser_get_donation_gateway($donation->did);
+  $method_instance = commerce_payment_method_instance_load($info['id']); // From commerce_payment.module.
+  $log = t('Payment cancelled at the gateway.');
+  // Check if we're in the wrong spot.
+  if (!$method_instance || !$method_instance['offsite']) {
+    if (!$method_instance) {
+      $log = t('No payment required on this donation.');
+    }
+    else {
+      $log = t('Payment was already submitted on this donation.');
+    }
+  }
+  // On return, the the user came to the cancel page - they canceled at the gateway.
+  if ($redirect_key == $order->data['payment_redirect_key']) {
+    $donation->result = array(
+      'success' => FALSE,
+      'message' => $log,
+      'data' => array(),
+    );
+    // And handle post processing form resolution and redirect.
+    _fundraiser_commerce_fundraiser_donation_process_external_form_redirect($donation);
+    // This will redirect us back to the original form and process any left over submissions.
+  }
+  return array(
+    '#markup' => '<div class="fundraiser-commerce-failed-to-redirect">' . $log . '</div>',
+  );
+}
+
+/**
+ * Callback for processing a return (success or fail) on the redirect.
+ */
+function _fundraiser_commerce_fundraiser_donation_process_external_form_return($did, $redirect_key = '') {
+  // Load up additional data as needed for this donation, from Fundraiser and Commerce.
+  $donation = fundraiser_donation_get_donation($did);
+  $order = commerce_order_load($donation->did);
+  $info = _fundraiser_get_donation_gateway($donation->did);
+  $method_instance = commerce_payment_method_instance_load($info['id']); // From commerce_payment.module.
+  $log = t('Payment attempted processing at the gateway.');
+  // Check if we're in the wrong spot.
+  if (!$method_instance || !$method_instance['offsite']) {
+    if (!$method_instance) {
+      $log = t('No payment required on this donation.');
+    }
+    else {
+      $log = t('Payment was already submitted on this donation.');
+    }
+  }
+  // On return, the user came back to the payment page - they paid at the gateway.
+  if ($redirect_key == $order->data['payment_redirect_key']) {
+    // Set initial values including the failure state.
+    $log = t('Payment failed at the gateway.');
+    $donation->result = array(
+      'success' => FALSE,
+      'message' => $log,
+      'data' => array(),
+    );
+    // Check for a validate handler on return.
+    $valid = TRUE;
+    if (isset($info['redirect callback']) && function_exists($info['redirect callback'] . '_validate')) {
+      $validation_function = $info['redirect callback'] . '_validate';
+      $valid = $validation_function($method_instance, $donation, $order);
+    }
+    if ($valid) {
+      if (isset($info['redirect callback']) && function_exists($info['redirect callback'] . '_submit')) {
+        $submit_function = $info['redirect callback'] . '_submit';
+        // Perform any submit functions if necessary.
+        $success = $submit_function($method_instance, $donation, $order);
+        // After a callback, we need to get transaction data into order->data, donation->data for storage.
+        _fundraiser_commerce_update_donation_result_data($donation, $success);
+        if ($success) {
+          $log = t('Payment successfully processed at the gateway.');
+        }
+      }
+    }
+    else {
+      // Otherwise display the failure message and send the customer back.
+      drupal_set_message(t('Payment failed at the payment server. Please review your information and try again.'), 'error');
+    }
+    // And handle post processing form resolution and redirect.
+    _fundraiser_commerce_fundraiser_donation_process_external_form_redirect($donation);
+    // This will redirect us back to the original form and process any left over submissions.
+  }
+  else {
+    $log = t('The return key was not the same as recorded for this donation.');
+  }
+  return array(
+    '#markup' => '<div class="fundraiser-commerce-failed-to-redirect">' . $log . '</div>',
+  );
+}
+
+/**
+ * Helper function, given a standard result array and donation set the data for storage.
+ */
+function _fundraiser_commerce_update_donation_result_data($donation, $success) {
+  // If no result then presume a failure or no hook installed for this gateway type.
+  if (!isset($success)) {
+    $donation->result = array(
+      'success' => FALSE,
+      'message' => 'This payment gateway is not supported by Fundraiser Commerce.',
+    );
+    return; // Return the failure.
+  }
+  // Load the order object so we can save additional data post submit.
+  $order = commerce_order_load($donation->did);
+  // Transactions are made even for failures, so we need to go through to get the very last one.
+  // Grab the transaction information so we can return the transaction id.
+  // Use the last one in the list cause it's the last one we processed.
+  $transactions = commerce_payment_transaction_load_multiple(array(), $conditions = array('order_id' => $order->order_id));
+  // Loop to get the latest transaction.
+  $remote_id = $transaction_id = $message = $status = $remote_status = '';
+  foreach ($transactions as $transaction) {
+    $message = $transaction->message;
+    $remote_id = $transaction->remote_id;
+    $transaction_id = $transaction->transaction_id;
+    $status = $transaction->status;
+    $remote_status = $transaction->remote_status;
+  }
+  // And update the result array success field.
+  $result = array(
+    'success' => $success,
+    'message' => $success ? t('Donation was successfully processed.') : t('Donation transaction failed.'), // Shown to user.
+    // Additional data for the order record to store.
+    'data' => array(
+      'txn_id' => $remote_id,
+      'remote_id' => $remote_id, // The handler ID.
+      'transaction_id' => $transaction_id, // The Drupal ID.
+      'status' => $status, // Local status.
+      'remote_status' => $remote_status, // Handler's status.
+    ),
+    // If a profile was created on this, it's stored in
+    //'customer_profile_id' => '',
+  );
+  $data = $result['data'];
+
+  // There may be information already in the donation->data.
+  // We want to make sure this information propogates if it's available on the donation object already.
+  if (is_array($donation->data) && !empty($donation->data)) {
+    // Merge the order data with existing donation data,
+    // This wil be stored on the order, encrypted, and decrypted on donation_get.
+    $data = array_merge($donation->data, $data);
+  }
+  $donation->data = $data;
+  $donation->txn_id = $remote_id; // TODO Not called anywhere locally, this may not even need to be stored.
+  // Encrypt it for storage.
+  $order->data['fundraiser_commerce'] = _fundraiser_commerce_order_data_prepare($donation->data);
+  // Save the order again to update its line item reference field and user.
+  commerce_order_save($order);
+  // Pass the result up the chain.
+  $donation->result = $result;
+}
+
+/**
+ * Helper function, after external redirect return the user to the original submitted form.
+ */
+function _fundraiser_commerce_fundraiser_donation_process_external_form_redirect($donation) {
+  // Grab data if it exists from the caches.
+  $form_build_id = cache_get('fundraiser-form-id-' . $donation->did, 'cache');
+  $form = $form_state = array();
+  if (!empty($form_build_id)) {
+    // Given the form build id, get the rest from the form cache.
+    $form = cache_get('fundraiser-form-' . $donation->did, 'cache_form');
+    $form_state = cache_get('fundraiser-form-state-' . $donation->did, 'cache_form');
+  }
+  // Finalize the processing (which clears the caches), and redirect the form.
+  fundraiser_commerce_fundraiser_donation_after_process($donation);
+  _fundraiser_donation_submit_after_process($donation);
+  // If we're down to this point, we've returned from a submit redirect. In that case, we redirect the form based on success or failure.
+  if (!empty($form_build_id)) {
+    if (!empty($form) && !empty($form_state)) {
+      $form = $form->data;
+      $form_state = $form_state->data;
+      // Now that we have the form and form_state as they were when we started this redirection, we can hop back in to the flow.
+      // Restarting form submission on return is the only good way to make sure all form submits (including webform ones)
+      // get kicked off. B/c of the redirects involved we can't pass $form, $form_state along - we need to have it in caches.
+      if (!empty($form['#submit'])) {
+        // On a failure we pick back up with the form submits.
+        $start = FALSE;
+        foreach ($form['#submit'] as $index => $submit_handler) {
+          // Skip handlers until we get to post submit.
+          if ($submit_handler == 'fundraiser_donation_post_submit') {
+            $start = TRUE;
+          }
+          if (!$start) {
+            unset($form['#submit'][$index]);
+          }
+        }
+        // With the correct set of submit handlers in place, we need to pick up processing again.
+        // From as if we were inside of drupal_process_form, since our goto interrupted execution.
+        // The following code is from drupal_process_form().
+        $form_id = $form['#build_id'];
+        $form_state['#donation'] = $donation;
+        // Handle the rest of the submit handlers.
+        form_execute_handlers('submit', $form, $form_state);
+        // Clean caches out entirely.
+        if (!variable_get('cache', 0) && !empty($form_state['values']['form_build_id'])) {
+          cache_clear_all('form_' . $form_state['values']['form_build_id'], 'cache_form');
+          cache_clear_all('form_state_' . $form_state['values']['form_build_id'], 'cache_form');
+        }
+        // Process batches as needed.
+        if ($batch = & batch_get() && !isset($batch['current_set'])) {
+          if ($batch['has_form_submits'] || !empty($form_state['rebuild'])) {
+            $batch['form_state'] = $form_state;
+          }
+          else {
+            $batch['form_state'] = array_intersect_key($form_state,
+              array_flip(array('programmed', 'rebuild', 'storage', 'no_redirect', 'redirect')));
+          }
+          $batch['progressive'] = !$form_state['programmed'];
+          batch_process();
+        }
+        // Set flag.
+        $form_state['executed'] = TRUE;
+        // Redirect the form based on values in $form_state.
+        // This will forward us to another page with a drupal goto if set.
+        // This will interupt further processing like a return would.
+        drupal_redirect_form($form_state);
+        // But if we aren't redirecting, something went wrong and so we continue.
+        // This does mean we will not rebuild a form in the even of a post-submission error.
+        // That's ok though, something went critically wrong if we got to this point.
+      }
+    }
+  }
+
+  // If the form doesn't exist in the cache try the sid from webform
+  elseif ($donation->sid) {
+    module_load_include('inc', 'webform', 'includes/webform.submissions');
+    $node = $donation->node;
+    $sid = $donation->sid;
+    $submission = webform_get_submission($node->webform['nid'], $sid, TRUE);
+
+    /**
+     * The code below is adapted from the webform module's confirmation handling
+     */
+
+    // Strip out empty tags added by WYSIWYG editors if needed.
+    $confirmation = strlen(trim(strip_tags($node->webform['confirmation']))) ? $node->webform['confirmation'] : '';
+
+    // Clean up the redirect URL and filter it for webform tokens.
+    $redirect_url = trim($node->webform['redirect_url']);
+    $redirect_url = _webform_filter_values($redirect_url, $node, $submission, NULL, FALSE, TRUE);
+
+    // Remove the domain name from the redirect.
+    $redirect_url = preg_replace('/^' . preg_quote($GLOBALS['base_url'], '/') . '\//', '', $redirect_url);
+
+    // Check confirmation and redirect_url fields.
+    $redirect = array(
+      'path' => '',
+      'options' => array(),
+    );
+    $external_url = FALSE;
+
+    if ($redirect_url == '<none>') {
+      $redirect['path'] = 'node/' . $node->nid;
+    }
+    elseif ($redirect_url == '<confirmation>') {
+      $redirect = array(
+        'path' => 'node/' . $node->nid . '/done',
+        'options' => array('query' => array('sid' => $sid)),
+      );
+    }
+    elseif (valid_url($redirect_url, TRUE)) {
+      $redirect['path'] = $redirect_url;
+      $external_url = TRUE;
+    }
+    elseif ($redirect_url && strpos($redirect_url, 'http') !== 0) {
+      $parts = drupal_parse_url($redirect_url);
+      $parts['query'] ? ($parts['query']['sid'] = $sid) : ($parts['query'] = array('sid' => $sid));
+      $query = $parts['query'];
+      $redirect = array(
+        'path' => $parts['path'],
+        'options' => array(
+          'query' => $query,
+          'fragment' => $parts['fragment'],
+        ),
+      );
+    }
+
+    // If redirecting and we have a confirmation message, show it as a message.
+    if (!$external_url && (!empty($redirect_url) && $redirect_url != '<confirmation>') && !empty($confirmation)) {
+      drupal_set_message(check_markup($confirmation, $node->webform['confirmation_format'], '', TRUE));
+    }
+
+    drupal_goto($redirect['path'], $redirect['options']);
+  }
+
+  // If we don't have all the information we need, then we do nothing and fall through to standard page display.
+}
+
+/**
+ * Implements hook_fundraiser_donation_update().
+ */
+function fundraiser_commerce_fundraiser_donation_update($donation) {
+  // Get basic information from the donation node.
+  $user = $donation->user;
+  $node = $donation->node;
+  // Pick out the values we need to generate an order.
+  if ($donation->donation['amount'] == 'other') {
+    $donation->donation['amount'] = preg_replace('/[^\d\.]/i', '', $donation->donation['other_amount']);
+  }
+  $donation->donation['currency'] = isset($donation->donation['currency']) ? $donation->donation['currency'] : commerce_default_currency();
+  // Determine quantity and data from donation values.
+  $quantity = isset($donation->donation['quantity']) && !empty($donation->donation['quantity']) ? $donation->donation['quantity'] : 1;
+
+  // Get the original order.
+  $order = commerce_order_load($donation->did);
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+  // Update the amount
+  if (!empty($donation->update_amount)) {
+    // Update the existing donation line item with the new value.
+    foreach ($order_wrapper->commerce_line_items as $line_item_wrapper) {
+      if ($line_item_wrapper->type->value() == 'donation') {
+        $line_item_wrapper->quantity = $quantity;
+        $line_item_wrapper->commerce_unit_price->amount = commerce_currency_decimal_to_amount(
+          $donation->donation['amount'],
+          $donation->donation['currency']['code']
+        );
+        $line_item_wrapper->commerce_unit_price->currency_code = $donation->donation['currency']['code'];
+
+        // Recalculate the price
+        commerce_line_item_rebase_unit_price($line_item_wrapper->value());
+
+        // Save the donation line item
+        commerce_line_item_save($line_item_wrapper->value());
+      }
+    }
+  }
+
+  // Update the billing information
+  if (!empty($donation->update_billing)) {
+    // Update the customer profile with new info.
+    $found = commerce_customer_profile_load_multiple(array(), array('uid' => $user->uid));
+    $profile_id = -1;
+    foreach ($found as $id => $found) {
+      $profile_id = $id;
+    }
+    if ($profile_id != -1) {
+      $profile = commerce_customer_profile_load($profile_id);
+    }
+    else {
+      $profile = commerce_customer_profile_new('billing', $user->uid); // Billing type comes with Commerce by default.
+    }
+    // Update profile with the billing information.
+    $field = field_info_field('commerce_customer_address');
+    $instance = field_info_instance('commerce_customer_profile', 'commerce_customer_address', 'billing');
+    $profile->data = addressfield_default_values($field, $instance);
+    $profile->data['country'] = $donation->donation['country'];
+    $profile->data['name_line'] = $donation->donation['first_name'] . ' ' . $donation->donation['last_name'];
+    $profile->data['first_name'] = $donation->donation['first_name'];
+    $profile->data['last_name'] = $donation->donation['last_name'];
+    $profile->data['administrative_area'] = $donation->donation['state'];
+    $profile->data['thoroughfare'] = $donation->donation['address'];
+    $profile->data['premise'] = $donation->donation['address_line_2'];
+    $profile->data['locality'] = $donation->donation['city'];
+    $profile->data['postal_code'] = $donation->donation['zip'];
+    commerce_customer_profile_save($profile);
+    $order->commerce_customer_billing[LANGUAGE_NONE][0]['profile_id'] = $profile->profile_id;
+  }
+
+  // Update the payment information
+  if (!empty($donation->update_payment)) {
+    // Allow the gateways to clean the data before going to the update function
+    if (isset($donation->gateway['cleanup callback']) && function_exists($donation->gateway['cleanup callback'])) {
+      $cleaned = $donation->gateway['cleanup callback']($donation->donation, $donation->donation['payment_method']);
+      $donation->donation['payment_fields'] = $cleaned['payment_fields'];
+    }
+
+    // Update the gateway's stored data.
+    // Gateways that allow recurring donation will have an update callback
+    $update_callback = isset($donation->gateway['update callback']) && function_exists($donation->gateway['update callback']) ? $donation->gateway['update callback'] : FALSE;
+    // If we're in a sustainer update, and this is the first record update the stored payment information
+    if (!empty($donation->sustainer_update) && !empty($donation->sustainer_update_first) && $update_callback) {
+      // Load the current card data for updating
+      $card_data = _fundraiser_commerce_donation_cardonfile_card($donation);
+      if (!empty($card_data)) {
+        // Ensure the expiration values are copied correctly.
+        $card_data = $update_callback($donation, $card_data);
+        if (!empty($card_data)) {
+          $donation->data['cardonfile'] = $card_data->card_id;
+        }
+      }
+    }
+    // Sustainer update, update remaining donations with the first record's cardonfile id
+    // This avoids calling the APIs for each donation
+    elseif (!empty($donation->sustainer_update) && !empty($donation->sustainer_update_did)) {
+      $master = fundraiser_donation_get_donation($donation->sustainer_update_did);
+      $donation->data['cardonfile'] = isset($master->data['cardonfile']) ? $master->data['cardonfile'] : FALSE;
+    }
+
+    // Allow the gateways to scrub the data before saving
+    $scrubbed_fields = isset($donation->donation['payment_fields']) ? $donation->donation['payment_fields'] : array();
+    if (isset($donation->gateway['scrub callback']) && function_exists($donation->gateway['scrub callback'])) {
+      $scrubbed_fields = $donation->gateway['scrub callback']($scrubbed_fields, $donation->donation['payment_method']);
+    }
+
+    // Add the fields to the data array
+    $donation->data['payment_fields'] = $scrubbed_fields;
+  }
+
+  // Add the status data.
+  $new_donation_status = isset($order->status) ? $order->status : 'unknown';
+  $new_donation_status = ($donation->status == 'auto_canceled') ? 'auto_canceled' : $new_donation_status;
+  $donation->status = $donation->status_label = $new_donation_status;
+  if (!empty($order->status)) {
+    $donation->status_label = _fundraiser_commerce_get_label_by_status($order->status);
+    $donation->status_charged = _fundraiser_commerce_get_charged_by_status($order->status);
+  }
+  // Save the updated data array to the order's data column
+  $order->data['fundraiser_commerce'] = _fundraiser_commerce_order_data_prepare($donation->data);
+
+  // Save the order
+  commerce_order_save($order);
+}
+
+/**
+ * Implements hook_fundraiser_donation_success().
+ */
+function fundraiser_commerce_fundraiser_donation_success($donation) {
+  // Mark as complete.
+  _fundraiser_commerce_update_order_status('payment_received', $donation->did);
+  $donation->status = 'payment_received';
+  $donation->status_label = _fundraiser_commerce_get_label_by_status('payment_received');
+  $donation->status_charged = _fundraiser_commerce_get_charged_by_status('payment_received');
+
+  // If the payment gateway has a response save callback, invoke it now.
+  if (!empty($donation->gateway['response save callback'])) {
+    $donation->gateway['response save callback']($donation);
+  }
+}
+
+/**
+ * Implements hook_fundraiser_donation_decline().
+ */
+function fundraiser_commerce_fundraiser_donation_decline($donation) {
+  // Mark the sale in commerce as failed.
+  _fundraiser_commerce_update_order_status('failed', $donation->did);
+  $donation->status = 'failed';
+  $donation->status_label = _fundraiser_commerce_get_label_by_status('failed');
+  $donation->status_charged = _fundraiser_commerce_get_charged_by_status('failed');
+}
+
+/**
+ * Implements hook_fundraiser_donation_exception().
+ */
+function fundraiser_commerce_fundraiser_donation_exception($donation) {
+  return fundraiser_commerce_fundraiser_donation_decline($donation);
+}
+
+/**
+ * Implements hook_fundraiser_donation_cancel().
+ */
+function fundraiser_commerce_fundraiser_donation_cancel($donation) {
+  // Mark the sale in commerce as canceled.
+  _fundraiser_commerce_update_order_status('canceled', $donation->did);
+  $donation->status = 'canceled';
+  $donation->status_label = _fundraiser_commerce_get_label_by_status('canceled');
+  $donation->status_charged = _fundraiser_commerce_get_charged_by_status('canceled');
+}
+
+/**
+ * Implements hook_fundraiser_donation_delete().
+ */
+function fundraiser_commerce_fundraiser_donation_delete($donation) {
+  // Mark the sale in commerce as canceled.
+  _fundraiser_commerce_update_order_status('canceled', $donation->did);
+  $donation->status = 'canceled';
+  $donation->status_label = _fundraiser_commerce_get_label_by_status('canceled');
+  $donation->status_charged = _fundraiser_commerce_get_charged_by_status('canceled');
+}
+
+/**
+ * Implements hook_fundraiser_refund_process().
+ */
+function fundraiser_commerce_fundraiser_refund_process($refund) {
+  // Grab the gateway configuration from fundraisers data.
+  $donation = fundraiser_donation_get_donation($refund->did);
+  $info = _fundraiser_get_donation_gateway($refund->did);
+  $method_instance = commerce_payment_method_instance_load($info['id']); // From commerce_payment.module.
+  // This gets us: The payment method instance object with the addition of the settings array. Settings are per Rule.
+  // Choose which of two ways to process this.
+  if (in_array($donation->donation['payment_method'], $info['offsite_processing']) && !in_array($donation->donation['payment_method'], $info['allow_refund'])) {
+    // If external processing, we cannot execute a refund charge against it.
+    drupal_set_message(t('The %title payment method indicates it is offsite processing, and cannot be refunded through this interface.',
+      array('%title' => $method_instance['title'])), 'error');
+  }
+  else {
+    if (empty($info['refund callback'])) {
+      // Alert the administrator that the module does not provide a required form.
+      drupal_set_message(t('The %title payment method does not provide a gateway refund function.',
+        array('%title' => $method_instance['title'])), 'error');
+      // We can't find the gateway and we should tell someone about it.
+      watchdog('fundraiser', 'Cannot determine the payment gateway for refund @id. Node id of refund form is @nid',
+        array('@id' => $refund->did, '@nid' => $donation->nid), WATCHDOG_CRITICAL);
+      watchdog('fundraiser_commerce', 'Refund function :function is empty.', array(':function' => $info['refund callback']));
+      $donation->result = array(
+        'success' => FALSE,
+        'message' => 'Cannot determine the payment gateway for this refund.',
+      );
+      return; // Return the failure.
+    }
+  }
+  // And process.
+  // Now execute the custom charge, keeping in mind for Commerce, the charge function is a submit handler.
+  if (isset($info['refund callback']) && function_exists($info['refund callback'])) {
+    $refund->donation = $donation;
+    $refund_function = $info['refund callback'];
+    $success = $refund_function($method_instance, $refund);
+  }
+  // Update the donation and order data and result values based on the success.
+  _fundraiser_commerce_update_donation_result_data($donation, $success);
+  // Finish up any last cleanup for this transaction.
+  if (isset($donation->result['success']) && $donation->result['success']) {
+    $refund->result = $donation->result;
+    // Set the values donation needs for the rest of the system.
+    $order = commerce_order_load($refund->did);
+    // Add the status data.
+    $refund->status = $donation->status = $donation->status_label = isset($order->status) ? $order->status : 'unknown';
+    if (!empty($order->status)) {
+      $donation->status_label = _fundraiser_commerce_get_label_by_status($order->status);
+      $donation->status_charged = _fundraiser_commerce_get_charged_by_status($order->status);
+    }
+    $refund->donation = $donation;
+    $refund->receipt_id = $donation->result['data']['remote_id'];
+    // If txn_id has been set by out refund function above, use that.
+    $refund->txn_id = !empty($refund->txn_id) ? $refund->txn_id :$donation->result['data']['txn_id'];
+  }
+}
+
+/**
+ * Implements hookfundraiser_refund_success().
+ */
+function fundraiser_commerce_fundraiser_refund_success($refund) {
+  // Mark as complete.
+  _fundraiser_commerce_update_order_status($refund->new_status, $refund->did);
+  $refund->status = $refund->donation->status = $refund->new_status;
+  $refund->donation->status_label = _fundraiser_commerce_get_label_by_status($refund->new_status);
+  $refund->donation->status_charged = _fundraiser_commerce_get_charged_by_status($refund->new_status);
+}
+
+/**
+ * Implements hook_fundraiser_refund_decline().
+ */
+function fundraiser_commerce_fundraiser_refund_decline($refund) {
+  // Mark as failed to refund.
+  _fundraiser_commerce_update_order_status('failed_refund', $refund->did);
+  $refund->status = $refund->donation->status = 'failed_refund';
+  $refund->donation->status_label = _fundraiser_commerce_get_label_by_status('failed_refund');
+  $refund->donation->status_charged = _fundraiser_commerce_get_charged_by_status('failed_refund');
+}
+
+/**
+ * Implements hook_salesforce_donation_statuses().
+ */
+function fundraiser_commerce_salesforce_donation_statuses() {
+  // Get a list of available statuses, and return that list to salesforce donation.
+  $available_statuses = array();
+  $order_statuses = commerce_order_statuses(array('fundraiser_status' => TRUE));
+
+  foreach ($order_statuses as $name => $order_status) {
+    $available_statuses[$name] = $order_status['title'] . ' (' . t('Commerce') . ')';
+  }
+
+  return $available_statuses;
+}
+
+/**
+ * Helper function, derives a valid username from an e-mail address.
+ */
+function _fundraiser_commerce_email_to_username($email) {
+  $name = substr($email, 0, strpos($email, '@'));
+  $name = preg_replace('/[^A-Za-z0-9_.-]/', '', $name);
+  $name = trim(substr($name, 0, USERNAME_MAX_LENGTH - 4));
+  // Make sure we don't hand out a duplicate username.
+  while (db_query('SELECT COUNT(uid) FROM {users} WHERE name LIKE :name', array(':name' => $name))->fetchField() > 0) {
+    if (strlen($name) == USERNAME_MAX_LENGTH) {
+      $name = substr($name, 0, USERNAME_MAX_LENGTH - 4);
+    }
+    $name .= rand(0, 9);
+  }
+  return $name;
+}
+
+/**
+ * Helper function, given a card number return likely type.
+ */
+function _fundraiser_commerce_get_cc_type($cardnumber) {
+  $cardtype = 'UNKNOWN';
+  $len = drupal_strlen($cardnumber);
+  if ( $len == 15 && drupal_substr($cardnumber, 0, 1) == '3' ) {
+    $cardtype = 'amex';
+  }
+  elseif ( $len == 16 && drupal_substr($cardnumber, 0, 4) == '6011' ) {
+    $cardtype = 'discover';
+  }
+  elseif ( $len == 16 && drupal_substr($cardnumber, 0, 1) == '5' ) {
+    $cardtype = 'mc';
+  }
+  elseif ( ($len == 16 || $len == 13) && drupal_substr($cardnumber, 0, 1) == '4' ) {
+    $cardtype = 'visa';
+  }
+  return ( $cardtype );
+}
+
+/**
+ * Helper function, gather commerces country information into a central location.
+ */
+function fundraiser_commerce_get_countries() {
+  $return_data = &drupal_static(__FUNCTION__);
+  if (empty($return_data)) {
+    $return_data = new stdClass();
+
+    // Try hitting cache first.
+    $cache = cache_get(__FUNCTION__);
+    if (isset($cache) && !empty($cache->data)) {
+      // cache_get() was a hit, so add to static cache.
+      $return_data = $cache->data;
+    }
+    else {
+      // cache_get() was a miss, so generate the data.
+      $countries = array();
+      $zones = array();
+      // Gather an array of countries.
+      $found_countries = _fundraiser_commerce_get_countries();
+      foreach ($found_countries as $found_country) {
+        // First load up id, name, iso code 2, iso code 3, and version from commerce.
+        $countries[$found_country->country_id] = $found_country;
+        $countries[$found_country->country_id]->zones = array();
+        $found_zones = _fundraiser_commerce_get_zone_by_country($found_country->country_id);
+        foreach ($found_zones as $found_zone) {
+          // For each zone load up, zone_id, zone country_id, zone, code, zone_name.
+          // Store in the country and zone arrays.
+          $countries[$found_country->country_id]->zones[$found_zone->zone_id] = $found_zone;
+          $zones[$found_zone->zone_id] = $found_zone;
+        }
+      }
+      $return_data->countries = $countries;
+      $return_data->zones = $zones;
+
+      // Save into cache.
+      cache_set(__FUNCTION__, $return_data);
+    }
+  }
+  return $return_data;
+}
+
+/**
+ * Helper function, update order status on a order.
+ */
+function _fundraiser_commerce_update_order_status($status, $order_id) {
+  // Commerce order provides four statuses: canceled, pending, processing, completed.
+  // We provide (or alter the names of) more: pending_future_payment, failed, refunded, partially_refunded
+  $order = commerce_order_load($order_id);
+  commerce_order_status_update($order, $status, FALSE); // Do not skip saving the order here.
+}
+
+/**
+ * Helper function, look in country table for country info.
+ */
+function _fundraiser_commerce_get_countries() {
+  // Commerce does not store countries in a database, it relies instead on locale.inc
+  $countries = array();
+  // Necessary for country_get_list().
+  require_once DRUPAL_ROOT . '/includes/locale.inc';
+  $drupal_countries = country_get_list();
+  foreach ($drupal_countries as $iso => $human_name) {
+    $country['country_id'] = $iso;
+    $country['country_name'] = $human_name;
+    $country['iso'] = $iso;
+    $countries[] = (object) $country;
+  }
+  return $countries;
+}
+
+/**
+ * Helper function, look in zone table for zone info.
+ */
+function _fundraiser_commerce_get_zone_by_country($country_id) {
+  // Commerce does not store countries in a database, it relies instead on locale.inc
+  // And a hard coded addressfield form widget for zone level information.
+  // In order to retrieve this information from Commerce, we need to call the addressfield widget
+  // And pull it from the form. The results will be different for each zone, and we can't grab them
+  // all at once. So thankfully we don't need to the way the rest of the system is designed.
+  // Some countries will have states, and do NOT have them listed here. UC has a more complete list.
+  // So we will need to leave those available for users to fill in as blanks.
+  module_load_include('inc', 'addressfield', 'plugins/format/address');
+  $address['country'] = $country_id;
+  addressfield_format_address_generate($form, $address, array('mode' => '')); // Data is loaded into $form
+  $zones = array();
+  if (isset($form['locality_block']['administrative_area']['#options'])) {
+    foreach ($form['locality_block']['administrative_area']['#options'] as $iso => $human_name) {
+      $zone['zone_id'] = $iso;
+      $zone['country_id'] = $country_id;
+      $zone['zone_name'] = $human_name;
+      $zone['iso'] = $iso;
+      $zones[] = (object) $zone;
+    }
+  }
+  return $zones;
+}
+
+/**
+ * Helper function. Translate status to status label.
+ */
+function _fundraiser_commerce_get_label_by_status($status) {
+  // Grab the human readable label for the status.
+  return commerce_order_status_get_title($status); // The machine name of the declares state, we need the human readable label.
+}
+
+/**
+ * Helper function, determine if given this status the donation has been charged already.
+ */
+function _fundraiser_commerce_get_charged_by_status($status) {
+  $chargable_states = array('pending'); // Commerce order provides three states: canceled, pending, completed.
+  $status = commerce_order_status_load($status);
+  if (in_array($status['state'], $chargable_states)) {
+    return FALSE; // If the donation is still able to be charged, say it hasn't been.
+  }
+  return TRUE;
+}
+
+/**
+ * Prepare the fundraiser commerce order data for storage
+ */
+function _fundraiser_commerce_order_data_prepare($data) {
+  $encrypted = _fundraiser_commerce_encrypt(serialize($data));
+
+  // Check to ensure the correct encryption was used
+  // @todo: Fix underlying issue with encrypting PayPal data, so that we don't need the workaround below.
+  $encryption_array = unserialize($encrypted);
+  if (!isset($encryption_array['method']) || ($data['payment_method'] != 'paypal' && $encryption_array['method'] != 'mcrypt_rij_256') || !isset($encryption_array['key_name']) || $encryption_array['key_name'] != 'secure_file_key') {
+    watchdog('fundraiser_commerce', 'The encryption module has not been configured correctly. You may need to patch or update your version.', array(), WATCHDOG_EMERGENCY, l('Fix', 'admin/config/system/encrypt'));
+    return FALSE;
+  }
+
+  return $encrypted;
+}
+
+/**
+ * Retrieve the fundraiser commerce order data
+ */
+function _fundraiser_commerce_order_data_retrieve($data) {
+  $decrypted = _fundraiser_commerce_decrypt($data);
+  if (is_string($decrypted) && $unserialized = @unserialize($decrypted)) {
+    return $unserialized;
+  }
+  return $decrypted;
+}
+
+/**
+ * Helper function, wrapper for encrypt function.
+ */
+function _fundraiser_commerce_encrypt($input) {
+  $unserialized = unserialize($input);
+  if (module_exists('encrypt')) {
+    module_load_install('encrypt');
+    $requirements = encrypt_requirements('runtime');
+    if (isset($requirements['encrypt_keys']) && $requirements['encrypt_keys']['severity'] == REQUIREMENT_ERROR) {
+      drupal_set_message(t('A problem was found with your secure key.') . ' ' .
+        $requirements['encrypt_keys']['value'], 'warning');
+    }
+    // Implicitly set 'none' encryption method for PayPal to avoid decryption errors.
+    // @todo: Debug underlying issue preventng PayPal data from decrypting properly when using Mcrypt AES 256 method.
+    elseif ($unserialized['payment_method'] == 'paypal') {
+      return encrypt($input, array(), 'none');
+    }
+    else {
+      return encrypt($input);
+    }
+  }
+  return $input;
+}
+
+/**
+ * Helper function, wrapper for decrypt function.
+ */
+function _fundraiser_commerce_decrypt($input) {
+  if (module_exists('encrypt')) {
+    module_load_install('encrypt');
+    $requirements = encrypt_requirements('runtime');
+    if (isset($requirements['encrypt_keys']) && $requirements['encrypt_keys']['severity'] == REQUIREMENT_ERROR) {
+      drupal_set_message(t('A problem was found with your secure key.') . ' ' .
+        $requirements['encrypt_keys']['value'], 'warning');
+    }
+    else {
+      return decrypt($input);
+    }
+  }
+  return $input;
+}
+
+/**
+ * Implements hook_fundraiser_get_total_donations_by_nids().
+ */
+function fundraiser_commerce_fundraiser_get_total_donations_by_nids($nids, $start = FALSE, $end = FALSE) {
+  // Since more than one goal may target this nid with differing date ranges we
+  // can't cache this.
+
+  // This would normally use the commerce_order table and do two JOINs,
+  // but here we use the derived values in fundraiser_donation to speed up
+  // the query.
+  // Having an index on fd.status also helps of course.
+  // (commerce_order doesn't have that index.)
+  $query = db_select('fundraiser_donation', 'fd');
+  $query->addExpression('SUM(fd.amount)', 'total');
+  $query->condition('fd.nid', $nids, 'IN');
+  $query->condition('fd.status', 'payment_received', '=');
+  if ($start) {
+    $query->condition('fd.created', $start, '>=');
+  }
+  if ($end) {
+    $query->condition('fd.created', $end, '<=');
+  }
+
+  // This result will already be in dollars.
+  return $query->execute()->fetchField();
+}
+
+/**
+ * Implements hook_rules_data_info_alter().
+ */
+function commerce_payment_rules_data_info_alter(&$data) {
+  if (!empty($data['commerce_payment_settings'])) {
+    $data['commerce_payment_settings'] = array(
+      'label' => t('Payment settings'),
+      'ui class' => 'FundraiserCommerceUIPaymentSettings',
+    );
+  }
+  return $data;
+}
+
+/**
+ * Adds a payment method settings form to the enabling action.
+ */
+class FundraiserCommerceUIPaymentSettings extends RulesDataUI implements RulesDataDirectInputFormInterface {
+  public static function getDefaultMode() {
+    return 'input';
+  }
+
+  public static function inputForm($name, $info, $settings, RulesPlugin $element) {
+    // If the specified payment method exists...
+    if (!empty($info['payment_method']) && $payment_method = commerce_payment_method_load($info['payment_method'])) {
+      $form[$name]['method_id'] = array(
+        '#type' => 'value',
+        '#value' => $info['payment_method'],
+      );
+
+      // If the payment method has a settings callback...
+      if ($callback = commerce_payment_method_callback($payment_method, 'settings_form')) {
+        // Prepare an array of payment method settings defaults.
+        $method_settings = !empty($settings[$name]['settings']) && is_array($settings[$name]['settings']) ? $settings[$name]['settings'] : array();
+
+        // Add the settings form elements to the action form.
+        $form[$name]['settings'] = $callback($method_settings);
+      }
+
+      // Add the remote recurring option if the module supports it.
+      module_load_include('inc', 'fundraiser_commerce', '/gateways/' . $payment_method['module']);
+      $gateway_info = module_invoke($payment_method['module'], 'fundraiser_commerce_fundraiser_gateway_info');
+      if (!empty($gateway_info['allow_recurring']) && !empty($gateway_info['offsite_recurring'])) {
+        $form[$name]['settings']['offsite_recurring'] = array(
+          '#type' => 'checkbox',
+          '#title' => t('Offsite recurring donations'),
+          '#description' => t('Handle recurring donations offsite at the gateway.'),
+          '#default_value' => isset($settings['payment_method']['settings']['offsite_recurring']) ? $settings['payment_method']['settings']['offsite_recurring'] : FALSE,
+        );
+      }
+      // Make sitewide submit button text customizable for each payment method.
+      $form[$name]['settings']['submit_text'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Submit button text'),
+        '#description' => t('Overrides sitewide submit button text. Must be enabled under \'Confirmation page & settings\' tab on individual webforms.'),
+        '#default_value' => !empty($settings['payment_method']['settings']['submit_text']) ? $settings['payment_method']['settings']['submit_text'] : '',
+      );
+      // Add payment intro HTML option.
+      $form[$name]['settings']['intro_html'] = array(
+        '#type' => 'textarea',
+        '#title' => t('Introductory HTML'),
+        '#description' => t('If set, this HTML appears just below the payment method field on the form'),
+        '#default_value' => !empty($settings['payment_method']['settings']['intro_html']) ? $settings['payment_method']['settings']['intro_html'] : '',
+      );
+      // Add radio image field options to each payment type.
+      $form[$name]['settings']['selected_image'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Selected image URL'),
+        '#description' => t('If added, this image will be shown as part of the radio button label when several payment methods are available to the user and this particular payment method is selected.'),
+        '#default_value' => !empty($settings['payment_method']['settings']['selected_image']) ? $settings['payment_method']['settings']['selected_image'] : '',
+        '#element_validate' => array('fundraiser_commerce_gateway_image_validate'),
+        '#states' => array(
+          'required' => array(
+            ':input[name*="[unselected_image]"]' => array('!value' => ''),
+          ),
+        ),
+      );
+      $form[$name]['settings']['unselected_image'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Unselected image URL'),
+        '#description' => t('This image will be shown as part of the radio button label when several payment methods are available to the user and this particular payment method is not selected.'),
+        '#default_value' => !empty($settings['payment_method']['settings']['unselected_image']) ? $settings['payment_method']['settings']['unselected_image'] : '',
+        '#element_validate' => array('fundraiser_commerce_gateway_image_validate'),
+        '#states' => array(
+          'required' => array(
+            ':input[name*="[selected_image]"]' => array('!value' => ''),
+          ),
+        ),
+      );
+      $form[$name]['settings']['standalone_image'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Standalone image URL'),
+        '#description' => t('If added, this image will be shown as part of the radio button label when only a single payment method is available to the user.'),
+        '#default_value' => !empty($settings['payment_method']['settings']['standalone_image']) ? $settings['payment_method']['settings']['standalone_image'] : '',
+      );
+    }
+    else {
+      $form[$name]['invalid']['#markup'] = t('Invalid or missing payment method.');
+    }
+    return $form;
+  }
+
+  public static function render($value) {
+    return array();
+  }
+}
+
+/**
+ * Given a donation, determine when the payment method expires.
+ *
+ * @param object $donation
+ *   The donation object.
+ *
+ * @return NULL|array
+ *   An array with 'month' and 'year' keys.
+ */
+function fundraiser_commerce_get_payment_method_expiration_date_from_donation($donation) {
+  if (isset($donation->gateway['expire callback'])) {
+    $expiration_func = $donation->gateway['expire callback'];
+    if (function_exists($expiration_func)) {
+      $expires = $expiration_func($donation->donation);
+      if (isset($expires['month']) && isset($expires['year'])) {
+        return $expires;
+      }
+    }
+  }
+
+  return NULL;
+}
+
+/**
+ * Supported gateway hooks.
+ * Some gateways in order to integrate with the fundraiser_commerce system must implement hooks.
+ * As the /inc files for those gateways are not automatically included, we must include those hooks
+ * internally to allow Drupal to pick up on the implementation. The space below is reserved for those.
+ */
+
+/**
+ * Implements hook_commerce_paypal_ipn_process().
+ */
+function fundraiser_commerce_commerce_paypal_ipn_process($order, $payment_method, $ipn) {
+  // If the user executes the transaction and then abandons at Paypal, not returning to fundraiser_commerce's
+  // return path and not triggering anything in _fundraiser_commerce_fundraiser_donation_process_external_form_return()
+  // Therefore we need to finish completion at the IPN transaction process path.
+
+  // We skip this step for so long as a pending is in play.
+  if ($ipn['payment_status'] == 'Pending') {
+    return;
+  }
+  if (!empty($order) && !empty($payment_method) && !empty($ipn)) {
+    if ($ipn['payment_status'] == 'Completed' && !empty($order)) {
+      // Grab the donation object from the order.
+      $donation = fundraiser_donation_get_donation($order->order_id);
+      // Update the donation and order data and result values based on the success.
+      _fundraiser_commerce_update_donation_result_data($donation, TRUE);
+      // Finish up any last cleanup for this transaction.
+      fundraiser_commerce_fundraiser_donation_after_process($donation);
+      // Save the donation
+      fundraiser_donation_update($donation);
+      // Finish up the submission to kick off success / decline triggers.
+      _fundraiser_donation_submit_after_process($donation);
+    }
+    elseif ($ipn['payment_status'] == 'Refunded') {
+      // commerce_paypal_wps handles the Commerce refund transactions. This is here to record the fundrasier_refund item
+      // when the refund is initiated from the PayPal dashboard.
+      $donation = fundraiser_donation_get_donation($order->order_id);
+      _fundraiser_commerce_ipn_refund($donation, $payment_method, $ipn);
+
+    }
+    elseif ($ipn['payment_status'] == 'Reversed') {
+      $donation = fundraiser_donation_get_donation($order->order_id);
+      _fundraiser_commerce_ipn_reverse($donation, $ipn);
+    }
+  }
+}
+
+/**
+ * Callback function to record fundrasier_refund items when refund initiated
+ * from PayPal dashboard (instead of through Springboard).
+ */
+function _fundraiser_commerce_ipn_refund($donation, $payment_method, $ipn) {
+  // If the fundraiser_refund record has already been saved, we don't need to continue.
+  $results = _fundraiser_get_refund_by_txn_id($ipn['txn_id']);
+  if ($results) {
+    return;
+  }
+  // Set up the refund.
+  $already_refunded = fundraiser_refund_get_refunds_by_did($donation->did, TRUE);
+  $refunded_total = 0;
+  if(!empty($already_refunded)) {
+    foreach ($already_refunded as $prior) {
+      // Omit the same refund transaction, if submitted through Springboard.
+      if ($prior->txn_id != $ipn['parent_txn_id']) {
+        $refunded_total += ($prior->amount * -1);
+      }
+    }
+  }
+  $able_to_refund = ($donation->donation['amount'] + $refunded_total);
+  $new_status = 'partially_refunded';
+  // Partial refund
+  $amount = $ipn['mc_gross'];
+  if ($amount >= $able_to_refund) {
+    $new_status = COMMERCE_PAYMENT_STATUS_FAILURE;
+  }
+
+  $refund = new stdClass();
+  $refund->did = $donation->did;
+  $refund->amount =  $amount;
+  $refund->currency = $donation->currency;
+  $refund = fundraiser_refund_create($refund);
+  $refund->new_status = $new_status;
+  $refund->ipn = TRUE;
+  fundraiser_refund_process($refund);
+  // At this point $donation->result is set and responses can be handled.
+  if (!isset($refund->result['message'])) {
+    $refund->result['message'] = '';
+  }
+  // The results should be at $donation->result, ready to respond to the aftermath.
+  if (isset($refund->result['success']) && $refund->result['success'] == TRUE) {
+    fundraiser_refund_success($refund);
+  }
+  else {
+    $donation->result['success'] = FALSE;
+    watchdog('ipn_refund_fail', '%ipn: A reversal failed to be processed.', array('%ipn', $ipn['item_name1']));
+  }
+}
+
+/**
+ * Callback function to handle chargebacks sent by PayPal.
+ */
+function _fundraiser_commerce_ipn_reverse($donation, $ipn) {
+  // Create a new payment transaction for the order.
+  $transaction = commerce_payment_transaction_new('paypal_wps', $donation->did);
+  $transaction->instance_id = $ipn['parent_txn_id'];
+  $transaction->remote_id = $ipn['txn_id'];
+  $transaction->amount = commerce_currency_decimal_to_amount($ipn['mc_gross'], $ipn['mc_currency']);
+  $transaction->currency_code = $ipn['mc_currency'];
+  $transaction->payload[REQUEST_TIME . '-ipn'] = $ipn;
+
+  // Set the transaction's statuses based on the IPN's payment_status.
+  $transaction->remote_status = $ipn['payment_status'];
+  $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
+  $transaction->message = t('Reversal by PayPal.');
+  commerce_payment_transaction_save($transaction);
+
+  // Set up the refund.
+  $already_refunded = fundraiser_refund_get_refunds_by_did($donation->did, TRUE);
+  $refunded_total = 0;
+  if(!empty($already_refunded)) {
+    foreach ($already_refunded as $prior) {
+      // Omit the same refund transaction, if submitted through Springboard.
+      if ($prior->txn_id != $ipn['parent_txn_id']) {
+        $refunded_total += ($prior->amount * -1);
+      }
+    }
+  }
+  $able_to_refund = ($donation->donation['amount'] + $refunded_total);
+  $new_status = 'partially_refunded';
+  // Partial refund
+  $amount = $ipn['mc_gross'];
+  if ($amount >= $able_to_refund) {
+    $new_status = COMMERCE_PAYMENT_STATUS_FAILURE;
+  }
+
+  $refund = new stdClass();
+  $refund->did = $donation->did;
+  $refund->amount =  $amount;
+  $refund->currency = $donation->currency;
+  $refund = fundraiser_refund_create($refund);
+  $refund->new_status = $new_status;
+  $refund->ipn = TRUE;
+  fundraiser_refund_process($refund);
+  // At this point $donation->result is set and responses can be handled.
+  if (!isset($refund->result['message'])) {
+    $refund->result['message'] = '';
+  }
+  // The results should be at $donation->result, ready to respond to the aftermath.
+  if (isset($refund->result['success']) && $refund->result['success'] == TRUE) {
+    fundraiser_refund_success($refund);
+  }
+  else {
+    $donation->result['success'] = FALSE;
+    watchdog('ipn_refund_fail', '%ipn: A reversal failed to be processed.', array('%ipn', $ipn['item_name1']));
+  }
+}
+
+/**
+ * Add values to the pane_values array before it goes to the commerce submit handler.
+ *
+ * @param array $pane_values
+ *    Values to be sent to a commerce payment processor, passed by reference
+ * @param object $donation
+ *   The donation to use to get the cardonfile data.
+ * @param string $form_key
+ *   The pane values form key to store cardonfile data under.
+ *   Should be fine with 'credit_card' most of the time.  Mainly used for
+ *   echeck.
+ *
+ * @return void
+ */
+function _fundraiser_commerce_submit_handler_pane_values(&$pane_values, $donation, $form_key = 'credit_card') {
+  // If card on file is enabled check if we should create a new profile.
+  if (module_exists('commerce_cardonfile')) {
+    // Load any existing card data.
+    $card = _fundraiser_commerce_donation_cardonfile_card($donation);
+
+    // If this is not a reference charge be sure to store the card data and
+    // set the new flag.
+    if ($donation->reference_charge === FALSE) {
+      // If there is not an existing card then set the store flag to TRUE
+      // This ensures card on file integrations create new profiles only
+      // for new cards.
+      if (empty($card)) {
+        $pane_values[$form_key]['cardonfile_store'] = isset($donation->donation['payment_fields'][$donation->donation['payment_method']]['cardonfile_store']) ? $donation->donation['payment_fields'][$donation->donation['payment_method']]['cardonfile_store'] : TRUE;
+      }
+      else {
+        $pane_values[$form_key]['cardonfile_store'] = FALSE;
+
+        // Also set this value on the donation for saving later
+        $donation->data['cardonfile'] = $card->card_id;
+      }
+
+      // To avoid using a stored CIM to charge set this value to new even for
+      // existing cards.
+      $pane_values['cardonfile'] = 'new';
+    }
+    // For reference charges add the cardonfile id.
+    elseif ($donation->reference_charge == TRUE) {
+      // Load the card on file card card data.
+      if (!empty($card)) {
+        $pane_values['cardonfile'] = $card->card_id;
+      }
+      else {
+        // Log the missing card data.
+        watchdog(
+          'fundraiser',
+          'A reference charge was attempted on donation @id but no stored card data was found.',
+          array('@id' => $donation->did),
+          WATCHDOG_CRITICAL
+        );
+      }
+    }
+  }
+  // Allow other modules to alter the pane values.
+  drupal_alter('fundraiser_commerce_submit_handler_pane_values', $pane_values, $donation);
+}
+
+/**
+ * Perform standard functions after a commerce submit form has been processed.
+ *
+ * Adds the cardonfile id to the donation object.
+ *
+ * @param bool $success
+ *   Whether the order was successful.
+ * @param array $method_instance
+ *   Details on the gateway.
+ * @param array $pane_values
+ *   Values passed to the commerce submit handler.
+ * @param object $donation
+ *   Fundraiser donation object.
+ * @param string $form_key
+ *   The form key under pane values where the cardonfile_store key exists.
+ *
+ * @return void
+ */
+function _fundraiser_commerce_charge_submit_form_process($success, $method_instance, $pane_values, $donation, $form_key = 'credit_card') {
+  // If this charge resulted in a new card on file save that to the donation
+  if ($success && module_exists('commerce_cardonfile') && !empty($pane_values[$form_key]['cardonfile_store'])) {
+    // Load up the cardonfile record for this donation and save it
+    $card = _fundraiser_commerce_donation_cardonfile_card($donation);
+    if (!empty($card)) {
+      $donation->data['cardonfile'] = $card->card_id;
+    }
+  }
+}
+
+/**
+ * Load the card on file card data for a donation
+ *
+ * @param $donation Object
+ *    Fundraiser donation object
+ * @param $active boolean
+ *    Flag to select only active cards, defaults to TRUE
+ * @return Object
+ *    Card on file card entity
+ */
+function _fundraiser_commerce_donation_cardonfile_card($donation, $active = TRUE) {
+  // If this donation has the cardonfile value set in its data array, load the card data from that
+  if (!empty($donation->donation['cardonfile']['card'])) {
+    return $donation->donation['cardonfile']['card'];
+  }
+
+  if (!empty($donation->data['cardonfile'])) {
+    return commerce_cardonfile_load($donation->data['cardonfile']);
+  }
+
+  // Allow modules to provide their own card on file profile field values
+  if (!empty($donation->gateway['cardonfile callback'])) {
+    $cardonfile_fields = $donation->gateway['cardonfile callback']($donation);
+  }
+  // If this is a credit purchase use the default credit function
+  elseif ($donation->donation['payment_method'] == 'credit') {
+    module_load_include('inc', 'fundraiser_commerce', 'includes/fundraiser_commerce.credit_card');
+    $cardonfile_fields = _fundraiser_commerce_credit_card_cardonfile_fields($donation);
+  }
+
+  if (empty($cardonfile_fields)) {
+    return FALSE;
+  }
+
+  return _fundraiser_commerce_cardonfile_match($cardonfile_fields, $active);
+}
+
+/**
+ * Search the card on file table for a record
+ *
+ * @param $fields Array
+ *    Array of fields to search card on file table
+ * @return Object
+ *    Card on file card entity or FALSE if no record
+ */
+function _fundraiser_commerce_cardonfile_match($fields, $active = TRUE) {
+  // Query for the card on file profile using the provided values
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'commerce_cardonfile')
+  ->propertyCondition('uid', $fields['uid'])
+  ->propertyCondition('instance_id', $fields['instance_id'])
+  ->propertyCondition('card_number', $fields['card_number']);
+
+  if (!empty($fields['card_exp_month'])) {
+    $query->propertyCondition('card_exp_month', $fields['card_exp_month']);
+  }
+
+  if (!empty($fields['card_exp_year'])) {
+    $query->propertyCondition('card_exp_year', $fields['card_exp_year']);
+  }
+
+  if ($active) {
+    $query->propertyCondition('status', TRUE);
+  }
+
+  $result = $query->execute();
+
+  if (isset($result['commerce_cardonfile'])) {
+    $ids = array_keys($result['commerce_cardonfile']);
+    return commerce_cardonfile_load($ids[0]);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Search the card on file table for a record that doesn't match the date
+ *
+ * @param $fields Array
+ *    Array of fields to search card on file table
+ * @return Object
+ *    Card on file card entity or FALSE if no record
+ */
+function _fundraiser_commerce_cardonfile_exp_date_mismatch($fields) {
+  // Create the date or portion of the query
+  $date_or = db_or()
+  ->condition('c.card_exp_month', $fields['card_exp_month'], '<>')
+  ->condition('c.card_exp_year', $fields['card_exp_year'], '<>');
+
+  // Query the db for an existing record
+  $existing = db_select('commerce_cardonfile', 'c')
+  ->fields('c', array('card_id'))
+  ->condition('c.uid', $fields['uid'], '=')
+  ->condition('c.instance_id', $fields['instance_id'], '=')
+  ->condition('c.card_number', $fields['card_number'], '=')
+  ->condition($date_or)
+  ->range(0, 1)
+  ->execute()
+  ->fetchField();
+
+  if ($existing) {
+    return commerce_cardonfile_load($existing);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Implements hook_commerce_authnet_cim_request_alter
+ */
+function fundraiser_commerce_commerce_authnet_cim_request_alter($api_request_element) {
+
+  if (!empty($api_request_element->transaction->profileTransAuthCapture->order->invoiceNumber)) {
+    $did = (string) $api_request_element->transaction->profileTransAuthCapture->order->invoiceNumber;
+    $donation = fundraiser_donation_get_donation($did);
+    $config = $donation->gateway['gateway_details']['settings'];
+    $extra = (string) $api_request_element->extraOptions;
+    $extra = substr($extra, 9, -3);
+    module_load_include('inc', 'fundraiser_commerce', 'gateways/commerce_authnet');
+    $fields = _commerce_authnet_extra_fields();
+    unset($fields[0]);
+    $i = 1;
+    foreach ($fields as $field) {
+      if (isset($config['commerce_authnet_webform_field_' . $i]) && isset($donation->submission_data[$config['commerce_authnet_webform_field_' . $i]])) {
+        $name = $fields[$config['commerce_authnet_authorize_field_' . $i]];
+        $value =  $donation->submission_data[$config['commerce_authnet_webform_field_' . $i]];
+        $value = str_replace(array("&","'",'"',"|"), array("%26","%27","%22","%7C"), $value);
+        $extra .= '&' . trim($name) . '=' . trim($value);
+      }
+      $i++;
+    }
+    $api_request_element->extraOptions = '<![CDATA[' .  $extra . '&cms=Springboard]]>';
+  }
+  if(isset($api_request_element->validationMode)) {
+      $api_request_element->validationMode = 'none';
+    }
+  // Change the description to something unique so we get a new profile each time
+  if (!empty($api_request_element->profile->description)) {
+    $api_request_element->profile->description = substr(t('CIM request taking place at @date', array('@date' => format_date(time()))), 0, 255);
+  }
+}
+
+/**
+ * Element validator to make a nice, flat array of selected mappable response fields.
+ */
+function fundraiser_commerce_response_fields_validate($element, &$form_state, $form) {
+  //@TODO: I bet there's a more robust way of doing this.
+  $form_state['values']['parameter']['payment_method']['settings']['payment_method']['settings']['response_fields']['mappable'] =
+    empty($form_state['input']['parameter']['payment_method']['settings']['payment_method']['settings']['response_fields'])
+    ? array()
+    : array_keys($form_state['input']['parameter']['payment_method']['settings']['payment_method']['settings']['response_fields']['all'])
+  ;
+}
+
+/**
+ * Implements hook_form_FORMID_alter
+ * Add a confirm form to payment_method settings
+ * Add original settings to form_state for logging and comparision to new settings
+ */
+function fundraiser_commerce_form_rules_ui_edit_element_alter(&$form, &$form_state) {
+
+  if(isset($form['parameter']['payment_method']['settings'])) {
+    //get the stored payment method settings
+    $method_id = isset($form['parameter']['payment_method']['settings']['payment_method']['method_id']['#value'])
+      ? $form['parameter']['payment_method']['settings']['payment_method']['method_id']['#value']
+      : '';
+    $method = commerce_payment_method_instance_load($method_id . '|commerce_payment_' . $method_id);
+
+    // Load form builder functions from the gateway include files,
+    // if they exist, in order to add custom settings form elements. Needed
+    // because hook_form_rules_ui_edit_element_alter() has cache problems if
+    // implemented from an include file.
+    if (!empty($method['module'])) {
+      $path = drupal_get_path('module', 'fundraiser_commerce') . '/gateways/' . $method['module'] . '.inc';
+      // Is there a module_name.inc file in the gateways folder?
+      if (file_exists($path)) {
+        // Load the inc file.
+        form_load_include($form_state, 'inc', 'fundraiser_commerce', '/gateways/' . $method['module']);
+        // Check to see if the form builder function exists.
+        $function = $method['module'] . '_form_rules_ui_edit_element_builder';
+        if (function_exists($function)) {
+          // Invoke the function to add the new elements to the
+          // action settings form.
+          $function($form, $form_state);
+        }
+      }
+    }
+
+    $form_state['storage']['old_settings_assoc'] = isset($method['settings']) ? $method['settings'] : FALSE;
+    $form['#submit'][] = 'fundraiser_commerce_gateway_log_gateway_settings_changes';
+    $form['#attached']['js'][]= drupal_get_path('module', 'fundraiser_commerce') . '/js//gateway.js';
+  }
+}
+
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Prevent disabling of a gateway if it is in use on a donation form by
+ * disabling the submit button on the confirmation form.
+ */
+function fundraiser_commerce_form_rules_ui_form_rules_config_confirm_op_alter(&$form, &$form_state) {
+  if ($form_state['op'] == 'disable') {
+    // Seems like there should be a better way to find the rule id than arg()
+    $rule = rules_config_load(arg(5));
+    // Select all records so we can search inside the serizalied gateways field.
+    $donation_forms = db_query("SELECT nid, gateways FROM {fundraiser}");
+    if ($donation_forms) {
+      // Compile list of forms to use when building the message to the user.
+      $matching_donation_forms = array();
+      while ($donation_form = $donation_forms->fetchAssoc()) {
+        $gateways = unserialize($donation_form['gateways']);
+        foreach ($gateways as $gateway) {
+          if (!empty($gateway['id'])) {
+            if (strpos($gateway['id'], $rule->name) && $gateway['status'] == 1) {
+              $matching_donation_forms[] = $donation_form['nid'];
+            }
+          }
+        }
+      }
+      if (!empty($matching_donation_forms)) {
+        // Disable submit button.
+        $form['actions']['submit']['#disabled'] = TRUE;
+        // Build user message with links to enabled donation forms.
+        $message = t('The payment gateway @rule_label cannot be disabled because it is currently in use on the following donation forms:',
+          array('@rule_label' => $rule->label));
+        $matching_nodes = db_select('node', 'n')
+          ->condition('nid', $matching_donation_forms, 'IN')
+          ->fields('n', array('nid', 'title'))
+          ->execute();
+        while ($matching_node = $matching_nodes->fetchAssoc()) {
+          $message .= t('<li><a href="@donation_form_url">@node_title</a></li>',
+            array(
+              '@donation_form_url' => url('node/' . $matching_node['nid']),
+              '@node_title' => $matching_node['title'],
+            )
+          );
+        }
+        $message .= '</ul>';
+        drupal_set_message($message, 'warning');
+      }
+    }
+  }
+}
+
+/**
+ * Log the payment method form settings
+ */
+function fundraiser_commerce_gateway_log_gateway_settings_changes($form, $form_state) {
+  global $user;
+  $gateway_id = $form_state['values']['parameter']['payment_method']['settings']['payment_method']['method_id'];
+
+  $new_settings_assoc = isset($form_state['values']['parameter']['payment_method']['settings']['payment_method']['settings'])
+    ? $form_state['values']['parameter']['payment_method']['settings']['payment_method']['settings']
+    : FALSE;
+
+  if ($new_settings_assoc) {
+    $new_settings = fundraiser_commerce_flatten_gateway_settings($new_settings_assoc);
+  }
+
+  $old_settings_assoc =$form_state['storage']['old_settings_assoc'];
+
+  if($old_settings_assoc) {
+    $old_settings = fundraiser_commerce_flatten_gateway_settings($old_settings_assoc);
+  }
+
+  $changed = array();
+  if (!empty($new_settings) && !empty($old_settings)) {
+    foreach($new_settings as $name => $value) {
+      if (!is_int($name) && isset($old_settings[$name]) && $old_settings[$name] !== $value) {
+        $changed[$name] = $name . ': old_value: ' . $old_settings[$name] . ', new_value: ' . $new_settings[$name];
+      }
+    }
+  }
+
+  if(!empty($changed)) {
+    $record = array (
+      'gateway_id' => $gateway_id,
+      'uid' => $user->uid,
+      'value' => implode("\n\r", $changed),
+      'time' => time(),
+    );
+    drupal_write_record ('fundraiser_commerce_gateway_settings_log', $record);
+  }
+}
+
+function fundraiser_commerce_flatten_gateway_settings($settings) {
+  $flat = array();
+  array_walk_recursive(
+    $settings,
+    function($value, $key) use (&$flat) {
+      $flat[$key] = $value;
+    }
+  );
+  return $flat;
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Alter the webform client form for donation content types.
+ * This is done with hook_form_alter and not hook_form_FORM_ID_alter
+ * because webform's form id varies.
+ * Ex. webform_client_form_NID.
+ */
+function fundraiser_commerce_form_alter(&$form, &$form_state, $form_id) {
+
+  if (strstr($form_id, 'webform_client_form') !== FALSE && fundraiser_is_donation_type($form['#node']->type) && arg(4) != 'edit') {
+    $node = $form['#node'];
+    // Load any custom configuration options.
+    $config = db_query('SELECT * FROM {fundraiser_webform_messages} f WHERE f.nid = :nid', array(':nid' => $form['#node']->nid))->fetchAssoc();
+
+    $enabled = 0;
+    $button_info = array();
+    $button_images = array();
+    foreach ($node->gateways as $gateway) {
+      if (!empty($gateway['status']) && $gateway['status'] == 1) {
+        $enabled++;
+        $active_gateway = $gateway;
+        $gateway_rule_name = substr($active_gateway['id'], strpos($active_gateway['id'], "|") + 1); //@TODO: is there a better way to get the rule name?
+        $rule = rules_config_load($gateway_rule_name);
+        $actions = $rule->actions();
+        foreach ($actions as $action) {
+          $settings = $action->settings;
+        }
+        // Change submit button text based on webform configuration and payment method
+        // submit button setting (if any).
+        if (empty($config['sitewide_submit']) && empty($form['#node']->webform['submit_text'])) {
+          // Change submit button text to payment gateway default, when only one gateway available.
+          $gateway_config = isset($settings['payment_method']['settings']) ? $settings['payment_method']['settings'] : '';
+          if (!empty($gateway_config['submit_text'])) {
+            $button_info[$active_gateway['method']]['text'] = $gateway_config['submit_text'];
+          }
+          else {
+            $button_info[$active_gateway['method']]['text'] = $form['actions']['submit']['#value'];
+          }
+        }
+
+        // Insert Intro HTML settings field into payment information fieldset.
+        if (!empty($settings['payment_method']['settings']['intro_html'])) {
+          // Reorder the intro HTML to be first.
+          $payment_array = $form['submitted']['payment_information']['payment_fields'][$gateway['method']];
+          $reordered = array_slice($payment_array, 0, 2, TRUE) +
+            array('intro_html' => array('#markup' => '<div>' . $settings['payment_method']['settings']['intro_html'] . '</div>')) +
+            array_slice($payment_array, 2, count($payment_array)-2, TRUE);
+          $form['submitted']['payment_information']['payment_fields'][$gateway['method']] = $reordered;
+        }
+
+        // Add payment selection images.
+        $option_text = !empty($form['submitted']['payment_information']['payment_method']['#options'][$gateway['method']]) ? $form['submitted']['payment_information']['payment_method']['#options'][$gateway['method']] : '';
+        if (!empty($settings['payment_method']['settings']['selected_image']) && !empty($settings['payment_method']['settings']['unselected_image'])) {
+          $form['submitted']['payment_information']['payment_method']['#options'][$gateway['method']] = '<img data-gateway="' . $gateway['method'] . '" id="' . $gateway['method'] . '-payment-option-img" src="//:0" alt="' . $option_text . '" title="' . $option_text . '" />';
+        }
+        $button_info[$active_gateway['method']]['unselected_image'] = !empty($settings['payment_method']['settings']['unselected_image']) && preg_match('/(\.jpg|\.png|\.gif)$/', $settings['payment_method']['settings']['unselected_image']) ? $settings['payment_method']['settings']['unselected_image'] : '';
+        $button_info[$active_gateway['method']]['selected_image'] = !empty($settings['payment_method']['settings']['selected_image']) && preg_match('/(\.jpg|\.png|\.gif)$/', $settings['payment_method']['settings']['selected_image']) ? $settings['payment_method']['settings']['selected_image'] : '';
+        $button_info[$active_gateway['method']]['standalone_image'] = !empty($settings['payment_method']['settings']['standalone_image']) && preg_match('/(\.jpg|\.png|\.gif)$/', $settings['payment_method']['settings']['standalone_image']) ? $settings['payment_method']['settings']['standalone_image'] : '';
+        if (!empty($settings['payment_method']['settings']['unselected_image'])) {
+          $form['submitted']['payment_information']['payment_method']['#options'][$gateway['method']] = '<img data-gateway="' . $gateway['method'] . '" id="' .$gateway['method'] . '-payment-option-img" src="'. $settings['payment_method']['settings']['unselected_image'] . '" alt="' . $option_text . '" title="' . $option_text . '">';
+        }
+
+      }
+    }
+    // Pass number of enabled gateways to js.
+    $button_info['enabled_count'] = $enabled;
+    // Add standalone image if only one gateway is enabled.
+    if ($enabled == 1) {
+      foreach ($node->gateways as $gateway_key => $gateway) {
+        // Set the alt/title label:
+        if (!empty($gateway['status']) && $gateway['status'] == 1 && !empty($settings['payment_method']['settings']['standalone_image'])) {
+          $option_text = isset($gateway['label']) && !empty($gateway['label']) ? $gateway['label'] : ucwords($gateway_key);
+          $form['submitted']['payment_information']['payment_fields'][$gateway['method']]['#description'] =
+            '<img src="' . $settings['payment_method']['settings']['standalone_image'] . '" alt="' . $option_text . '" title="' . $option_text . '">';
+        }
+      }
+    }
+    $form['#attached']['js'][] = drupal_get_path('module', 'fundraiser_commerce') . '/js/gateway-client-form.js';
+    $form['#attached']['js'][] = array('data' => array('fundraiser' => $button_info), 'type' => 'setting');
+  }
+}
+
+function fundraiser_commerce_gateway_image_validate($element, &$form_state, $form) {
+  if ($element['#title'] == 'Selected image URL'
+    && !empty($form_state['values']['parameter']['payment_method']['settings']['payment_method']['settings']['unselected_image'])
+    && empty($form_state['values']['parameter']['payment_method']['settings']['payment_method']['settings']['selected_image'])
+  ) {
+    form_error($element, t('Selected image field is required'));
+  }
+  if ($element['#title'] == 'Unselected image URL'
+    && !empty($form_state['values']['parameter']['payment_method']['settings']['payment_method']['settings']['selected_image'])
+    && empty($form_state['values']['parameter']['payment_method']['settings']['payment_method']['settings']['unselected_image'])
+  ) {
+    form_error($element, t('Unselected image field is required'));
+  }
+}
+
+/**
+ * Implements hook_fundraiser_update_billing_form_alter().
+ */
+function fundraiser_sustainers_fundraiser_update_billing_form_alter__fundraiser_commerce(&$form, &$form_state, $default_values) {
+  $form['#validate'][] = 'fundraiser_commerce_update_billing_form_validate';
+}
+
+/**
+ * Form validation handler for billing address update form.
+ */
+function fundraiser_commerce_update_billing_form_validate($form, &$form_state) {
+  // If it's a credit card, do some generic validation.
+  // This is because the gateway's validation doesn't happen during a
+  // billing update.
+  $credit_card_errors = array();
+  if ($submission_fields['payment_method'] == 'credit') {
+    // This returns an array.
+    $credit_card_errors = fundraiser_commerce_generic_credit_card_validate($submission_fields['payment_fields']);
+    if (count($credit_card_errors)) {
+      foreach ($credit_card_errors as $form_key => $message) {
+        form_set_error('payment_fields][credit][' . $form_key, $message);
+      }
+    }
+  }
+}

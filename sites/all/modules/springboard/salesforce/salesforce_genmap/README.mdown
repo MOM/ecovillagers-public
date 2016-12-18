@@ -1,0 +1,104 @@
+# Salesforce Generic Mapping
+
+Provides tools to make it easier for modules to create mapping interfaces and
+store the created maps for their custom data objects.
+
+In the future, the goal is to merge `salesforce_mapping` and `salesforce_genmap`
+into one module `salesforce_map` that would provide extentions for the `webform`
+and `entity` modules.
+
+
+## Configuration
+
+Config page: admin/config/salesforce/salesforce-generic
+
+@TODO: There appear to be no configuration options
+
+
+## How to map a custom data object
+
+There are hooks provided to allow for mapping of custom objects. The following hook
+must be implemented matching a map stored on the genmap table.
+
+hook_salesforce_genmap_map_fields(), returning a keyed array of values for the map.
+
+This hook is the one that does the heavy lifting the match values to fields in the
+Salesforce object. An object that never varies in it's mapping could implement this
+hook and be set, provided that a means of setting the map in the genmap table.
+
+In addition, to provide a default administrative interface, the following hooks may
+be implemented,
+
+salesforce_donation_salesforce_genmap_info(), providing a default tab for mapping.
+salesforce_donation_salesforce_genmap_map_field_info($node), returning a keyed array
+of fields, and the labels to go with them.
+
+This is an optional, though recommended, approach to handling administrative needs
+for a map. It is possible to provide a map with custom (or non-existent) administration.
+
+## Support to expand modules
+
+The `salesforce_genmap` module will allow you to expand an existing module for the
+purpose of adding mapping support into those modules.  For example, the
+`webform` module does not come with support for mapping its submissions so we
+have provided it through the extended modules system.  Using the same system,
+the `salesforce_mapping` module has been modified to streamline its interface
+for the `springboard` workflow.
+
+To expand a module, add an include file to the `includes/modules` directory that
+has the filename structure of `my_module.inc`.  For example, if the module you
+wished to expand was `views_bulk_operation` you would name the file
+`views_bulk_operation.inc`.  The include file will only be loaded if the
+original module is enabled.  The list of expanded modules is cached, so clear
+the cache if the include file is not loading properly.
+
+
+### Salesforce Mapping
+
+@TODO: Kathleen
+
+
+### Webform
+
+Webform mapping takes the standard recommended route as described under 'How to map a
+custom data object'. It implements hook_salesforce_genmap_map_fields(),
+salesforce_donation_salesforce_genmap_info(), and
+salesforce_donation_salesforce_genmap_map_field_info().
+
+## Patches
+
+These patches to the `salesforce` module are required in order for the
+`salesforce_mapping` extension of the `salesforce_genmap` module to work
+correctly.
+
+_All patches are automatically applied when a `springboard` instance is built
+using [Springboard Build](https://github.com/JacksonRiver/Springboard-Build)._
+
+**Fix issue where validation not failing when it should (node/1951700):**
+  * http://drupal.org/files/key_validation-1951700_0.patch
+
+
+**Fix ajax validation issue (node/1951722):**
+  * http://drupal.org/files/salesforce_mapping-01-extract_default_values-1951722_0.patch
+  * http://drupal.org/files/salesforce_mapping-02-extract_default_values-1951722.patch
+
+This is considered a critical issue because the issue prevented the ability to
+build tests on the form. The issue was caused by having each ajax request
+validate the entire form, which would cause simpletest to abort.
+
+
+**Salesforce Mapping form enhancements:**
+  * (node/1951728): http://drupal.org/files/salesforce-externalId_to_idLookup-1951728.patch
+  * (node/1951730): http://drupal.org/files/salesforce_mapping-flexible_table_alter.patch
+  * (node/1951734): http://drupal.org/files/salesforce_mapping-descriptive_select-1951734.patch
+
+These are not strictly considered bugs, however, 1951728 is considered required
+because the usage of `externalId` is too restrictive, and 1951730 allows an
+easier ability to modify the form through the use of hook_alters.
+
+
+**Add simpletests to Salesforce Mapping:**
+  * (node/1951744): http://drupal.org/files/salesforce_mapping-tests-1951744.patch
+
+This is considered critical in order to provide a streamlined development
+environment.

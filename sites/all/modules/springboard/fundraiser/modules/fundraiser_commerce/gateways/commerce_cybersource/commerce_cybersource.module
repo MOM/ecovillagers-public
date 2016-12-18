@@ -1,0 +1,1857 @@
+<?php
+
+/**
+ * @file
+ * Implements CyberSource payment services for use in Drupal Commerce.
+ */
+
+// CyberSource transaction mode definitions:
+define('CYBERSOURCE_TXN_MODE_PRODUCTION', 'production');
+define('CYBERSOURCE_TXN_MODE_TEST', 'test');
+
+
+/**
+ * Implements hook_menu().
+ */
+function commerce_cybersource_menu() {
+  $items = array();
+
+  // Add a menu item for capturing authorizations.
+  $items['admin/commerce/orders/%commerce_order/payment/%commerce_payment_transaction/cybersource-soap-capture'] = array(
+    'title' => 'Capture',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('commerce_cybersource_soap_capture_form', 3, 5),
+    'access callback' => 'commerce_cybersource_soap_capture_access',
+    'access arguments' => array(3, 5),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'context' => MENU_CONTEXT_INLINE,
+    'weight' => 2,
+    'file' => 'includes/commerce_cybersource.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Determines access to the prior authorization capture form for CyberSource
+ *   SOAP credit card transactions.
+ *
+ * @param $order
+ *   The order the transaction is on.
+ * @param $transaction
+ *   The payment transaction object to be captured.
+ *
+ * @return
+ *   TRUE or FALSE indicating capture access.
+ */
+function commerce_cybersource_soap_capture_access($order, $transaction) {
+  // Return FALSE if the transaction isn't for CyberSource SOAP or isn't
+  // awaiting capture.
+  if ($transaction->payment_method != 'cybersource_soap_cc' || strpos($transaction->remote_status, COMMERCE_CREDIT_AUTH_ONLY) !== 0) {
+    return FALSE;
+  }
+
+  // Allow access if the user can update payments on this transaction.
+  return commerce_payment_transaction_access('update', $transaction);
+}
+
+/**
+ * Implements hook_commerce_payment_method_info().
+ */
+function commerce_cybersource_commerce_payment_method_info() {
+  $payment_methods = array();
+
+  $payment_methods['cybersource_soap_cc'] = array(
+    'base' => 'commerce_cybersource_soap_cc',
+    'title' => t('CyberSource SOAP API - CC'),
+    'short_title' => t('CyberSource CC'),
+    'display_title' => t('Credit card'),
+    'description' => t('Integrates the CyberSource SOAP API Toolkit for card not present CC transactions.'),
+    'cardonfile' => array(//https://www.drupal.org/files/1740346-cardonfile.patch
+      'update callback' => 'commerce_cybersource_cardonfile_update',
+      'delete callback' => 'commerce_cybersource_cardonfile_delete',
+    ),
+  );
+
+  return $payment_methods;
+}
+
+/**
+ * Returns the default settings for the CyberSource SOAP CC payment method.
+ */
+function commerce_cybersource_soap_cc_default_settings() {
+  $cardonfile = module_exists('commerce_cardonfile');
+  return array(
+    'merchant_id' => '',
+    'transaction_key' => '',
+    'transaction_mode' => CYBERSOURCE_TXN_MODE_TEST,
+    'credit_card' => array(
+      'transaction_type' => COMMERCE_CREDIT_AUTH_CAPTURE,
+      'submit_itemized_order' => FALSE,
+      'cardonfile' => $cardonfile,
+      'card_types' => array(),
+    ),
+    'tax' => array(
+      'calculate_taxes' => FALSE,
+      'nexus' => '',
+      'nexus_states_only' => FALSE,
+      'cache_timeout' => '0',
+      'storage' => 'total',
+      'shipping_profile' => '',
+      'product_code_field' => '',
+      'default_product_code' => 'default',
+      'poo' => array(
+        'city' => '',
+        'state' => '',
+        'postal_code' => '',
+        'county' => '',
+        'country' => variable_get('site_default_country', ''),
+      ),
+      'poa' => array(
+        'city' => '',
+        'state' => '',
+        'postal_code' => '',
+        'county' => '',
+        'country' => variable_get('site_default_country', ''),
+      ),
+      'origin' => array(
+        'city' => '',
+        'state' => '',
+        'postal_code' => '',
+        'county' => '',
+        'country' => variable_get('site_default_country', ''),
+      ),
+      'seller_registration' => '',
+    ),
+    'log' => array('request' => '0', 'response' => '0'),
+  );
+}
+
+/**
+ * Payment method callback: settings form.
+ */
+function commerce_cybersource_soap_cc_settings_form($settings = NULL) {
+  module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+  $settings += commerce_cybersource_soap_cc_default_settings();
+
+  // Required to get a list of all countries.
+  require_once DRUPAL_ROOT . '/includes/locale.inc';
+
+  $form = array();
+
+  $form['merchant_id'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Merchant ID'),
+    '#description' => t('This is the merchant ID you use to login to the CyberSource business center.'),
+    '#default_value' => $settings['merchant_id'],
+    '#required' => TRUE,
+  );
+  $form['transaction_key'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Transaction Key'),
+    '#description' => t('Enter a key generated for the SOAP Toolkit API under Account Management > Transaction Security Keys in the business center.'),
+    '#default_value' => $settings['transaction_key'],
+    '#required' => TRUE,
+  );
+  $form['transaction_mode'] = array(
+    '#type' => 'radios',
+    '#title' => t('Transaction mode'),
+    '#description' => t('Adjust to live transactions when you are ready to start processing real payments.'),
+    '#options' => array(
+      CYBERSOURCE_TXN_MODE_PRODUCTION => t('Live transactions in the production environment'),
+      CYBERSOURCE_TXN_MODE_TEST => t('Test transactions in the test environment'),
+    ),
+    '#default_value' => $settings['transaction_mode'],
+  );
+  $form['log'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Log the following messages for debugging'),
+    '#options' => array(
+      'request' => t('API request messages'),
+      'response' => t('API response messages'),
+    ),
+    '#default_value' => $settings['log'],
+  );
+
+  if (module_exists('commerce_cardonfile')) {
+    $form['cardonfile'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Enable card on file to store credit card information.'),
+      '#default_value' => $settings['cardonfile'],
+    );
+  }
+
+  $form['credit_card'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Credit card service settings'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+  $form['credit_card']['transaction_type'] = array(
+    '#type' => 'radios',
+    '#title' => t('Default credit card transaction type'),
+    '#description' => t('The default will be used to process transactions during checkout.'),
+    '#options' => array(
+      COMMERCE_CREDIT_AUTH_CAPTURE => t('Authorization and capture'),
+      COMMERCE_CREDIT_AUTH_ONLY => t('Authorization only (requires manual or automated capture after checkout)'),
+    ),
+    '#default_value' => $settings['credit_card']['transaction_type'],
+  );
+  $form['credit_card']['submit_itemized_order'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Submit itemized orders to CyberSource instead of just sending the grand total to authorize / capture.'),
+    '#default_value' => $settings['credit_card']['submit_itemized_order'],
+  );
+
+  $form['credit_card']['card_types'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Limit accepted credit cards to the following types'),
+    '#description' => t('If none are checked, any credit card type will be accepted.'),
+    '#options' => commerce_payment_credit_card_types(),
+    '#default_value' => $settings['credit_card']['card_types'],
+  );
+
+
+  $form['credit_card']['avs_codes'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Reject transactions that return the following AVS codes. By default, only the AVS code N results in an AVS decline. If you check any values here, be sure to check "N" as well, if you want to continue using it.'),
+    '#description' => t('If none are checked, N will be the default'),
+    '#options' => commerce_cybersource_avs_options(),
+    '#default_value' => !empty($settings['credit_card']['avs_codes']) ? $settings['credit_card']['avs_codes'] : array(),
+  );
+
+  $form['tax'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Tax service settings'),
+    '#description' => t('CyberSource offers a tax calculation service through which they will calculate taxes for your orders for a fee per request. If you have enabled this with your account and are willing to pay to calculate taxes for each order, these settings will let you properly use their tax service.'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+  $form['tax']['calculate_taxes'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Enable tax calculation through CyberSource. This occurs during the checkout process when a customer advances to the Review page or when requested by an administrator on the back end.'),
+    '#default_value' => $settings['tax']['calculate_taxes'],
+  );
+  $form['tax']['nexus'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Nexus'),
+    '#description' => t('Enter two-letter abbreviations separated by spaces representing the states or provinces where your business has nexus. This is defined as a place where you have a business address, whether it is for administrative, warehousing, or delivery purposes. Sales taxes in the U.S. and Canada will only be applied when shipping to a customer who resides in a state or province where you have nexus. Leave blank to calculate all applicable taxes for a customer irregardless of where you have nexus.'),
+    '#default_value' => $settings['tax']['nexus'],
+  );
+
+  $form['tax']['nexus_states_only'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Only request taxes when the shipping address matches a state where your business has nexus.'),
+    '#default_value' => $settings['tax']['nexus_states_only'],
+  );
+
+  $form['tax']['cache_timeout'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Cache timeout'),
+    '#description' => t('Enter the number of seconds after which cached tax rates will no longer be considered valid.'),
+    '#default_value' => $settings['tax']['cache_timeout'],
+    '#field_suffix' => t('seconds'),
+    '#size' => 10,
+  );
+
+  $form['tax']['storage'] = array(
+    '#type' => 'select',
+    '#title' => t('Choose a method for storing returned taxes in line items.'),
+    '#default_value' => $settings['tax']['storage'],
+    '#options' => array(
+      'total' => t('Total only'),
+      'itemized' => t('Itemized'),
+    ),
+  );
+
+  // Generate an options list of customer profile reference fields attached to orders.
+  $options = array();
+
+  foreach (commerce_info_fields('commerce_customer_profile_reference', 'commerce_order') as $field_name => $field) {
+    $options[$field_name] = check_plain($field_name);
+  }
+
+  $form['tax']['shipping_profile'] = array(
+    '#type' => 'select',
+    '#title' => t('Shipping information reference field'),
+    '#description' => t("Select a customer profile reference field attached to your order that contains the customer's shipping address."),
+    '#options' => $options,
+    '#default_value' => $settings['tax']['shipping_profile'],
+    '#empty_value' => '',
+  );
+
+  // Generate an options list of text fields attached to products.
+  $options = array();
+
+  foreach (commerce_info_fields('text', 'commerce_product') as $field_name => $field) {
+    $options[$field_name] = check_plain($field_name);
+  }
+
+  $form['tax']['product_code_field'] = array(
+    '#type' => 'select',
+    '#title' => t('Product code field'),
+    '#description' => t('Select a product text field that contains the CyberSource product code when present on a product.'),
+    '#options' => $options,
+    '#default_value' => $settings['tax']['product_code_field'],
+    '#empty_value' => '',
+  );
+
+  $form['tax']['default_product_code'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Default product code'),
+    '#description' => t('Provide a default CyberSource product code to use when none is found on a product.'),
+    '#default_value' => $settings['tax']['default_product_code'],
+  );
+
+  $form['tax']['poo'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Point of order origin'),
+    '#description' => t("This is the place of business where you receive the customer's order."),
+  );
+  $form['tax']['poo']['city'] = array(
+    '#type' => 'textfield',
+    '#title' => t('City'),
+    '#default_value' => $settings['tax']['poo']['city'],
+    '#maxlength' => 50,
+  );
+  $form['tax']['poo']['state'] = array(
+    '#type' => 'textfield',
+    '#title' => t('State / Province'),
+    '#description' => t('Use the appropriate two-letter abbreviation.'),
+    '#default_value' => $settings['tax']['poo']['state'],
+    '#maxlength' => 2,
+  );
+  $form['tax']['poo']['postal_code'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Postal code'),
+    '#default_value' => $settings['tax']['poo']['postal_code'],
+    '#maxlength' => 10,
+  );
+  $form['tax']['poo']['county'] = array(
+    '#type' => 'textfield',
+    '#title' => t('County'),
+    '#default_value' => $settings['tax']['poo']['county'],
+    '#maxlength' => 50,
+  );
+  $form['tax']['poo']['country'] = array(
+    '#type' => 'select',
+    '#title' => t('Country'),
+    '#options' => country_get_list(),
+    '#default_value' => $settings['tax']['poo']['country'],
+  );
+
+  $form['tax']['poa'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Point of order acceptance'),
+    '#description' => t("This is the place of business where you accept and approve the customer’s order, thereby becoming contractually obligated to make the sale. This may be the same as your point of order origin."),
+  );
+  $form['tax']['poa']['city'] = array(
+    '#type' => 'textfield',
+    '#title' => t('City'),
+    '#default_value' => $settings['tax']['poa']['city'],
+    '#maxlength' => 50,
+  );
+  $form['tax']['poa']['state'] = array(
+    '#type' => 'textfield',
+    '#title' => t('State / Province'),
+    '#description' => t('Use the appropriate two-letter abbreviation.'),
+    '#default_value' => $settings['tax']['poa']['state'],
+    '#maxlength' => 2,
+  );
+  $form['tax']['poa']['postal_code'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Postal code'),
+    '#default_value' => $settings['tax']['poa']['postal_code'],
+    '#maxlength' => 10,
+  );
+  $form['tax']['poa']['county'] = array(
+    '#type' => 'textfield',
+    '#title' => t('County'),
+    '#default_value' => $settings['tax']['poa']['county'],
+    '#maxlength' => 50,
+  );
+  $form['tax']['poa']['country'] = array(
+    '#type' => 'select',
+    '#title' => t('Country'),
+    '#options' => country_get_list(),
+    '#default_value' => $settings['tax']['poa']['country'],
+  );
+
+  $form['tax']['origin'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Shipping origin address'),
+  );
+  $form['tax']['origin']['city'] = array(
+    '#type' => 'textfield',
+    '#title' => t('City'),
+    '#default_value' => $settings['tax']['origin']['city'],
+    '#maxlength' => 50,
+  );
+  $form['tax']['origin']['state'] = array(
+    '#type' => 'textfield',
+    '#title' => t('State / Province'),
+    '#description' => t('Use the appropriate two-letter abbreviation.'),
+    '#default_value' => $settings['tax']['origin']['state'],
+    '#maxlength' => 2,
+  );
+  $form['tax']['origin']['postal_code'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Postal code'),
+    '#default_value' => $settings['tax']['origin']['postal_code'],
+    '#maxlength' => 10,
+  );
+  $form['tax']['origin']['county'] = array(
+    '#type' => 'textfield',
+    '#title' => t('County'),
+    '#default_value' => $settings['tax']['origin']['county'],
+    '#maxlength' => 50,
+  );
+  $form['tax']['origin']['country'] = array(
+    '#type' => 'select',
+    '#title' => t('Country'),
+    '#options' => country_get_list(),
+    '#default_value' => $settings['tax']['origin']['country'],
+  );
+
+  $form['tax']['seller_registration'] = array(
+    '#type' => 'textarea',
+    '#title' => t('VAT seller registration number(s)'),
+    '#description' => t('Enter a comma-separated list of your VAT seller registration numbers.'),
+  );
+
+  return $form;
+}
+
+/**
+ * Payment method callback: checkout form.
+ */
+function commerce_cybersource_soap_cc_submit_form($payment_method, $pane_values, $checkout_pane, $order) {
+  module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+  $payment_method['settings'] += commerce_cybersource_soap_cc_default_settings();
+
+  // Prepare the fields to include on the credit card form.
+  $fields = array(
+    'code' => '',
+  );
+
+  // Add the credit card types array if necessary.
+  $card_types = array_diff(array_values($payment_method['settings']['credit_card']['card_types']), array(0));
+
+  if (!empty($card_types)) {
+    $fields['type'] = $card_types;
+  }
+
+  //https://www.drupal.org/files/1740346-cardonfile.patch
+  else {
+    module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+    $fields['type'] = array_keys(commerce_payment_credit_card_types());
+  }
+  return commerce_payment_credit_card_form($fields);
+}
+
+/**
+ * Payment method callback: checkout form validation.
+ */
+function commerce_cybersource_soap_cc_submit_form_validate($payment_method, $pane_form, $pane_values, $order, $form_parents = array()) {
+  module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+
+  // Validate the credit card fields.
+  $settings = array(
+    'form_parents' => array_merge($form_parents, array('credit_card')),
+  );
+
+  //https://www.drupal.org/files/1740346-cardonfile.patch
+  // If using cardonfile, skip the validation of credit card info as it doesn't exist.
+  if (module_exists('commerce_cardonfile') && $payment_method['settings']['cardonfile'] &&
+    !empty($pane_values['cardonfile']) && $pane_values['credit_card']['cardonfile_store'] !== TRUE) {
+    return TRUE;
+  }
+
+  if (!commerce_payment_credit_card_validate($pane_values['credit_card'], $settings)) {
+    return FALSE;
+  }
+}
+
+/**
+ * Payment method callback: checkout form submission.
+ */
+function commerce_cybersource_soap_cc_submit_form_submit($payment_method, $pane_form, $pane_values, $order, $charge) {
+  $payment_method['settings'] += commerce_cybersource_soap_cc_default_settings();
+  // Create and populate the request object.
+  $request = (object) array(
+    'merchantReferenceCode' => t('Order @number', array('@number' => $order->order_number)),
+  );
+
+  // Request an authorization that may also be captured this request. Whether
+  // the default transaction type is authorization only or authorization plus
+  // capture, the authorization must first happen in its own API request.
+  $request->ccAuthService = (object) array(
+    'run' => 'true',
+  );
+
+  //https://www.drupal.org/files/1740346-cardonfile.patch
+  // If the customer specified payment using a card on file, use the subscriptionID
+  // instead of credit card info.
+
+  // there's a hack in fundraiser_commerce which always sets $pane_values['cardonfile'] to "new"
+  // so we need to test whether it's a new card by some other means:
+  $store =  (isset($pane_values['credit_card']['cardonfile_store']) && $pane_values['credit_card']['cardonfile_store'] === TRUE) ? TRUE : FALSE;
+  $new = isset($pane_values['cardonfile']) && $pane_values['cardonfile'] =='new' ? TRUE : FALSE;
+
+  if (module_exists('commerce_cardonfile') && ($payment_method['settings']['cardonfile']
+    && !empty($pane_values['cardonfile'])) && (!$store && !$new)) {
+    // First attempt to load the card on file.
+    if(isset($pane_values['the_real_cardonfile_value'])) {
+      $card_data = commerce_cardonfile_load($pane_values['the_real_cardonfile_value']);
+    }
+    else {
+      $card_data = commerce_cardonfile_load($pane_values['cardonfile']);
+    }
+
+  //https://www.drupal.org/files/1740346-cardonfile.patch
+  // Fail now if it is no longer available or the card is inactive.
+    if (empty($card_data) || $card_data->status == 0) {
+      drupal_set_message(t('The requested card on file is no longer valid.'), 'error');
+      return FALSE;
+    }
+    $request->recurringSubscriptionInfo = (object) array('subscriptionID' => $card_data->remote_id);
+  }
+  else {
+    // Add the billing information.
+    $request->billTo = commerce_cybersource_address('billing', $order, 'commerce_customer_billing');
+    $billing_name = $request->billTo->firstName . ' ' . $request->billTo->lastName;
+    // Add the shipping address if it exists
+    $ship_to = commerce_cybersource_address('shipping', $order, 'commerce_customer_shipping');
+    if(!empty($ship_to->state)){
+      $request->shipTo = $ship_to;
+    }
+    else {
+      $request->shipTo = clone $request->billTo;
+    }
+    // Add the credit card details.
+    $request->card = (object) array(
+      'accountNumber' => $pane_values['credit_card']['number'],
+      'expirationMonth' => $pane_values['credit_card']['exp_month'],
+      'expirationYear' => $pane_values['credit_card']['exp_year'],
+    );
+    // Determine the credit card type if possible for use in later code.
+    if (!empty($pane_values['credit_card']['number']) && empty($pane_values['credit_card']['type'])) {
+      module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+      $card_type = commerce_payment_validate_credit_card_type($pane_values['credit_card']['number'], array_keys(commerce_payment_credit_card_types()));
+      $request->card->cardType = commerce_cybersource_cc_type_code($card_type);
+    }
+    else {
+      $card_type = $pane_values['credit_card']['type'];
+      $request->card->cardType = commerce_cybersource_cc_type_code($card_type);
+    }
+    // Add the CVV data if included.
+    if (isset($pane_values['credit_card']['code'])) {
+      $request->card->cvNumber = $pane_values['credit_card']['code'];
+    }
+  }
+
+  // Add purchase total information.
+  $request->purchaseTotals = (object) array(
+    'currency' => $charge['currency_code'],
+    'grandTotalAmount' => commerce_currency_amount_to_decimal($charge['amount'], $charge['currency_code']),
+  );
+
+  // Individually add each line item to the order if specified. In the event
+  // that the total value of all the line items and their taxes does not match
+  // the grandTotalAmount supplied above, the itemization will be ignored and
+  // CyberSource will process the transaction based solely on that amount.
+  if ($payment_method['settings']['credit_card']['submit_itemized_order']) {
+    $items = commerce_cybersource_itemize_order($order, $charge['currency_code'], $payment_method);
+
+    if (!empty($items)) {
+      $request->item = $items;
+    }
+  }
+
+  // Add the capture directive if specified in the payment method settings.
+  if ($payment_method['settings']['credit_card']['transaction_type'] == COMMERCE_CREDIT_AUTH_CAPTURE) {
+    $request->ccCaptureService = (object) array(
+      'run' => 'true',
+    );
+  }
+
+  $avs = array();
+  foreach ($payment_method['settings']['credit_card']['avs_codes'] as $key => $avs_code) {
+    if ($avs_code !== 0) {
+      $avs[] = $avs_code;
+    }
+  }
+  $declines = !empty($avs) ? implode(' ', $avs) : 'N';
+  //$request->businessRules_declineAVSFlags = $declines;
+  $request->businessRules = (object) array(
+    'decline_AVSFlags' => $declines,
+    );
+
+  if ($response = commerce_cybersource_soap_api_request($payment_method, $request)) {
+    // Prepare a transaction object to log the API response.
+    $transaction = commerce_payment_transaction_new('cybersource_soap_cc', $order->order_id);
+    $transaction->instance_id = $payment_method['instance_id'];
+    $transaction->remote_id = $response->requestID;
+    $transaction->amount = $charge['amount'];
+    $transaction->currency_code = $charge['currency_code'];
+    $transaction->payload[REQUEST_TIME] = $response;
+
+    // If we didn't get an approval response code...
+    if ($response->ccAuthReply->reasonCode != 100) {
+      // Create a failed transaction with the error message.
+      $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
+    }
+    else {
+      // Otherwise if we also captured successfully, mark this as a success.
+      if ($payment_method['settings']['credit_card']['transaction_type'] == COMMERCE_CREDIT_AUTH_CAPTURE &&
+        $response->ccCaptureReply->reasonCode == 100) {
+        $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+        $transaction->remote_status = COMMERCE_CREDIT_AUTH_CAPTURE;
+      }
+      else {
+        // Or leave it pending.
+        $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
+
+        // Store the transaction type with the timestamp so the request token can be
+        // reliably retrieved later for capturing.
+        $transaction->remote_status = COMMERCE_CREDIT_AUTH_ONLY . ':' . REQUEST_TIME;
+      }
+    }
+
+    // Build a meaningful response message.
+    $message = array(
+      '<b>' . ($payment_method['settings']['credit_card']['transaction_type'] == COMMERCE_CREDIT_AUTH_ONLY ? t('Credit Card Authorization') : t('Credit Card Authorization and Capture')) . '</b>',
+      '<b>' . t('@decision:', array('@decision' => $response->decision)) . '</b> ' . commerce_cybersource_reason_message($response->reasonCode),
+    );
+
+    // Add an AVS response if returned.
+    if (!empty($response->ccAuthReply->avsCode)) {
+      $message[] = '<b>' . t('AVS response:') . '</b> ' . commerce_cybersource_avs_response($response->ccAuthReply->avsCode);
+    }
+
+    // Add a CVV response if returned.
+    if (!empty($response->ccAuthReply->cvCode)) {
+      $message[] = '<b>' . t('CVN response:') . '</b> ' . commerce_cybersource_avs_response($response->ccAuthReply->cvCode);
+    }
+
+    $transaction->message = implode('<br />', $message);
+
+    // Save the transaction information.
+    commerce_payment_transaction_save($transaction);
+
+    // If the payment failed, display an error and rebuild the form.
+    if ($response->ccAuthReply->reasonCode != 100) {
+      drupal_set_message(t('We received the following error processing your card: @reason', array('@reason' => commerce_cybersource_reason_message($response->ccAuthReply->reasonCode))), 'error');
+      drupal_set_message('Please enter you information again or try a different card.', 'error');
+      return FALSE;
+    }
+
+    // don't create profiles from "add payment" transactions
+    $add_payment_form = (isset($pane_form['#id']) && $pane_form['#id'] == 'edit-payment-details') ? TRUE : FALSE;
+
+    // If Card on File storage is enabled and this appears to be a new card
+    if (empty($add_payment_form) && module_exists('commerce_cardonfile') && $payment_method['settings']['cardonfile']
+      && (empty($pane_values['cardonfile']) || !empty($pane_values['credit_card']['cardonfile_store']))) {
+      // Submit a request to create the Customer Profile.
+      if ($response = commerce_cybersource_create_customer_profile_request($request, $payment_method, $order)) {
+
+        // If the Customer Profile creation was a success, store the new card on
+        // file data locally.
+        if ($response->paySubscriptionCreateReply->reasonCode == 100) {
+          // Build a remote ID that includes the MerchantRefernceCode and ProfileSubscriptionID
+          $remote_id = $response->paySubscriptionCreateReply->subscriptionID;
+
+        // Store the token with cardonfile.
+          $card_data = commerce_cardonfile_new();
+          $card_data->uid = $order->uid;
+          $card_data->payment_method = $payment_method['method_id'];
+          $card_data->instance_id = $payment_method['instance_id'];
+          $card_data->remote_id = $remote_id;
+          $card_data->card_type = !empty($card_type) ? $card_type : 'card';
+          $card_data->card_name = $billing_name;
+          $card_data->card_number = substr($pane_values['credit_card']['number'], -4);
+          $card_data->card_exp_month = $pane_values['credit_card']['exp_month'];
+          $card_data->card_exp_year = $pane_values['credit_card']['exp_year'];
+          $card_data->status = 1;
+
+          // Save and log the creation of the new card on file.
+          commerce_cardonfile_save($card_data);
+
+          watchdog('commerce_cybersource', 'Customer Profile @profile_id created and saved to user @uid.', array('@profile_id' => (string) $response->paySubscriptionCreateReply->subscriptionID, '@uid' => $order->uid));
+        }
+        else {
+          watchdog('commerce_cybersource', 'Customer Profile response code was error @code', array('@code' => $response->paySubscriptionCreateReply->reasonCode));
+        }
+      }
+      else {
+        watchdog('commerce_cybersource', 'Error connecting to server or getting response for transaction @transaction_id', array('@transaction_id' => $transaction->instance_id));
+      }
+    }
+  }
+  else {
+    drupal_set_message(t('We encountered an error contacting our payment processor. Please try submitting your payment again.'), 'error');
+    return FALSE;
+  }
+}
+
+/**
+ * Returns an address object for use in a CyberSource API request.
+ *
+ * @param $type
+ *   The type of address object to return, either 'billing' or 'shipping'.
+ *   Billing addresses include an e-mail address and IP address in addition to
+ *   the actual billing address.
+ * @param $order
+ *   The order object containing the address information via a referenced
+ *   customer profile.
+ * @param $field_name
+ *   The name of the customer profile reference field that links the order to
+ *   the proper customer profile where the address data will be retrieved from.
+ *
+ * @return
+ *   An object representing the address of the requested type for use in a
+ *   CyberSource API request.
+ */
+function commerce_cybersource_address($type, $order, $field_name) {
+  // Return an empty address object if the specified profile field doesn't exist.
+  if (empty($order->{$field_name})) {
+    return new stdClass();
+  }
+
+  // Prepare the address data for use in the request address.
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $address_data = $order_wrapper->{$field_name}->commerce_customer_address->value();
+
+  if (empty($address_data['first_name'])) {
+    $name_parts = explode(' ', $address_data['name_line']);
+    $address_data['first_name'] = array_shift($name_parts);
+    $address_data['last_name'] = implode(' ', $name_parts);
+  }
+
+  // Add the basic address information to the return array.
+  $address = array(
+    'firstName' => $address_data['first_name'],
+    'lastName' => $address_data['last_name'],
+    'street1' => $address_data['thoroughfare'],
+    'street2' => $address_data['premise'],
+    'city' => $address_data['locality'],
+    'state' => $address_data['administrative_area'],
+    'postalCode' => $address_data['postal_code'],
+    'country' => $address_data['country'],
+  );
+
+  // Add the e-mail and IP address to the billing information.
+  if ($type == 'billing') {
+    $address += array(
+      'email' => empty($order->mail) ? 'null@cybersource.com' : $order->mail,
+      'ipAddress' => ip_address(),
+    );
+  }
+
+  return (object) $address;
+}
+
+/**
+ * Returns an array of items as expected by the CyberSource API representing the
+ * line items on the order.
+ *
+ * @param $order
+ *   The order to itemize.
+ * @param $currency_code
+ *   The currency code of the currency when calculating the unit price of all
+ *   the items and taxes derived from the order's line items.
+ * @param $payment_method
+ *   The payment method instance array containing the settings used for this
+ *   itemization.
+ * @param $include_tax
+ *   Boolean indicating whether or not to include tax amounts on items if available.
+ *
+ * @return
+ *   An array of items as expected by the CyberSource API.
+ */
+function commerce_cybersource_itemize_order($order, $currency_code, $payment_method, $include_tax = TRUE) {
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  $items = array();
+
+  // Extract the tax settings from the payment method instance.
+  $payment_method['settings'] += commerce_cybersource_soap_cc_default_settings();
+  $tax_settings = $payment_method['settings']['tax'];
+
+  // Loop over each line item on the order.
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    $item = new stdClass();
+    $item->id = $delta;
+
+    // Add product data if this is a product line item.
+    if (in_array($line_item_wrapper->type->value(), commerce_product_line_item_types())) {
+      $item->productName = $line_item_wrapper->commerce_product->title->value();
+      $item->productSKU = $line_item_wrapper->commerce_product->sku->value();
+
+      // Include a product code if the payment method's tax settings include a
+      // product code field. Otherwise use the default. See Appendix F in the
+      // Simple Order API documentation for a list of available product codes.
+      if (!empty($tax_settings['product_code_field']) &&
+        isset($line_item_wrapper->commerce_product->{$tax_settings['product_code_field']})) {
+        $item->productCode = $line_item_wrapper->commerce_product->{$tax_settings['product_code_field']}->value();
+      }
+      elseif (!empty($tax_settings['default_product_code'])) {
+        $item->productCode = $tax_settings['default_product_code'];
+      }
+    }
+    else {
+      $item->productName = $line_item_wrapper->line_item_label->value();
+      $item->productSKU = $line_item_wrapper->type->value();
+
+      if (!empty($tax_settings['default_product_code'])) {
+        $item->productCode = $tax_settings['default_product_code'];
+      }
+    }
+
+    // Use 'default' for the product code if it hasn't been set yet.
+    if (empty($item->productCode)) {
+      $item->productCode = 'default';
+    }
+
+    // The unit price is assumed to be in the currency used in the purchase
+    // total information above.
+    $item_amount = $line_item_wrapper->commerce_unit_price->amount->value();
+    $item_currency_code = $line_item_wrapper->commerce_unit_price->currency_code->value();
+
+    $item->unitPrice = commerce_currency_amount_to_decimal(commerce_currency_convert($item_amount, $item_currency_code, $currency_code), $currency_code);
+    $item->quantity = $line_item_wrapper->quantity->value();
+
+    // Conditionally add any non-inclusive tax included in the line item.
+    if ($include_tax && module_exists('commerce_tax')) {
+      $data = $line_item_wrapper->commerce_unit_price->data->value();
+      $amount = commerce_tax_total_amount($data['components'], FALSE, $currency_code) * $line_item_wrapper->quantity->value();
+
+      $item->taxAmount = commerce_currency_amount_to_decimal($amount, $currency_code);;
+    }
+
+    // Give other modules a chance to alter the item before adding it.
+    drupal_alter('commerce_cybersource_item', $item, $line_item_wrapper->value());
+
+    // Add the item to the return value.
+    $items[] = $item;
+  }
+
+  return $items;
+}
+
+/**
+ * Submits a prior authorization capture request.
+ *
+ * @param $order
+ *   The order object the payment is for.
+ * @param $transaction
+ *   The payment transaction representing the authorization the capture is for.
+ * @param $amount
+ *   An integer price amount.
+ *
+ * @return
+ *   The response from CyberSource or FALSE upon failure.
+ */
+function commerce_cybersource_soap_capture($order, $transaction, $amount) {
+
+  // Load the payment method instance used to create the authorization.
+  $payment_method = commerce_payment_method_instance_load($transaction->instance_id);
+
+  // Extract the timestamp used to retrieve the order request token from the
+  // remote status value.
+  if(strpos($transaction->remote_status, ':') !== FALSE ) {
+    list($status, $timestamp) = explode(':', $transaction->remote_status);
+  }
+  else {
+    $timestamp = $transaction->revision_timestamp;
+  }
+
+  // Fail now if now timestamp was not found or the payload is missing.
+  if (empty($timestamp) || empty($transaction->payload[$timestamp])) {
+    return FALSE;
+  }
+
+  // Create and populate the request object.
+  $request = (object) array(
+    'merchantReferenceCode' => t('Order @number', array('@number' => $order->order_number)),
+    'orderRequestToken' => $transaction->payload[$transaction->revision_timestamp]->requestToken,
+  );
+
+  // Add purchase total information.
+  $request->purchaseTotals = (object) array(
+    'currency' => $transaction->currency_code,
+    'grandTotalAmount' => commerce_currency_amount_to_decimal($amount, $transaction->currency_code),
+  );
+
+  // Add the capture service information.
+  $request->ccCaptureService = (object) array(
+    'run' => 'true',
+    'authRequestID' => $transaction->remote_id,
+  );
+
+  if ($response = commerce_cybersource_soap_api_request($payment_method, $request)) {
+    // Add the response to the payload.
+    $transaction->payload[REQUEST_TIME] = $response;
+
+    if ($response->ccCaptureReply->reasonCode == 100) {
+      // Update the amount in case it changed between authorization and capture.
+      $transaction->amount = commerce_currency_decimal_to_amount($response->ccCaptureReply->amount, $transaction->currency_code);
+
+      // Update the transaction status and remote status.
+      $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+      $transaction->remote_status = COMMERCE_CREDIT_PRIOR_AUTH_CAPTURE . ':' . REQUEST_TIME;
+    }
+
+    commerce_payment_transaction_save($transaction);
+
+    return $response;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Submits a prior authorization capture request.
+ *
+ * @param $order
+ *   The order object the payment is for.
+ * @param $transaction
+ *   The payment transaction representing the authorization the capture is for.
+ * @param $amount
+ *   An integer price amount.
+ *
+ * @return
+ *   The response from CyberSource or FALSE upon failure.
+ */
+function commerce_cybersource_soap_refund($order, $transaction, $amount) {
+
+  // Load the payment method instance used to create the authorization.
+  $payment_method = commerce_payment_method_instance_load($transaction->instance_id);
+
+  // Extract the timestamp used to retrieve the order request token from the
+  // remote status value.
+  if(strpos($transaction->remote_status, ':') !== FALSE ) {
+    list($status, $timestamp) = explode(':', $transaction->remote_status);
+  }
+  else {
+    $timestamp = $transaction->revision_timestamp;
+  }
+
+  // Fail now if now timestamp was not found or the payload is missing.
+  if (empty($timestamp) || empty($transaction->payload[$timestamp])) {
+    return FALSE;
+  }
+
+  // Create and populate the request object.
+  $request = (object) array(
+    'merchantReferenceCode' => t('Order @number', array('@number' => $order->order_number)),
+    'orderRequestToken' => $transaction->payload[$transaction->revision_timestamp]->requestToken,
+  );
+
+  // Add purchase total information.
+  $request->purchaseTotals = (object) array(
+    'currency' => $transaction->currency_code,
+    'grandTotalAmount' => commerce_currency_amount_to_decimal($amount, $transaction->currency_code),
+  );
+
+  // Add the capture service information.
+  $request->ccCreditService = (object) array(
+    'run' => 'true',
+    'captureRequestID' => $transaction->remote_id,
+  );
+
+  if ($response = commerce_cybersource_soap_api_request($payment_method, $request)) {
+    // Add the response to the payload.
+    $transaction->payload[REQUEST_TIME] = $response;
+
+    if ($response->ccCreditReply->reasonCode == 100) {
+      // Update the amount in case it changed between authorization and capture.
+      $transaction->amount = commerce_currency_decimal_to_amount($response->ccCreditReply->amount, $transaction->currency_code);
+
+      // Update the transaction status and remote status.
+      $transaction->status = COMMERCE_PAYMENT_STATUS_SUCCESS;
+      $transaction->remote_status = COMMERCE_CREDIT_CREDIT . ':' . REQUEST_TIME;
+    }
+
+    commerce_payment_transaction_save($transaction);
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Submits a tax calculation request.
+ *
+ * @param $payment_method
+ *   The payment method instance array associated with this API request.
+ * @param $order
+ *   The order object whose taxes should be calculated.
+ *
+ * @return
+ *   The tax response from CyberSource or FALSE upon failure.
+ */
+function commerce_cybersource_soap_calculate_taxes($payment_method, $order) {
+  $payment_method['settings'] += commerce_cybersource_soap_cc_default_settings();
+  $tax_settings = $payment_method['settings']['tax'];
+
+  // If tax calculation isn't enabled, return FALSE.
+  if (!$tax_settings['calculate_taxes']) {
+    return FALSE;
+  }
+
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+  // Create and populate the request object.
+  $request = (object) array(
+    'merchantReferenceCode' => t('Order @number', array('@number' => $order->order_number)),
+  );
+
+  // Request tax calculation.
+  $request->taxService = (object) array(
+    'run' => 'true',
+
+    'orderOriginCity' => $tax_settings['poo']['city'],
+    'orderOriginState' => $tax_settings['poo']['state'],
+    'orderOriginPostalCode' => $tax_settings['poo']['postal_code'],
+    'orderOriginCounty' => $tax_settings['poo']['county'],
+    'orderOriginCountry' => $tax_settings['poo']['country'],
+
+    'orderAcceptanceCity' => $tax_settings['poa']['city'],
+    'orderAcceptanceState' => $tax_settings['poa']['state'],
+    'orderAcceptancePostalCode' => $tax_settings['poa']['postal_code'],
+    'orderAcceptanceCounty' => $tax_settings['poa']['county'],
+    'orderAcceptanceCountry' => $tax_settings['poa']['country'],
+  );
+
+  // Only add the nexus property if it has been entered.
+  if (!empty($tax_settings['nexus'])) {
+    $request->taxService->nexus = $tax_settings['nexus'];
+  }
+
+  // Only add VAT seller registration numbers if they have been specified.
+  if (!empty($tax_settings['seller_registration'])) {
+    $vat_numbers = explode(',', $tax_settings['seller_registration']);
+
+    // If there is only one VAT number entered...
+    if (count($vat_numbers) == 1) {
+      // Add it as the sole VAT seller registration number.
+      $request->taxService->sellerRegistration = trim($vat_numbers[0]);
+    }
+    else {
+      // Otherwise loop over all entered numbers and add them.
+      foreach ($vat_numbers as $delta => $vat_number) {
+        $request->taxService->{'sellerRegistration' . $delta} = trim($vat_number);
+      }
+    }
+  }
+
+  // TODO: Add support for the customer's VAT registration number.
+
+  // Add an origin address for shipped items.
+  $request->shipFrom = (object) array(
+    'city' => $tax_settings['origin']['city'],
+    'state' => $tax_settings['origin']['state'],
+    'postalCode' => $tax_settings['origin']['postal_code'],
+    'county' => $tax_settings['origin']['county'],
+    'country' => $tax_settings['origin']['country'],
+  );
+
+  // Add the customer's billing information.
+  $request->billTo = commerce_cybersource_address('billing', $order, 'commerce_customer_billing');
+
+  // Add the customer's shipping information.
+  if (!empty($tax_settings['shipping_profile'])) {
+    $request->shipTo = commerce_cybersource_address('shipping', $order, $tax_settings['shipping_profile']);
+  }
+
+  // Add purchase total information.
+  $currency_code = $order_wrapper->commerce_order_total->currency_code->value();
+
+  $request->purchaseTotals = (object) array(
+    'currency' => $currency_code,
+  );
+
+  // Itemize the line items on the order.
+  $items = commerce_cybersource_itemize_order($order, $currency_code, $payment_method, FALSE);
+
+  if (!empty($items)) {
+    $request->item = $items;
+  }
+
+  if ($response = commerce_cybersource_soap_api_request($payment_method, $request)) {
+    return $response;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Submits an API request through the CyberSource SOAP API Toolkit.
+ *
+ * @param $payment_method
+ *   The payment method instance array associated with this API request.
+ * @param $request
+ *   The request object containing the parameters of the requested services.
+ *
+ * @return
+ *   The response object from the API with properties pertinent to the requested
+ *     services.
+ */
+function commerce_cybersource_soap_api_request($payment_method, $request) {
+  // Get the API endpoint URL for the method's transaction mode.
+  $url = commerce_cybersource_soap_wsdl_url($payment_method['settings']['transaction_mode']);
+
+  // Add the merchant ID to the request object.
+	$request->merchantID = $payment_method['settings']['merchant_id'];
+
+  // Add information on PHP for troubleshooting purposes.
+	$request->clientLibrary = 'PHP';
+  $request->clientLibraryVersion = phpversion();
+  $request->clientEnvironment = php_uname();
+
+  // Log the request if specified.
+  if ($payment_method['settings']['log']['request'] == 'request') {
+    // Get our clone on to avoid messing up the legit data.
+    $log_request = clone($request);
+
+    // Mask the credit card number and CVV.
+    if (!empty($log_request->card)) {
+      $log_request->card = clone($log_request->card);
+
+      $log_request->card->accountNumber = str_repeat('X', strlen($log_request->card->accountNumber) - 4) . substr($log_request->card->accountNumber, -4);
+
+      if (!empty($log_request->card->cavv)) {
+        $log_request->card->cavv = str_repeat('X', strlen($log_request->card->cavv));
+      }
+    }
+
+    watchdog('commerce_cybersource', 'CyberSource SOAP request to @url: !request', array('@url' => $url, '!request' => '<pre>' . check_plain(print_r($log_request, TRUE)) . '</pre>'), WATCHDOG_DEBUG);
+  }
+
+  // Allow other modules to modify the request before it is sent (in case there is additional logic they want to add)
+  drupal_alter('commerce_cybersource_request', $payment_method, $request);
+
+  // Attempt the SOAP request and log the exception on failure.
+  try {
+    $soapClient = new CommerceCyberSourceSoapClient($url, array(), $request->merchantID, $payment_method['settings']['transaction_key']);
+    $response = $soapClient->runTransaction($request);
+  }
+  catch (SoapFault $exception) {
+    watchdog('commerce_cybersource', 'CyberSource SOAP error: @exception', array('@exception' => $exception->getMessage()), WATCHDOG_ERROR);
+    return FALSE;
+  }
+
+  // Log the response if specified.
+  if ($payment_method['settings']['log']['response'] == 'response') {
+    watchdog('commerce_cybersource', 'CyberSource SOAP response: !request', array('!request' => '<pre>' . check_plain(print_r($response, TRUE)) . '</pre>', WATCHDOG_DEBUG));
+  }
+
+  return $response;
+}
+
+/**
+ * Returns the URL to the CyberSource WSDL determined by transaction mode.
+ *
+ * @param $transaction_mode
+ *   The transaction mode that relates to the production or test server.
+ *
+ * @return
+ *   The URL to use to submit requests to the CyberSource SOAP server.
+ */
+function commerce_cybersource_soap_wsdl_url($transaction_mode) {
+  switch ($transaction_mode) {
+    case CYBERSOURCE_TXN_MODE_PRODUCTION:
+      return 'https://ics2ws.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.107.wsdl';
+    case CYBERSOURCE_TXN_MODE_TEST:
+      return 'https://ics2wstest.ic3.com/commerce/1.x/transactionProcessor/CyberSourceTransaction_1.107.wsdl';
+  }
+}
+
+/**
+ * Returns the message text for a credit card service reason code.
+ */
+function commerce_cybersource_reason_message($code) {
+  switch ($code) {
+    case 100:
+      return t('Successful transaction.');
+    case 101:
+      return t('The request is missing one or more required fields.');
+    case 102:
+      return t('One or more fields in the request contains invalid data.');
+    case 110:
+      return t('Only a partial amount was approved.');
+    case 150:
+      return t('Error: General system failure.');
+    case 151:
+      return t('Error: The request was received but there was a server timeout. This error does not include timeouts between the client and the server.');
+    case 152:
+      return t('Error: The request was received, but a service did not finish running in time.');
+    case 200:
+      return t('The authorization request was approved by the issuing bank but declined by CyberSource because it did not pass the Address Verification Service (AVS) check.');
+    case 201:
+      return t('The issuing bank has questions about the request. You do not receive an authorization code programmatically, but you might receive one verbally by calling the processor.');
+    case 202:
+      return t('Expired card.');
+    case 203:
+      return t('General decline of the card. No other information provided by the issuing bank.');
+    case 204:
+      return t('Insufficient funds in the account.');
+    case 205:
+      return t('Stolen or lost card.');
+    case 207:
+      return t('Issuing bank unavailable.');
+    case 208:
+      return t('Inactive card or card not authorized for card-not-present transactions.');
+    case 209:
+      return t('American Express Card Identification Digits (CID) did not match.');
+    case 210:
+      return t('The card has reached the credit limit.');
+    case 211:
+      return t('Invalid CVN.');
+    case 221:
+      return t('The customer matched an entry on the processor’s negative file.');
+    case 230:
+      return t('The authorization request was approved by the issuing bank but declined by CyberSource because it did not pass the CVN check.');
+    case 231:
+      return t('Invalid account number.');
+    case 232:
+      return t('The card type is not accepted by the payment processor.');
+    case 233:
+      return t('General decline by the processor.');
+    case 234:
+      return t('There is a problem with your CyberSource merchant configuration.');
+    case 235:
+      return t('The requested amount exceeds the originally authorized amount.');
+    case 236:
+      return t('Processor failure.');
+    case 237:
+      return t('The authorization has already been reversed.');
+    case 238:
+      return t('The authorization has already been captured.');
+    case 239:
+      return t('The requested transaction amount must match the previous transaction amount.');
+    case 240:
+      return t('The card type sent is invalid or does not correlate with the credit card number.');
+    case 241:
+      return t('The request ID is invalid.');
+    case 242:
+      return t('You requested a capture, but there is no corresponding, unused authorization record.');
+    case 243:
+      return t('The transaction has already been settled or reversed.');
+    case 246:
+      return t('The capture or credit is not voidable because the capture or credit information has already been submitted to your processor or you requested a void for a type of transaction that cannot be voided.');
+    case 247:
+      return t('You requested a credit for a capture that was previously voided.');
+    case 250:
+      return t('Error: The request was received, but there was a timeout at the payment processor.');
+  }
+
+  return '-';
+}
+
+/**
+ * Returns the message text for an AVS response code.
+ */
+function commerce_cybersource_avs_response($code) {
+  switch ($code) {
+    case'A':
+      return t('Partial match: Street address matches, but 5-digit and 9-digit postal codes do not match.');
+    case 'B':
+      return t('Partial match: Street address matches, but postal code is not verified.');
+    case 'C':
+      return t('No match: Street address and postal code do not match.');
+    case 'D':
+    case 'M':
+      return t('Match: Street address and postal code match.');
+    case 'E':
+      return t('Invalid: AVS data is invalid or AVS is not allowed for this card type.');
+    case 'F':
+      return t("Partial match: Card member's name does not match, but billing postal code matches.");
+    case 'G':
+      return t('Not supported: Non-U.S. issuing bank does not support AVS.');
+    case 'H':
+      return t('Partial match: Card member’s name does not match, but street address and postal code match.');
+    case 'I':
+      return t('No match: Address not verified.');
+    case 'K':
+      return t("Partial match: Card member's name matches, but billing address and billing postal code do not match.");
+    case 'L':
+      return t("Partial match: Card member's name and billing postal code match, but billing address does not match.");
+    case 'N':
+      return t("No match: Street address and postal code do not match or card member's name, street address and postal code do not match.");
+    case 'O':
+      return t("Partial match: Card member's name and billing address match, but billing postal code does not match.");
+    case 'P':
+      return t('Partial match: Postal code matches, but street address not verified.');
+    case 'R':
+      return t('System unavailable.');
+    case 'S':
+      return t('Not supported: U.S.-issuing bank does not support AVS.');
+    case 'T':
+      return t("Partial match: Card member's name does not match, but street address matches.");
+    case 'U':
+      return t('System unavailable: Address information unavailable from the bank.');
+    case 'V':
+      return t("Match: Card member's name, billing address, and billing postal code match.");
+    case 'W':
+      return t('Partial match: Street address does not match, but 9-digit postal code matches.');
+    case 'X':
+      return t('Match: Street address and 9-digit postal code match.');
+    case 'Y':
+      return t('Match: Street address and 5-digit postal code match.');
+    case 'Z':
+      return t('Partial match: Street address does not match, but 5-digit postal code matches.');
+    case '1':
+      return t('Not supported: AVS is not supported for this processor or card type.');
+    case '2':
+      return t('Invalid: The processor returned an unrecognized value for the AVS response.');
+  }
+
+  return '-';
+}
+
+/**
+ * Returns the message text for a CVV match.
+ */
+function commerce_cybersource_cvn_response($code) {
+  switch ($code) {
+    case 'D':
+      return t('The transaction was determined to be suspicious by the issuing bank.');
+    case 'I':
+      return t("The CVN failed the processor's data validation check.");
+    case 'M':
+      return t('The CVN matched.');
+    case 'N':
+      return t('The CVN did not match.');
+    case 'P':
+      return t('The CVN was not processed by the processor for an unspecified reason.');
+    case 'S':
+      return t('The CVN is on the card but was not included in the request.');
+    case 'U':
+      return t('Card verification is not supported by the issuing bank.');
+    case 'X':
+      return t('Card verification is not supported by the card association.');
+    case '1':
+      return t('Card verification is not supported for this processor or card type.');
+    case '2':
+      return t('An unrecognized result code was returned by the processor for the card verification response.');
+    case '3':
+      return t('No result code was returned by the processor.');
+  }
+
+  return '-';
+}
+
+ /**
+ * Returns three digit code for a credit card type per cybersource documentation:
+ * http://apps.cybersource.com/library/documentation/dev_guides/Decision_Ma...
+ */
+function commerce_cybersource_cc_type_code($text) {
+  $text = strtolower($text);
+  switch ($text) {
+    case 'visa':
+      return '001';
+     case 'mastercard':
+     case 'eurocard':
+      return '002';
+    case 'amex':
+      return '003';
+    case 'discover':
+      return '004';
+    case 'dc':
+      return '005';
+    case 'cb':
+      return '006';
+    case 'jcb':
+      return '007';
+    case 'enroute':
+      return '014';
+    case 'jal':
+      return '021';
+    case 'maestro (uk domestic)':
+      return '024';
+    case 'delta':
+      return '031';
+    case 'visaelectron':
+      return '033';
+    case 'dankfort':
+      return '034';
+    case 'laser':
+      return '035';
+    case 'carte bleue':
+      return '036';
+    case 'carta si':
+      return '037';
+    case 'encoded account number':
+      return '039';
+    case 'uatp':
+      return '040';
+    case 'maestro':
+      return '042';
+    case 'ge money uk card':
+      return '043';
+    case 'style':
+      return '045';
+    default:
+      return false;
+  }
+}
+
+function commerce_cybersource_avs_options() {
+  $options = array(
+   "A" =>"'A': Partial match: street address matches, but 5-digit and 9-digit postal codes do not match.",
+   "B" =>"'B': Partial match: street address matches, but postal code is not verified. Returned only for non U.S.-issued Visa cards.",
+   "C" =>"'C': No match: street address and postal code do not match. Returned only for non U.S.-issued Visa cards.",
+   "E" =>"'E': Invalid: AVS data is invalid or AVS is not allowed for this card type.",
+   "F" =>"'F': Partial match: card member’s name does not match, but billing postal code matches. Returned only for the American Express card type.",
+   "G" =>"'G': Not supported: non-U.S. issuing bank does not support AVS.",
+   "H" =>"'H': Partial match: card member’s name does not match, but street address and postal code match. Returned only for the American Express card type.",
+   "I" =>"'I': No match: address not verified. Returned only for non U.S.-issued cards.",
+   "K" =>"'K': Partial match: card member’s name matches, but billing address and billing postal code do not match. Returned only for the American Express card type.",
+   "L" =>"'L': Partial match: card member’s name and billing postal code match, but billing address does not match. Returned only for the American Express card type.",
+   "N" =>"'N': No match: one of the following: 1. Street address and postal code do not match. 2. For Amex only, card member’s name, street address, and postal code do not match.",
+   "O" =>"'O': Partial match: card member’s name and billing address match, but billing postal code does not match. Returned only for the American Express card type.",
+   "P" =>"'P': Partial match: postal code matches, but street address not verified. Returned only for non U.S.-issued Visa cards.",
+   "R" =>"'R': System unavailable.",
+   "S" =>"'S': Not supported: U.S.-issuing bank does not support AVS.",
+   "T" =>"'T': Partial match: card member’s name does not match, but street address matches. Returned only for the American Express card type.",
+   "U" =>"'U': System unavailable: address information unavailable for one of these reasons: The U.S. bank does not support non-U.S. AVS. The AVS in a U.S. bank is not functioning properly.",
+   "W" =>"'W': Partial match: street address does not match, but 9-digit postal code matches.",
+   "Z" =>"'Z': Partial match: street address does not match, but 5-digit postal code matches.",
+   "1" =>"'1': Not supported: AVS is not supported for this processor or card type.",
+   "2" =>"'2': Unrecognized: the processor returned an unrecognized value for the AVS response.",
+   "4" =>"'4': No match: address is not confirmed. Returned only for PayPal Express Checkout."
+  );
+  return $options;
+}
+
+
+/**
+ * Caches calculated tax data for an order.
+ *
+ * @param $order
+ *   The order the taxes were calculated for.
+ * @param $tax_data
+ *   An array of tax data as specified by the tax fetch function.
+ *
+ * @see commerce_cybersource_fetch_calculated_taxes()
+ */
+function commerce_cybersource_taxes_cache_set($order, $tax_data) {
+  cache_set($order->order_id, $tax_data, 'cache_commerce_cybersource_taxes', CACHE_TEMPORARY);
+}
+
+/**
+ * Retrieves cached tax data for an order.
+ *
+ * @param $order
+ *   The order the rates were calculated for.
+ * @param $timeout
+ *   Number of seconds after which cached tax data should be considered invalid.
+ *   Defaults to 0, meaning cached tax data is only good for the current page
+ *   request.
+ *
+ * @return
+ *   A cached array of tax data or FALSE if no cache existed or the cache is
+ *   invalid based on the timeout parameter if specified.
+ */
+function commerce_cybersource_taxes_cache_get($order, $timeout = 0) {
+  $cache = cache_get($order->order_id, 'cache_commerce_cybersource_taxes');
+
+  // If no data was retrieved, return FALSE.
+  if (empty($cache)) {
+    return FALSE;
+  }
+
+  // If a timeout value was specified...
+  if ($cache->created < REQUEST_TIME - $timeout) {
+    return FALSE;
+  }
+
+  return $cache->data;
+}
+
+/**
+ * Clears the CyberSource taxes cache for the specified order.
+ */
+function commerce_cybersource_taxes_cache_clear($order) {
+  cache_clear_all($order->order_id, 'cache_commerce_cybersource_taxes');
+}
+
+/**
+ * Implements hook_flush_caches().
+ */
+function commerce_cybersource_flush_caches() {
+  return array('cache_commerce_cybersource_taxes');
+}
+
+/**
+ * Calculates taxes for the given line item using CyberSource's tax service.
+ *
+ * @param $line_item
+ *   The line item object whose taxes should be calculated.
+ * @param $instance_id
+ *   A CyberSource payment method instance ID containing tax settings for use in
+ *   calculating taxes.
+ */
+function commerce_cybersource_calculate_line_item_taxes($line_item, $instance_id) {
+  // We presently don't support calculating taxes for line items on their own or
+  // for line items that haven't been saved yet.
+  if (empty($line_item->order_id) || empty($line_item->line_item_id)) {
+    return;
+  }
+
+  // Load the line item's order.
+  $order = commerce_order_load($line_item->order_id);
+
+  // Load the CyberSource payment method instance.
+  $payment_method = commerce_payment_method_instance_load($instance_id);
+  $tax_settings = $payment_method['settings']['tax'];
+
+  // If we're only supposed to calculate taxes for states where we have nexus
+  // and we know what shipping profile to use...
+  if ($tax_settings['nexus_states_only'] && !empty($tax_settings['shipping_profile'])) {
+    // Extract the shipping address from the order.
+    $shipping_address = commerce_cybersource_address('shipping', $order, $tax_settings['shipping_profile']);
+
+    // If the shipping state is not one where the business has nexus, exit now.
+    if (!in_array($shipping_address->state, explode(' ', $tax_settings['nexus']))) {
+      return;
+    }
+  }
+
+  // Calculate taxes for the line item now.
+  _commerce_cybersource_calculate_line_item_taxes($line_item, $order, $payment_method);
+}
+
+/**
+ * Calculates taxes via a CyberSource API request and stores the results in the
+ * line item.
+ *
+ * @param $line_item
+ *   The line item object whose taxes are being calculated.
+ * @param $order
+ *   The full order object that the line item is attached to.
+ * @payment_method
+ *   The CyberSource payment method instance containing the tax settings to use
+ *   for the API request and response parsing.
+ */
+function _commerce_cybersource_calculate_line_item_taxes($line_item, $order, $payment_method) {
+  // If CyberSource returns taxes for the whole order...
+  if ($order_taxes = commerce_cybersource_fetch_calculated_taxes($payment_method, $order)) {
+    $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+
+    // Load the CyberSource tax price components and extract the tax storage.
+    $cybersource_price_components = commerce_cybersource_commerce_price_component_type_info();
+    $tax_storage = $payment_method['settings']['tax']['storage'];
+
+    // Extract the tax data and currency code from the API response.
+    $line_item_taxes = $order_taxes['line_item_taxes'][$line_item->line_item_id];
+    $currency_code = $order_taxes['response']->purchaseTotals->currency;
+
+    // Loop over all of the calculated tax values returned for this line item.
+    foreach ($line_item_taxes as $key => $decimal) {
+      // Load the price component type we would use to store this tax in the
+      // line item's unit price.
+      $component_type = commerce_price_component_type_load('commerce_cybersource|' . $key);
+
+      // Convert the decimal tax value to an integer amount.
+      $amount = commerce_currency_decimal_to_amount($decimal, $currency_code);
+
+      // If we actually need to collect and store this particular tax amount...
+      if ($amount > 0 && $component_type['storage'] == $tax_storage) {
+        // Build the price component array.
+        $price_component = array(
+          'amount' => $amount,
+          'currency_code' => $currency_code,
+          'data' => array(),
+        );
+
+        // Add it to the line item's unit price.
+        $line_item_wrapper->commerce_unit_price->data = commerce_price_component_add(
+          $line_item_wrapper->commerce_unit_price->value(),
+          $component_type['name'],
+          $price_component,
+          $component_type['included']
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Cache the response from an API request and return the tax rates for an order.
+ *
+ * @param $payment_method
+ *   The payment method instance containing the CyberSource tax settings.
+ * @param $order
+ *   The fully loaded order object whose taxes should be calculated.
+ *
+ * @return
+ *   An array containing tax data for the current order including:
+ *   - items: an array of tax values calculated for each line item keyed by line
+ *     item ID
+ *   - taxReply: the meta data included in the API response from CyberSource
+ *     besides the line item tax calculations
+ */
+function commerce_cybersource_fetch_calculated_taxes($payment_method, $order) {
+  $timeout = empty($payment_method['settings']['tax']['cache_timeout']) ? 0 : $payment_method['settings']['tax']['cache_timeout'];
+  $order_tax_data = commerce_cybersource_taxes_cache_get($order, $timeout);
+
+  // If we don't already have cached taxes for the order...
+  if (!$order_tax_data) {
+    // Request applicable taxes from CyberSource now.
+    if ($response = commerce_cybersource_soap_calculate_taxes($payment_method, $order)) {
+      // If CyberSource returned a valid response for the order...
+      if ($response->decision == 'ACCEPT') {
+        $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+        $line_item_taxes = array();
+
+        // Ensure we have an array of tax reply items to work with.
+        if (!is_array($response->taxReply->item)) {
+          $tax_reply_items = array($response->taxReply->item);
+        }
+        else {
+          $tax_reply_items = $response->taxReply->item;
+        }
+
+        // Loop over each tax reply item.
+        foreach ($tax_reply_items as $tax_reply_item) {
+          // Extract the delta value from the item using its id property.
+          $delta = $tax_reply_item->id;
+          unset($tax_reply_item->id);
+
+          // If that delta is still applicable to this order...
+          if (isset($order_wrapper->commerce_line_items[$delta])) {
+            // Get the line item ID from the line item wrapper.
+            $line_item_id = $order_wrapper->commerce_line_items[$delta]->line_item_id->value();
+
+            // Assign the tax reply item to the line item taxes array.
+            $line_item_taxes[$line_item_id] = $tax_reply_item;
+          }
+        }
+
+        // Remove the item data from the tax reply.
+        unset($response->taxReply->item);
+
+        // Save the tax data for the order to the cache array.
+        $order_tax_data = array(
+          'response' => $response,
+          'line_item_taxes' => $line_item_taxes,
+        );
+
+        // Cache the calculated taxes for subsequent requests.
+        commerce_cybersource_taxes_cache_set($order, $order_tax_data);
+      }
+    }
+  }
+
+  return $order_tax_data;
+}
+
+/**
+ * Implements hook_commerce_price_component_type_info().
+ */
+function commerce_cybersource_commerce_price_component_type_info() {
+  $components = array();
+
+  $components['commerce_cybersource|cityTaxAmount'] = array(
+    'title' => 'cityTaxAmount',
+    'display_title' => t('City tax'),
+    'included' => FALSE,
+    'storage' => 'itemized',
+  );
+  $components['commerce_cybersource|countyTaxAmount'] = array(
+    'title' => 'countyTaxAmount',
+    'display_title' => t('County tax'),
+    'included' => FALSE,
+    'storage' => 'itemized',
+  );
+  $components['commerce_cybersource|districtTaxAmount'] = array(
+    'title' => 'districtTaxAmount',
+    'display_title' => t('District tax'),
+    'included' => FALSE,
+    'storage' => 'itemized',
+  );
+  $components['commerce_cybersource|stateTaxAmount'] = array(
+    'title' => 'stateTaxAmount',
+    'display_title' => t('State tax'),
+    'included' => FALSE,
+    'storage' => 'itemized',
+  );
+  $components['commerce_cybersource|totalTaxAmount'] = array(
+    'title' => 'totalTaxAmount',
+    'display_title' => t('Sales tax'),
+    'included' => FALSE,
+    'storage' => 'total',
+  );
+
+  return $components;
+}
+
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function commerce_cybersource_form_commerce_cardonfile_update_form_alter(&$form, &$form_state) {
+  // Extract the card data from the form and load the payment method instance.
+  $card_data = $form['card_data']['#value'];
+  $payment_method = commerce_payment_method_instance_load($card_data->instance_id);
+  // Load the full payment profile from cybersource.
+  $response = commerce_cybersource_retrieve_customer_profile_request($payment_method, $card_data->remote_id);
+  if ($response->reasonCode == 100) {
+    $billto = $response->paySubscriptionRetrieveReply;
+
+    $address = array(
+      '<strong>' . t('Billing address:') . '</strong>',
+      (string) isset($billto->company) ? $billto->company : '' ,
+      (string) $billto->street1,
+      (string) $billto->city . ', ' . (string) $billto->state . ' ' . (string) $billto->postalCode,
+      (string) $billto->country,
+    );
+
+    // Add the address info to the form.
+    $form['billto'] = array(
+      '#type' => 'markup',
+      '#markup' => '<div class="commerce-authnet-cim-billto">' . implode('<br />', array_diff($address, array(''))) . '</div>',
+      '#weight' => -50,
+    );
+  }
+}
+
+/**
+ * Card on file callback: updates the associated customer payment profile.
+ */
+function commerce_cybersource_cardonfile_update($form, &$form_state, $payment_method, $card_data) {
+  $result = commerce_cybersource_update_customer_profile_request($payment_method, $form_state, $card_data);
+
+  if ($result) {
+    return $result->paySubscriptionUpdateReply->reasonCode == 100;
+  }
+}
+
+/**
+ * Card on file callback: deletes the associated customer payment profile.
+ */
+function commerce_cybersource_cardonfile_delete($form, &$form_state, $payment_method, $card_data) {
+  $result = commerce_cybersource_delete_customer_profile_request($payment_method, $card_data);
+
+  return $result->paySubscriptionDeleteReply->reasonCode == 100;
+}
+
+/**
+ * Submits a paySubscriptionCreateService XML request to Cybersource.
+ *
+ * This function will attempt to create a Customer Profile using an existing credit card authorization.
+ *
+ * @param $payment_method
+ *   The payment method instance array containing the API credentials for a CIM
+ *   enabled Authorize.Net account.
+ * @param $order
+ *   The order object containing the billing address and e-mail to use for the
+ *   customer profile.
+ * @param $payment_details
+ *   An array of payment details to use in the default payment profile. See the
+ *   respective helper array functions for possible keys.
+ *
+ * @return
+ *   A SimpleXMLElement containing the API response.
+ */
+function commerce_cybersource_create_customer_profile_request($orig_request, $payment_method, $order) {
+
+  $request = new stdClass();
+  $request->billTo = $orig_request->billTo;
+  $request->card = $orig_request->card;
+
+  $request->merchantReferenceCode = 'Order ' . $order->order_number;
+  $request->purchaseTotals = (object) array('currency' => 'USD');
+  $request->subscription = (object) array(
+      'title' => 'On-Demand Profile',
+      'paymentMethod' => 'credit card'
+    );
+
+  //$request->recurringSubscriptionInfo->amount = 0.00;
+  $request->recurringSubscriptionInfo = (object) array('frequency' => 'on-demand');
+
+  $request->paySubscriptionCreateService = (object) array('run' => 'true');
+  //$request->paySubscriptionCreateService->paymentRequestID = $request_id;
+   return commerce_cybersource_soap_api_request($payment_method, $request);
+}
+
+/**
+ * Retrieve a customer profile from cybersource.
+ *
+ * @param type $payment_method
+ * @param type $request_id
+ * @return type
+ */
+function commerce_cybersource_retrieve_customer_profile_request($payment_method, $request_id) {
+  $request = new stdClass();
+  $request->merchantReferenceCode = 'Read ' . $request_id;
+  $request->paySubscriptionRetrieveService = (object) array('run' => 'true');
+  $request->recurringSubscriptionInfo = (object) array('subscriptionID' => $request_id);
+  return commerce_cybersource_soap_api_request($payment_method, $request);
+}
+
+/**
+ * Delete a customer profile
+ *
+ * @param type $card_data
+ */
+function commerce_cybersource_update_customer_profile_request($payment_method, $form_state, $card_data) {
+  $pane_values = $form_state['values'];
+  $request = new stdClass();
+  $request->merchantReferenceCode = 'Update Profile ' . $card_data->remote_id;
+  $request->paySubscriptionUpdateService = (object) array('run' => 'true');
+  $request->recurringSubscriptionInfo = (object) array('subscriptionID' => $card_data->remote_id);
+  if (isset($pane_values['credit_card']['number'])) {
+    $number = $pane_values['credit_card']['number'];
+  }
+  else {
+    $number = $card_data->card_number;
+  }
+  // Add the credit card details.
+  $request->card = (object) array(
+    'accountNumber' => $number,
+    'expirationMonth' => $pane_values['credit_card']['exp_month'],
+    'expirationYear' => $pane_values['credit_card']['exp_year'],
+  );
+    if (isset($pane_values['billto'])) {
+      $request->billTo = $pane_values['billto'];
+    }
+  // Determine the credit card type if possible for use in later code.
+    if (!empty($pane_values['credit_card']['number']) && empty($pane_values['credit_card']['type'])) {
+      module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+      $card_type = commerce_payment_validate_credit_card_type($pane_values['credit_card']['number'], array_keys(commerce_payment_credit_card_types()));
+      $request->card->cardType = commerce_cybersource_cc_type_code($card_type);
+    }
+    elseif(!empty($pane_values['credit_card']['type'])) {
+      $card_type = $pane_values['credit_card']['type'];
+      $request->card->cardType = commerce_cybersource_cc_type_code($card_type);
+    }
+    else {
+      $card_type = $pane_values['card_data']->card_type;
+      $request->card->cardType = commerce_cybersource_cc_type_code($card_type);
+    }
+  // Add the CVV data if included.
+  if (isset($pane_values['credit_card']['code'])) {
+    $request->card->cvNumber = $pane_values['credit_card']['code'];
+  }
+  return commerce_cybersource_soap_api_request($payment_method, $request);
+}
+
+/**
+ * Delete a customer profile
+ *
+ * @param type $card_data
+ */
+function commerce_cybersource_delete_customer_profile_request($payment_method, $card_data) {
+  $request = new stdClass();
+  $request->merchantReferenceCode = 'Delete Profile ' . $card_data->remote_id;
+  $request->paySubscriptionDeleteService = (object) array('run' => 'true');
+  $request->recurringSubscriptionInfo = (object) array('subscriptionID' => $card_data->remote_id);
+
+  return commerce_cybersource_soap_api_request($payment_method, $request);
+}
+

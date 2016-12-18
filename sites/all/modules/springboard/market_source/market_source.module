@@ -1,0 +1,933 @@
+<?php
+
+/**
+ * @file
+ * Provides a way to track which campaigns and market sources drive users to the
+ * site.
+ */
+
+define('MARKET_SOURCE_VALUE_MAXLENGTH', 255);
+
+/**
+ * Implements hook_libraries_info().
+ */
+function market_source_libraries_info() {
+  $libraries['mobiledetect'] = array(
+    'name' => 'Mobile Detect',
+    'vendor url' => 'https://github.com/serbanghita/Mobile-Detect',
+    'download url' => 'https://github.com/serbanghita/Mobile-Detect/archive/2.8.17.tar.gz',
+    'version' => '2.8',
+    'version arguments' => array(
+      'file' => 'Mobile_Detect.php',
+      'pattern' => '/@version\s+(\d+\.\d+)/',
+      'lines' => 25,
+    ),
+    'files' => array(
+      'php' => array(
+        'Mobile_Detect.php',
+      ),
+    ),
+  );
+
+  $libraries['phpuseragent'] = array(
+    'name' => 'PHP User Agent',
+    'vendor url' => 'https://github.com/donatj/PhpUserAgent',
+    'download url' => 'https://github.com/donatj/PhpUserAgent/archive/v0.5.0.tar.gz',
+    'path' => 'Source',
+    'version' => '0.5.0',
+    'files' => array(
+      'php' => array(
+        'UserAgentParser.php',
+      ),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function market_source_menu() {
+  $items = array();
+  $items['admin/config/search/market-source'] = array(
+    'title' => 'Market Source',
+    'description' => 'Configuration settings for the Market Source module.',
+    'type' => MENU_NORMAL_ITEM,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('market_source_admin_settings_form'),
+    'access arguments' => array('administer market source'),
+    'file' => 'market_source.admin.inc',
+  );
+  return $items;
+}
+
+/** 
+ * Implements hook_springboard_admin_alias_patterns().
+ */
+function market_source_springboard_admin_alias_patterns() {
+    return array(
+    // Market Source config page.
+    'admin/config/search/market-source' => array(
+      'path' => array(
+        'regex' => '|^/admin/config/search/market-source$|',
+        'replacement' => 'admin/config/search/market-source',
+      ),
+      'alias' => array(
+        'regex' => '|^springboard/market-source$|',
+        'replacement' => 'springboard/market-source',
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_springboard_admin_admin_menu_items_alter().
+ */
+function market_source_springboard_admin_admin_menu_items_alter(&$items) {
+  // Marketing & Analytics > Source Codes.
+  $items['admin/springboard/marketing-analytics']['_children']['admin/config/search/market-source'] = array(
+    'link_path' => 'admin/config/search/market-source',
+    'link_title' => 'Source Codes',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 3,
+  );
+  
+  // Settings > Settings > Source Codes.
+  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/config/search/market-source'] = array(
+    'link_path' => 'admin/config/search/market-source',
+    'link_title' => 'Source Codes',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 7,
+  );
+}
+
+/**
+ * Implements hook_permission().
+ */
+function market_source_permission() {
+  return array (
+    'administer market source' => array(
+      'title' => t("Administer Market Source"),
+      'description' => t('Configure the Market Source module, create and edit source codes.'),
+    ),    
+  );
+}
+
+/**
+ * Implements hook_init().
+ */
+function market_source_init() {
+  // Add JavaScript to each page load.
+  drupal_add_js(drupal_get_path('module', 'market_source') . '/js/jquery-cookie.js');
+  drupal_add_js(drupal_get_path('module', 'market_source') . '/js/market_source.js');
+  // Get cookie domain info.
+  $market_source_cookie_domain = variable_get('market_source_cookie_domain', '');
+  $ms_cookie_domain = '';
+  // Per RFC 2109, cookie domains must contain at least one dot other than the
+  // first. For hosts such as 'localhost' or IP Addresses we don't set a cookie domain.
+  if (count(explode('.', $market_source_cookie_domain)) > 1 && !is_numeric(str_replace('.', '', $market_source_cookie_domain))) {
+    $ms_cookie_domain = $market_source_cookie_domain;
+  }
+  // Add other variables to the JS settings array.
+  drupal_add_js(array('market_source' => array(
+      'qs_keys' => _market_source_build_qs_keys(),
+      'maxlength' => MARKET_SOURCE_VALUE_MAXLENGTH,
+      'cookie_domain' => $market_source_cookie_domain,
+      'cookie_path' => ini_get('session.cookie_path'),
+    )), 'setting');
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_fields_alter().
+ */
+function market_source_salesforce_genmap_map_fields_alter(&$fields, $context) {
+  if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+    // Alter donations based on recurring status.
+    if ($context['module'] == 'salesforce_donation' || $context['module'] == 'webform') {
+      $submission = $context['object'];
+      $map = $context['map'];
+      // Check the salesforce donation map.
+      if (isset($map->field_map['salesforce_webform_map']['cid'])) {
+        $sf_field = $map->field_map['salesforce_webform_map']['cid'];
+        if (!empty($fields[$sf_field])) {
+          if (!_market_source_validate_cid($fields[$sf_field])) {
+            unset($fields[$sf_field]);
+          }
+        }
+      }
+      // Check the webform.inc map.
+      if (isset($map->field_map['webform_map']['cid'])) {
+        $sf_field = $map->field_map['webform_map']['cid'];
+        if (!empty($fields[$sf_field])) {
+          if (!_market_source_validate_cid($fields[$sf_field])) {
+            unset($fields[$sf_field]);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function market_source_theme($existing, $type, $theme, $path) {
+  return array(
+    'market_source_admin_global_fields_table' => array(
+      'render element' => 'element',
+      'file' => 'market_source.admin.inc',
+    ),
+  );
+}
+
+/**
+ * Implements hook_webform_user_profile_fields_alter().
+ */
+function market_source_webform_user_profile_fields_alter(&$fields, $node) {
+  // Market Source is active on all webform nodes, so we don't need to check the node type.
+  // For every field that market source will be handling the creation, remove it from webform user creation.
+  $mapping = variable_get('market_source_to_user_map', array());
+  if (empty($mapping)) {
+    return;
+  }
+  foreach ($fields as $index => $profile_field) {
+    $name = $profile_field['name'];
+    if (isset($mapping[$name]) &&   $mapping[$name]) {
+      // This field will be created by fundraiser, so we don't need to set it up in webform user.
+      unset($fields[$index]);
+    }
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function market_source_form_alter(&$form, &$form_state, $form_id) {
+  // Alter webforms.
+  if (isset($form['#node']->nid) && !empty($form['#node']->webform) && $form_id == 'webform_client_form_' . $form['#node']->nid) {
+    // Add an #after_build callback for webforms.
+    $form['#after_build'][] = 'market_source_webform_after_build';
+    // Add validation callback for campaigns.
+    if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+      $form['#validate'][] = 'market_source_webform_cid_validate';
+    }
+  }
+  elseif ($form_id == 'webform_component_edit_form') {
+    // For new components ONLY prevent key conflicts by name.
+    if (arg(4) == 'new') {
+      $node = node_load($form['nid']['#value']);
+      // Gather the set of already available keys.
+      $seen_keys = array();
+      if (isset($node->webform['components'])) {
+        foreach ($node->webform['components'] as $cid => $this_component) {
+          $seen_keys[$cid] = $this_component['form_key'];
+        }
+      }
+      if (in_array($form['form_key']['#default_value'], $seen_keys)) {
+        $new_key_name = $form['form_key']['#default_value'];
+        $count = 0;
+        while (in_array($new_key_name, $seen_keys)) {
+          $new_key_name = $form['form_key']['#default_value'] = $new_key_name = $form['form_key']['#default_value'] . '_' . $count;
+        }
+        $form['form_key']['#default_value'] = $new_key_name;
+      }
+    }
+    // Do not allow users to muck with defined form keys in component editting form.
+    // They're named what they're named for a reason and we need those keys to remain unharmed.
+    // Walk array of defined fields to gather keys.
+    $preserved_keys = _market_source_get_field_keys();
+    $form_key = $form['form_key']['#default_value'];
+    if (in_array($form_key, $preserved_keys)) {
+      $form['form_key']['#disabled'] = TRUE;
+      $form['form_key']['#description'] .= '</br>' . t('This field key is required by Market Source and cannot be changed.');
+      $form['form_key']['#value'] = $form['form_key']['#default_value'];
+    }
+    // Now that keys are preserved, check for the campaign id.
+    if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+      if ($form_key == 'cid') {
+        if (module_exists('salesforce_sync')) {
+          // Check if we should reset the cache
+          $reset = FALSE;
+          if (!empty($_GET['campaign-cache-clear'])) {
+            $reset = TRUE;
+          }
+          $campaigns = market_source_get_campaigns($reset);
+          $select_options = array();
+          foreach ($campaigns as $campaign_id => $campaign) {
+            $select_options[$campaign_id] = $campaign['name'] . ' (' . $campaign_id . ')';
+          }
+          if (is_array($campaigns)) {
+            asort($select_options);
+            $form['value']['#type'] = 'select';
+            $form['value']['#options'] = $select_options;
+          }
+          // Add a link to clear the cache
+          $form['value']['#suffix'] = l('Clear the campaign cache', current_path(), array('query' => array('campaign-cache-clear' => 1)));
+          $form['value']['#suffix'] .= '<div>' . t("To update the list of campaigns in the dropdown click the link above to clear the campaign cache.") . '</div>';
+        }
+      }
+    }
+  }
+  elseif ($form_id == 'user_register') {
+    // Add an #after_build callback for user registration form.
+    $form['#after_build'][] = 'market_source_user_register_after_build';
+    // Add validation callback for campaigns.
+    if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+      $form['#validate'][] = 'market_source_user_register_cid_validate';
+    }
+  }
+  elseif ($form_id == 'user_register_form') {
+    // Replaces hook_user() register op.
+    // Add the qs_keys as hidden fields on the user registration form.
+    $qs_keys = _market_source_build_qs_keys();
+    foreach (array_keys($qs_keys) as $key) {
+      $form['profile_' . $key] = array(
+        '#type' => 'hidden',
+      );
+    }
+  }
+  else {
+    $additional_forms = variable_get('market_source_additional_forms', array());
+    if (array_search($form_id, $additional_forms) !== FALSE) {
+      // Add an #after_build callback for webforms.
+      $form['#after_build'][] = 'market_source_generic_form_after_build';
+      // Add validation callback for campaigns.
+      if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+        $form['#validate'][] = 'market_source_generic_form_cid_validate'; // Coder: Is ok, this is what the global is called in settings.php.
+      }
+    }
+  }
+}
+
+/**
+ * An #after_build callback for the user registration form.
+ */
+function market_source_user_register_after_build($form, &$form_state) {
+  if ($form_state['submitted']) {
+    // Do not add form keys when the form has been submitted.
+    return $form;
+  }
+  // Get form keys array.
+  $form_keys = _market_source_build_form_keys($form, 'profile_');
+
+  // Add form_keys to the JS settings array.
+  drupal_add_js(array('market_source' => array(
+      'form_keys' => array(
+        $form['#id'] => $form_keys,
+      ),
+    )), 'setting');
+  // Mandatory return value for #after_build callbacks.
+  return $form;
+}
+
+/**
+ * An #after_build callback for all webforms.
+ */
+function market_source_webform_after_build($form, &$form_state) {
+  if ($form_state['submitted']) {
+    // Do not add form keys when the form has been submitted.
+    return $form;
+  }
+  // When viewing a submission record, expose Market Source fields for editing.
+  if (!empty($form['#submission'])) {
+    // @todo This code totally does not work. kljr 3/10/2016.
+    $qs_keys = _market_source_build_qs_keys();
+    foreach (array_keys($qs_keys) as $key) {
+      $element = &_market_source_form_find_element($form, $key);
+      if (!empty($element) && $element['#type'] == 'hidden') {
+        $element['#type'] = 'textfield';
+        // Prevent the core textfield formatter's default 128 limit.
+        $element['#maxlength'] = NULL;
+      }
+    }
+  }
+  // Otherwise, output the form info to Javascript so it can be populated.
+  else {
+    // Get form keys array.
+    $form_keys = _market_source_build_form_keys($form);
+
+    // Set the array.
+    $settings = array(
+      'form_keys' => array(
+        $form['#id'] => $form_keys,
+      ),
+    );
+    // Add form_keys to the JS settings array.
+    drupal_add_js(array('market_source' => $settings), 'setting');
+
+    // Populate device info fields.
+    if (libraries_load('mobiledetect')) {
+      $mobile_detect = new Market_Source_Mobile_Detect();
+
+      if (!empty($mobile_detect->getUserAgent())) {
+        $device_properties = $mobile_detect->getDeviceProperties();
+
+        if (!$mobile_detect->isMobile()) {
+          if (libraries_load('phpuseragent')) {
+            $ua_parse = parse_user_agent($mobile_detect->getUserAgent());
+
+            $device_properties['os'] = $ua_parse['platform'];
+            $device_properties['browser'] = $ua_parse['browser'] . ' ' . $ua_parse['version'];
+          }
+        }
+
+        $device_type = &_market_source_form_find_element($form, 'device_type');
+        $device_type['#value'] = $device_properties['type'];
+
+        $device_name = &_market_source_form_find_element($form, 'device_name');
+        $device_name['#value'] = $device_properties['name'];
+
+        $device_os = &_market_source_form_find_element($form, 'device_os');
+        $device_os['#value'] = $device_properties['os'];
+
+        $device_browser = &_market_source_form_find_element($form, 'device_browser');
+        $device_browser['#value'] = $device_properties['browser'];
+      }
+    }
+  }
+
+  // Mandatory return value for #after_build callbacks.
+  return $form;
+}
+
+/**
+ * An #after_build callback for generic forms.
+ */
+function market_source_generic_form_after_build($form, &$form_state) {
+  if ($form_state['submitted']) {
+    // Do not add form keys when the form has been submitted.
+    return $form;
+  }
+  // Get form keys array.
+  $prefix = isset($form['#market_source_prefix']) ? $form['#market_source_prefix'] : NULL;
+  $form_keys = _market_source_build_form_keys($form, $prefix);
+  // Set the array.
+  $settings = array(
+    'form_keys' => array(
+      $form['#id'] => $form_keys,
+    ),
+  );
+  // Add form_keys to the JS settings array.
+  drupal_add_js(array('market_source' => $settings), 'setting');
+  // Mandatory return value for #after_build callbacks.
+  return $form;
+}
+
+/**
+ * Campaign ID validation callback for user registration form.
+ */
+function market_source_user_register_cid_validate($form, &$form_state) {
+  // If campaign validation is enabled, validate.
+  if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+    $cid_element = &_market_source_form_find_element($form, 'cid');
+    $cid = &_market_source_form_find_element($form_state['values'], 'cid');
+    if (!empty($cid) && !_market_source_validate_cid($cid)) {
+      // Set the cid to the form's default cid.
+      form_set_value($cid_element, '', $form_state);
+    }
+  }
+}
+
+/**
+ * Campaign ID validation callback for webforms.
+ */
+function market_source_webform_cid_validate($form, &$form_state) {
+  // If campaign validation is enabled, validate.
+  if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+    $cid_element = &_market_source_form_find_element($form, 'cid');
+    $cid = &_market_source_form_find_element($form_state['values'], 'cid');
+    if (!empty($cid) && !_market_source_validate_cid($cid)) {
+      // Set the cid to the form's default cid.
+      form_set_value($cid_element, '', $form_state);
+    }
+  }
+}
+
+/**
+ * Campaign ID validation callback for generic forms.
+ */
+function market_source_generic_form_cid_validate($form, &$form_state) {
+  // If campaign validation is enabled, validate.
+  if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+    $cid_element = &_market_source_form_find_element($form, 'cid');
+    $cid = &_market_source_form_find_element($form_state['values'], 'cid');
+    if (!empty($cid) && !_market_source_validate_cid($cid)) {
+      // Set the cid to empty.
+      form_set_value($cid_element, '', $form_state);
+    }
+  }
+}
+
+/**
+ * Add settings array with all market source querystring keys.
+ */
+function _market_source_build_qs_keys() {
+  static $qs_keys = array();
+  if (empty($qs_keys)) {
+    // collate custom and default field settings
+    $default_fields = variable_get('market_source_default_fields', array());
+    $custom_fields = variable_get('market_source_custom_fields', array());
+
+    // Pull in details for any ms fields defined by other modules.
+    // Modules that invoke this hook should return an array of field records.
+    // Each record should contain the following key/value pairs:
+    //   - key          : unique field key
+    //   - name         : human-readable name
+    //   - default      : default value
+    //   - persistence : persistence settings for this fields, acceptable values are 'on', 'off' or 'direct'
+    $external_fields = module_invoke_all('market_source_external_field_keys');
+    $field_settings = array(
+      'ms' => isset($default_fields['market_source']) ? $default_fields['market_source'] : array(),
+      'cid' => isset($default_fields['campaign']) ? $default_fields['campaign'] : array(),
+      'referrer' => isset($default_fields['referrer']) ? $default_fields['referrer'] : array(),
+      'initial_referrer' => isset($default_fields['initial_referrer']) ? $default_fields['initial_referrer'] : array(),
+      'search_engine' => isset($default_fields['search_engine']) ? $default_fields['search_engine'] : array(),
+      'search_string' => isset($default_fields['search_string']) ? $default_fields['search_string'] : array(),
+      'user_agent' => isset($default_fields['user_agent']) ? $default_fields['user_agent'] : array(),
+      'device_type' => isset($default_fields['device_type']) ? $default_fields['device_type'] : array(),
+      'device_name' => isset($default_fields['device_name']) ? $default_fields['device_name'] : array(),
+      'device_os' => isset($default_fields['device_os']) ? $default_fields['device_os'] : array(),
+      'device_browser' => isset($default_fields['device_browser']) ? $default_fields['device_browser'] : array(),
+    );
+    foreach ($custom_fields as $custom_field) {
+      $field_settings[$custom_field['key']] = $custom_field;
+    }
+    if (is_array($external_fields) && count($external_fields)) {
+      foreach ($external_fields as $external_field) {
+        $field_settings[$external_field['key']] = $external_field;
+      }
+    }
+    // create keys with null values and persistence settings
+    $ms_keys = _market_source_get_field_keys();
+    if (is_array($ms_keys)) {
+      foreach ($ms_keys as $ms_key) {
+        $qs_keys[$ms_key] = array(
+          'value' => NULL,
+          'persistence' => isset($field_settings[$ms_key]['persistence']) ? $field_settings[$ms_key]['persistence'] : TRUE,
+        );
+      }
+    }
+  }
+  return $qs_keys;
+}
+
+/**
+ * Traverse the $form array for each $qs_keys key.
+ */
+function _market_source_build_form_keys(&$form, $prefix = NULL) {
+  // Return $qs_keys array.
+  $qs_keys = _market_source_build_qs_keys();
+
+  $form_keys = array();
+  foreach (array_keys($qs_keys) as $key) {
+    $lookup_key = $key;
+    if (!empty($prefix)) {
+      $lookup_key = $prefix . $key;
+    }
+    // Lookup the element ID of $key in $form.
+    $element = &_market_source_form_find_element($form, $lookup_key);
+    if (is_array($element) && isset($element['#name'])) {
+      // Add the element name to $form_keys.
+      $form_keys[$key] = $element['#name'];
+    }
+  }
+
+  $context = array('form' => $form, 'prefix' => $prefix);
+  drupal_alter('market_source_build_form_keys', $form_keys, $context);
+
+  return $form_keys;
+}
+
+/**
+ * Lookup function for finding the FAPI element corresponding to $key.
+ */
+function &_market_source_form_find_element(&$form, $key) {
+  foreach (element_children($form) as $id) {
+    $element = &$form[$id];
+    if ($id === $key) {
+      return $element;
+    }
+    else {
+      if (is_array($element) && element_children($element)) {
+        $retval = &_market_source_form_find_element($element, $key);
+        if ($retval !== FALSE) {
+          return $retval;
+        }
+      }
+    }
+  }
+  $retval = FALSE;
+  return $retval;
+}
+
+/**
+ * Lookup function for finding the webform component corresponding to $key.
+ */
+function &_market_source_webform_find_component(&$components, $key) {
+  foreach (element_children($components) as $id) {
+    $component = &$components[$id];
+    if ($component['form_key'] == $key) {
+      return $component;
+    }
+  }
+  $retval = FALSE;
+  return $retval;
+}
+
+/**
+ * Validate a campaign ID.
+ */
+function _market_source_validate_cid($val) {
+  $retval = FALSE;
+  $val = trim($val);
+  if (!empty($val)) {
+    if (preg_match('/^[a-zA-Z0-9_+-]+$/', $val)) {
+      if (drupal_strlen($val) <= MARKET_SOURCE_VALUE_MAXLENGTH) {
+        if (variable_get('market_source_validate_sf_campaigns', FALSE)) {
+          $campaigns = market_source_get_campaigns();
+          if (!empty($campaigns)) {
+            $campaigns = array_keys($campaigns);
+            if (strlen($val) == 18) {
+              $retval = in_array($val, $campaigns);
+            } else {
+              $campaigns_15char = array_map(
+                create_function('$cid', 'return substr($cid, 0, 15);'),
+                $campaigns
+              );
+              $retval = in_array($val, $campaigns_15char);
+            }
+          }
+        }
+      }
+    }
+  }
+  return $retval;
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function market_source_node_insert($node) {
+  if (module_exists('webform')) {
+    $webform_types = variable_get('webform_node_types', array('webform'));
+    // Make sure this node type contains a webform.
+    if (in_array($node->type, $webform_types)) {
+      if (!isset($node->clone_from_original_nid)) { // Value from node_clone module.
+        module_load_include('inc', 'webform', 'includes/webform.components');
+        $components = market_source_create_standard_components($node->nid);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_market_source_field_info().
+ * Note: This uses the same format for field info as fundraiser.
+ */
+function market_source_market_source_field_info() {
+  $fields = array();
+  $fields['ms'] = array(
+    '#title' => t('Market Source'),
+    '#type' => 'hidden',
+    '#value' => variable_get('market_source_default_campaign', 'default_ms'),
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  if (variable_get('fundraiser_salesforce_integration', 0) && module_exists('sf_donation')) {
+    $default_campaign = variable_get('sf_donation_default_campaign', 'default_cid');
+  }
+  $fields['cid'] = array(
+    '#title' => t('Campaign ID'),
+    '#type' => 'hidden',
+    '#value' => isset($default_campaign) ? $default_campaign : '',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['referrer'] = array(
+    '#title' => t('Referrer'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['initial_referrer'] = array(
+    '#title' => t('Initial Referrer'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['search_engine'] = array(
+    '#title' => t('Search Engine'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['search_string'] = array(
+    '#title' => t('Search String'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['user_agent'] = array(
+    '#title' => t('User Agent'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['device_type'] = array(
+    '#title' => t('Device Type'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['device_name'] = array(
+    '#title' => t('Device Name'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['device_os'] = array(
+    '#title' => t('Device OS'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $fields['device_browser'] = array(
+    '#title' => t('Device Browser'),
+    '#type' => 'hidden',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  $custom_fields = variable_get('market_source_custom_fields', array());
+  if (count($custom_fields)) {
+    foreach ($custom_fields as $custom_field) {
+      $fields[$custom_field['key']] = array(
+        '#title' => isset($custom_field['name']) ? $custom_field['name'] : 'Custom Field - ' . $custom_field['key'],
+        '#type' => 'hidden',
+        '#value' => isset($custom_field['default']) ? $custom_field['default'] : '',
+        '#required' => 1,
+        '#extra' => array(
+          'description' => '',
+          'hidden_type' => 'hidden',
+        ),
+      );
+    }
+  }
+  return $fields;
+}
+
+/**
+ * Helper function, return a list of all market source fields from all available modules.
+ */
+function market_source_field_info() {
+  // Cache market source fields during page execution.
+  $fields = &drupal_static(__FUNCTION__);
+  if (!isset($fields) || empty($fields)) {
+    // Request additional fields from other modules.
+    $fields = module_invoke_all('market_source_field_info');
+    // Allow for others to modify as needed.
+    drupal_alter('market_source_field_info', $fields);
+  }
+  // And return.
+  return $fields;
+}
+
+/**
+ * Helper function, given the array from field_info - get the listed keys.
+ * WARNING: Recursion is here to walk the field info array to gather form keys.
+ */
+function _market_source_get_field_keys($field_info = NULL, $keys = array()) {
+  if ($field_info == NULL) {
+    $field_info = market_source_field_info();
+  }
+  $children = element_children($field_info);
+  $keys = array_merge($keys, $children);
+  foreach ($children as $child) {
+    if ($field_info[$child] != NULL && !empty($field_info[$child])) {
+      $keys = _market_source_get_field_keys($field_info[$child], $keys);
+    }
+  }
+  return $keys;
+}
+
+/**
+ * Helper function, creates all donation specific webform components.
+ * Called on node insert (but not on node update).
+ */
+function market_source_create_standard_components($nid) {
+  // Poll other modules for the information they would normally provide to the donation form.
+  $fields = market_source_field_info();
+  // Start creating fields based on the component.
+  $components = array();
+  $child_weight = 0;
+  foreach ($fields as $field_key => $field) {
+    _market_source_update_component($nid, $field_key, $field, 0, $child_weight);
+    $child_weight++;
+  }
+}
+
+/**
+ * Helper function, handles recursion for _fundraiser_webform_update_components().
+ */
+function _market_source_update_component($nid, $field_key, $field, $pid = 0, $weight = 0) {
+  // Include the webform module that allows components to be created.
+  module_load_include('inc', 'webform', 'includes/webform.components');
+  if (!isset($field['#type'])) {
+    drupal_set_message(t('Error in creating component: %field', array('%field' => print_r($field, TRUE))));
+    return;
+  }
+  // Check if empty.
+  if (!empty($field)) {
+    // Create the field array.
+    $component = array();
+    $component['nid'] = $nid;
+    $component['pid'] = $pid;
+    $component['form_key'] = $field_key;
+    $component['name'] = isset($field['#title']) ? $field['#title'] : '';
+    if (isset($field['#value'])) {
+      $component['value'] = $field['#value'];
+    }
+    $component['type'] = isset($field['#type']) ? $field['#type'] : '';
+    $component['extra'] = isset($field['#extra']) ? $field['#extra'] : array('description' => '');
+    $component['mandatory'] = isset($field['#required']) ? $field['#required'] : 0;
+    $component['email'] = 1; //isset($field['#email']) ? 1 : 0;
+    $component['weight'] = $weight;
+    $allow_update = isset($field['#allow_update']) ? $field['#allow_update'] : 0;
+    // Create the component.
+    $cid = webform_component_insert($component);
+    // Check for mapping, and set the map if we need to.
+    if (module_exists('webform_user')) {
+      static $mapping;
+      if (empty($mapping)) {
+        $mapping = variable_get('market_source_to_user_map', array());
+      }
+      // Add the component mapping record if there is a map value for this.
+      $found_key = array_search($component['form_key'], $mapping);
+      if ($found_key) {
+        $map = array(
+          'nid' => $nid,
+          'cid' => $cid,
+          'map_id' => $found_key,
+        );
+        drupal_write_record('webform_user_component_map', $map);
+      }
+    }
+    // Check for children. Recursion occurs here.
+    $child_weight = 0;
+    foreach (element_children($field) as $key) {
+      _market_source_update_component($nid, $key, $field[$key], $cid, $child_weight);
+      $child_weight++;
+    }
+  }
+}
+
+/**
+ * Helper function, retrieve a set of available campaigns.
+ *
+ * @param bool $reset
+ *   Whether to reset the static cache variable.
+ *
+ * @return array
+ *   An array with campaign id and name, keyed by campaign ID.
+ *   Example: $campaigns[id] => array('id' => id, 'name' => name)
+ */
+function market_source_get_campaigns($reset = FALSE) {
+  // If the reset option has been passed clear the static variable
+  if ($reset === TRUE) {
+    drupal_static_reset(__FUNCTION__);
+  }
+
+  $campaigns = &drupal_static(__FUNCTION__, array());
+
+  if (empty($campaigns) && module_exists('salesforce_sync')) {
+    if (($cache = cache_get('market_source_campaigns')) && $reset === FALSE) {
+      $campaigns = $cache->data;
+    }
+    else {
+
+      // Create a new soapclient
+      try {
+        $sync = new SalesforceSync();
+
+        $found_campaigns = $sync->fetchRecords('Campaign', array('Id', 'Name'), array('isActive = TRUE'));
+        // Return a list of Campaign ids.
+        if (is_array($found_campaigns)) {
+          foreach ($found_campaigns as $found_campaign) {
+            $campaigns[$found_campaign->Id] = array(
+              'id' => $found_campaign->Id,
+              'name' => $found_campaign->Name,
+            );
+          }
+        }
+        else {
+          $campaigns = array();
+        }
+        cache_set('market_source_campaigns', $campaigns, 'cache', CACHE_TEMPORARY);
+      }
+      catch (Exception $ex) {
+        watchdog('Market Source', 'Market Source failed to load the campaign ids due to an API error.',
+          array(),
+          WATCHDOG_ERROR);
+        return array();
+      }
+    }
+  }
+
+  return $campaigns;
+}
+
+/**
+ * Returns campaigns ready to be used in an #options form api array.
+ *
+ * @param bool $reset
+ *   Whether to reset the static cache.
+ *
+ * @return array
+ *   Campaign names keyed by campaign id.
+ */
+function market_source_get_campaign_options($reset = FALSE) {
+  $campaigns = market_source_get_campaigns($reset);
+  $options = array();
+  foreach ($campaigns as $campaign_id => $campaign) {
+    $options[$campaign_id] = $campaign['name'] . ' (' . $campaign_id . ')';
+  }
+
+  return $options;
+}

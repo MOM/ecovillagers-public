@@ -56,10 +56,10 @@ function _webform_render_fieldset($component, $value = NULL, $filter = TRUE) {
 
   $element = array(
     '#type' => 'fieldset',
-    '#title' => $filter ? webform_filter_xss($component['name']) : $component['name'],
+    '#title' => $filter ? _webform_filter_xss($component['name']) : $component['name'],
     '#title_display' => $component['extra']['title_display'] ? $component['extra']['title_display'] : NULL,
     '#weight' => $component['weight'],
-    '#description' => $filter ? webform_filter_descriptions($component['extra']['description'], $node) : $component['extra']['description'],
+    '#description' => $filter ? _webform_filter_descriptions($component['extra']['description'], $node) : $component['extra']['description'],
     '#collapsible' => $component['extra']['collapsible'],
     '#collapsed' => $component['extra']['collapsed'],
     '#attributes' => array('class' => array('webform-component-fieldset')),
@@ -71,11 +71,10 @@ function _webform_render_fieldset($component, $value = NULL, $filter = TRUE) {
 }
 
 /**
- * Pre-render function to set a unique fieldset class name.
+ * Pre-render function to set a fieldset ID.
  */
 function webform_fieldset_prerender($element) {
-  $element['#id'] = NULL;
-  $element['#attributes']['class'][] = 'webform-component--' . str_replace('_', '-', implode('--', array_slice($element['#parents'], 1)));
+  $element['#id'] = 'webform-component-' . str_replace('_', '-', implode('--', array_slice($element['#parents'], 1)));
   return $element;
 }
 

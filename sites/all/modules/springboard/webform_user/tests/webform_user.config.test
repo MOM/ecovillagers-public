@@ -1,0 +1,225 @@
+<?php
+/**
+ * @file
+ * Test the configuation and form creation functionality of webform user.
+ */
+
+/**
+ * Tests webform_user configuration.
+ */
+class WebformUserConfigTestCase extends WebformUserTestSetup {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Webform User Configuation'),
+      'description' => t('Test the configuration and form creation functionality of webform user.'),
+      'group' => t('Webform User'),
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($additional_modules = array()) {
+    parent::setUp($additional_modules);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Test that unsupported field types do not get created as webform components.
+   *
+   * Unsupported field types include image and file fields.
+   */
+  public function testWebformUserInvalidFieldTypes() {
+    $this->webformUserAddField('resume', 'Resume', 'file');
+
+    $this->drupalLogin($this->users['editor']);
+
+    $edit = array(
+      'title' => t('Sign me'),
+      'is_webform_user' => 1,
+    );
+
+    $this->drupalPost('node/add/petition', $edit, t('Save'));
+
+    // Ensure the newly added was not picked up by webform user.
+    $component = $this->webformUserComponentDetails(1, 'resume');
+    $this->assertFalse($component, t('File field component not created.'));
+  }
+
+  /**
+   * Test that the webform map is created and stored correctly in the database.
+   */
+  public function testWebformUserMap() {
+    // Create a new webform user form.
+    $this->drupalLogin($this->users['editor']);
+
+    $edit = array(
+      'title' => t('Sign me'),
+      'is_webform_user' => 1,
+    );
+
+    $this->drupalPost('node/add/petition', $edit, t('Save'));
+
+    // Query and verify the map record.
+    $map = db_query("SELECT cid, map_id
+      FROM {webform_user_component_map} WHERE nid = :nid", array(':nid' => 1))->fetchAllKeyed();
+
+    // Get the default profile fields.
+    $profile_fields = $this->webformUserDefaultProfileFields();
+
+    // Make sure all the fields are accounted for in the map.
+    foreach ($profile_fields as $field) {
+      $this->assertTrue(in_array($field['field_name'], $map), t('Field !field mapped correctly.', array('!field' => $field['field_name'])));
+    }
+  }
+
+  /**
+   * Test that new fields added to the user entity get created.
+   */
+  public function testWebformUserCustomComponentCreation() {
+    // Add a new field to the user entity.
+    $this->webformUserAddField('favorite_color', 'Favorite color', 'text');
+
+    $this->drupalLogin($this->users['editor']);
+
+    $edit = array(
+      'title' => t('Sign me'),
+      'is_webform_user' => 1,
+    );
+
+    $this->drupalPost('node/add/petition', $edit, t('Save'));
+
+    // Ensure the newly added field is picked up by webform user.
+    $component = $this->webformUserComponentDetails(1, 'favorite_color');
+    $this->assertTrue($component, t('Favorite color component created.'));
+    $this->assertEqual('textfield', $component->type, t('Favorite color component type is textfield.'));
+
+    // Ensure the map record was created as well.
+    $map = db_query("SELECT cid, map_id
+      FROM {webform_user_component_map} WHERE map_id = :map_id", array(':map_id' => 'favorite_color'))->fetchObject();
+
+    $this->assertEqual('favorite_color', $map->map_id, 'Favorite color component mapped correctly.');
+  }
+
+  /**
+   * Webform user correctly adds the default profile fields to the webform.
+   */
+  public function testWebformUserDefaultComponentCreation() {
+
+    $this->drupalLogin($this->users['editor']);
+
+    $edit = array(
+      'title' => t('Sign me'),
+      'is_webform_user' => 1,
+    );
+
+    $this->drupalPost('node/add/petition', $edit, t('Save'));
+
+    // Confirm webform components are created.
+    // Email.
+    $component = $this->webformUserComponentDetails(1, 'mail');
+    $this->assertNotNull($component, t('Email component created.'));
+    $this->assertEqual('email', $component->type, t('Mail component type is email.'));
+
+    // First name.
+    $component = $this->webformUserComponentDetails(1, 'sbp_first_name');
+    $this->assertNotNull($component, t('First name component created.'));
+    $this->assertEqual('textfield', $component->type, t('First name component type is textfield.'));
+
+    // Last name.
+    $component = $this->webformUserComponentDetails(1, 'sbp_last_name');
+    $this->assertNotNull($component, t('Last name component created.'));
+    $this->assertEqual('textfield', $component->type, t('Last name component type is textfield.'));
+
+    // Address.
+    $component = $this->webformUserComponentDetails(1, 'sbp_address');
+    $this->assertNotNull($component, t('Address component created.'));
+    $this->assertEqual('textfield', $component->type, t('Address component type is textfield.'));
+
+    // Address line 2.
+    $component = $this->webformUserComponentDetails(1, 'sbp_address_line_2');
+    $this->assertNotNull($component, t('Address line 2 component created.'));
+    $this->assertEqual('textfield', $component->type, t('Address line 2 component type is textfield.'));
+
+    // City.
+    $component = $this->webformUserComponentDetails(1, 'sbp_city');
+    $this->assertNotNull($component, t('City component created.'));
+    $this->assertEqual('textfield', $component->type, t('City component type is textfield.'));
+
+    // State.
+    $component = $this->webformUserComponentDetails(1, 'sbp_state');
+    $this->assertNotNull($component, t('State component created.'));
+    $this->assertEqual('textfield', $component->type, t('State component type is textfield.'));
+
+    // Country.
+    $component = $this->webformUserComponentDetails(1, 'sbp_country');
+    $this->assertNotNull($component, t('Country component created.'));
+    $this->assertEqual('textfield', $component->type, t('Country component type is textfield.'));
+
+    // Zip.
+    $component = $this->webformUserComponentDetails(1, 'sbp_zip');
+    $this->assertNotNull($component, t('Postal Code component created.'));
+    $this->assertEqual('textfield', $component->type, t('Postal Code component type is textfield.'));
+
+    // Campaign Id.
+    $component = $this->webformUserComponentDetails(1, 'sbp_cid');
+    $this->assertNotNull($component, t('Campaign Id component created.'));
+    $this->assertEqual('hidden', $component->type, t('Campaign Id component type is hidden.'));
+
+    // Market Source.
+    $component = $this->webformUserComponentDetails(1, 'sbp_ms');
+    $this->assertNotNull($component, t('Market Source component created.'));
+    $this->assertEqual('hidden', $component->type, t('Market Source component type is hidden.'));
+
+    // Referrer.
+    $component = $this->webformUserComponentDetails(1, 'sbp_referrer');
+    $this->assertNotNull($component, t('Referrer component created.'));
+    $this->assertEqual('hidden', $component->type, t('Referrer component type is hidden.'));
+
+    // Initial Referrer.
+    $component = $this->webformUserComponentDetails(1, 'sbp_initial_referrer');
+    $this->assertNotNull($component, t('Initial Referrer component created.'));
+    $this->assertEqual('hidden', $component->type, t('Initial Referrer component type is hidden.'));
+
+    // Search Engine.
+    $component = $this->webformUserComponentDetails(1, 'sbp_search_engine');
+    $this->assertNotNull($component, t('Search Engine component created.'));
+    $this->assertEqual('hidden', $component->type, t('Search Engine component type is hidden.'));
+
+    // Search String.
+    $component = $this->webformUserComponentDetails(1, 'sbp_search_string');
+    $this->assertNotNull($component, t('Search String component created.'));
+    $this->assertEqual('hidden', $component->type, t('Search String component type is hidden.'));
+
+    // User agent.
+    $component = $this->webformUserComponentDetails(1, 'sbp_user_agent');
+    $this->assertNotNull($component, t('User Agent component created.'));
+    $this->assertEqual('hidden', $component->type, t('User Agent component type is hidden.'));
+
+    // Salesforce account id.
+    $component = $this->webformUserComponentDetails(1, 'sbp_salesforce_account_id');
+    $this->assertNotNull($component, t('Salesforce Account Id webform component created as textfield.'));
+    $this->assertEqual('hidden', $component->type, 'Salesforce Account Id component type is hidden.');
+
+    // Salesforce contact id.
+    $component = $this->webformUserComponentDetails(1, 'sbp_salesforce_contact_id');
+    $this->assertNotNull($component, t('Salesforce Contact Id component created.'));
+    $this->assertEqual('hidden', $component->type, 'Salesforce Contact Id component type is hidden.');
+
+    // @todo Create the form.
+    // $form = $this->webformUserCreateNode();
+    // @todo Request it for viewing.
+    // $this->drupalGet('node/1');
+  }
+
+}

@@ -1,0 +1,286 @@
+/* This file is used for the profile pages wrapper, it's not called directly*/
+
+/* Global css for various p2p pages */
+
+/* Some basic deafults for p2p pages */
+
+html body {
+  padding-right: 20px;
+  padding-left: 20px;
+  color: #5b5b5b;
+  font-family: "Open Sans", arial, sans-serif;
+}
+
+body ul,
+body ol {
+  margin: 0;
+  padding: 0;
+}
+
+h1.page-title {
+  margin: 10px 0 24px 0;
+  text-transform: capitalize;
+}
+
+body h2 a:hover,
+body h3 a:hover {
+  text-decoration: none;
+}
+
+body a {
+  color: #0285b0;
+}
+
+/* layout */
+
+div#main {
+  padding: 10px;
+  border: 1px solid #ccc;
+}
+
+.container, .navbar-static-top .container,
+.navbar-fixed-top .container,
+.navbar-fixed-bottom .container {
+  max-width: 940px;
+  width: inherit;
+}
+
+/* tabs */
+
+ul.primary.tabs {
+  position: relative;
+  display: table;
+  overflow: hidden;
+  margin: 0;
+  width: 100%;
+  border-bottom: 2px solid #c6d2d3;
+  background: #eff0f2;
+  text-align: center;
+}
+
+ul.primary.tabs li {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  padding: 0;
+  vertical-align: top;
+  line-height: 38px;
+}
+
+ul.primary.tabs a {
+  display: block;
+  padding: 8px 16px;
+  outline: none;
+  background-color: #eff0f2;
+  color: #888;
+  text-decoration: none;
+  text-transform: capitalize;
+  letter-spacing: 0;
+  font-weight: bold;
+  -webkit-transition: all 0.2s ease-in-out;
+  -moz-transition: all 0.2s ease-in-out;
+  transition: all 0.2s ease-in-out;
+}
+
+ul.primary li a {
+  margin-right: 0;
+  height: auto;
+  border-width: 0;
+  border-style: none;
+  border-color: inherit;
+}
+
+ul.primary li.active a {
+  border: 0;
+  border-bottom: 0;
+}
+
+ul.primary.tabs .active a,
+ul.primary.tabs a:hover {
+  background: #c6d2d3;
+  color: #fff;
+  color: #333;
+}
+
+/* global table style */
+
+table {
+  width: 100%;
+}
+
+table tbody tr {
+  border: 1px solid #ccc;
+}
+
+table th {
+  padding: 4px 0 3px 6px;
+  border-right: 1px solid #ccc;
+  border-bottom: none;
+  background: #ccc;
+  text-align: left;
+}
+
+table tr.even {
+  background-color: #f5f5f5;
+}
+
+table tr.odd {
+  background-color: #fcfcfc;
+}
+
+table td {
+  padding: 3px 3px 3px 6px;
+}
+
+.region.region-content {
+  margin: 30px 0 0 0;
+}
+
+/* forms */
+
+label,
+.field-prefix,
+.field-label {
+  margin: 0 0 10px 0;
+  color: #7e7e7e;
+  font-weight: normal;
+  font-size: 14px;
+}
+
+.field .field-label {
+  margin: 0 0 10px 0;
+}
+
+.control-group {
+  float: none;
+}
+
+body .form-actions {
+  clear: both;
+}
+
+div.password-suggestions.description {
+  padding: 24px 20px;
+}
+
+.field {
+  margin: 0;
+  padding: 12px 0 12px 10px;
+  border-bottom: 1px dotted #ccc;
+}
+
+.field:nth-child(odd) {
+  background-color: #f5f5f5;
+}
+
+.field:nth-child(even) {
+  background-color: #fcfcfc;
+}
+
+body .profile .field,
+body .profile .field-label {
+  font-size: 17px;
+}
+
+body .form-actions {
+  position: relative;
+  margin: 10px 0;
+  padding: 0;
+  border-top: none;
+  background-color: #fff;
+}
+
+body input[type="submit"],
+body input[type="submit"].btn {
+  position: relative;
+  margin: 0 10px 0 0;
+  padding: 6px 20px;
+  min-width: 200px;
+  border: 0;
+  -webkit-border-radius: 0;
+  -moz-border-radius: 0;
+  border-radius: 0;
+  background: #859596;
+  color: #fff;
+  vertical-align: top;
+  text-align: center;
+  text-shadow: none;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+body input[type="submit"]:hover,
+body input[type="submit"].btn:hover {
+  outline: none;
+  background: #2980b9;
+  -webkit-transition: all 0.2s ease-in-out;
+  -moz-transition: all 0.2s ease-in-out;
+  transition: all 0.2s ease-in-out;
+}
+
+body.page-user ul.pager {
+  margin: 20px 0 10px 0;
+}
+
+li.pager-current,
+.pager li > a,
+.pager li > span {
+  display: inline-block;
+  padding: 5px 14px;
+  border: 1px solid #ddd;
+  -webkit-border-radius: 0;
+  -moz-border-radius: 0;
+  border-radius: 0;
+  background-color: #fff;
+}
+
+li.pager-current {
+  background-color: #f5f5f5;
+  text-decoration: none;
+}
+
+table {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+table tbody tr {
+  border: 1px solid #ccc;
+}
+
+table th {
+  padding: 4px 0 3px 6px;
+  border-bottom: none;
+  text-align: left;
+}
+
+table tr.even {
+  background-color: #f5f5f5;
+}
+
+table tr.odd {
+  background-color: #fcfcfc;
+}
+
+table td {
+  padding: 3px 3px 3px 6px;
+}
+
+@media (max-width: 979px) {
+
+  ul.primary.tabs {
+    text-align: left;
+  }
+
+  ul.primary.tabs li {
+    display: block;
+    border-bottom: 1px dotted #888;
+    line-height: 18px;
+  }
+
+  .tabs a {
+    display: block;
+    padding: 0px 16px;
+  }
+
+}

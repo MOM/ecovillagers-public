@@ -1,0 +1,76 @@
+#ask-amounts .form-item,
+#recurring-ask-amounts .form-item {
+  float: left;
+  padding-right: 20px;
+}
+
+#ask-amounts label,
+#recurring-ask-amounts label {
+  width: 100px;
+}
+
+#ask-amounts .form-submit,
+#recurring-ask-amounts .form-submit {
+  float:left;
+  display: inline;
+  margin-top: 35px;	
+}
+
+#fundraiser-ask-amounts-table .form-type-textfield input,
+#fundraiser-recurring-ask-amounts-table .form-type-textfield input,
+#fundraiser-recurring-donation-types-table .form-type-textfield input {
+  margin-bottom: 0;
+}
+
+/* Layout sustainer mgmt pages */
+
+#payment-info,
+#donation-billing-form,
+#billing-info,
+#donation-amount-form,
+#payment-schedule,
+#donation-cancel-form {
+  background-color:#f4f4f4;
+  padding:10px;
+  margin-bottom:10px;
+}
+
+#donation-amount-form #edit-fee-amount-wrapper label {
+  display:inline;
+}
+
+#donation-amount-form #edit-fee-amount-wrapper .description #current,
+#donation-amount-form #edit-fee-amount-wrapper .description #minimum {
+  display:block;
+}
+
+#center #donation-amount-form form,
+#center #donation-cancel-form form {
+  margin-bottom:0;
+}
+
+#center #donation-amount-form form .form-submit,
+#center #donation-cancel-form form .form-submit {
+  margin-top:0;
+}
+
+#payment-info dl {
+  margin:0;padding:0;
+  padding-top:10px;
+  padding-bottom:10px;
+}
+
+#payment-info dl dd {
+  display:block;
+  margin:0;
+}
+
+#payment-info dl dt {
+  width:210px;
+  float:left;
+}
+
+/* Remove background image for error style in system.messages.css */
+.control-group.error {
+  background:none;
+}

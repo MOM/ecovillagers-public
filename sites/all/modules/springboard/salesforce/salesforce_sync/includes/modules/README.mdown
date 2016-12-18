@@ -1,0 +1,8 @@
+# Expand modules
+
+To expand a module, add an include file to this directory that has the filename
+structure of `my_module.inc`.  For example, if the module you wished to expand
+was `views_bulk_operation` you would name the file `views_bulk_operation.inc`.
+The include file will only be loaded if the original module is enabled.  The
+list of expanded modules is cached, so clear the cache if the include file is
+not loading properly.

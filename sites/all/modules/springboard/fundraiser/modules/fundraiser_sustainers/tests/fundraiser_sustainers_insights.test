@@ -1,0 +1,122 @@
+<?php
+/**
+ * @file
+ * Tests for Sustainers Insights reports.
+ */
+
+/**
+ * Class FundraiserSustainersInsightsTestCase.
+ */
+class FundraiserSustainersInsightsTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser Sustainers Insights',
+      'description' => 'Test the Fundraiser Sustainers Insights data.',
+      'group' => 'Fundraiser Sustainers',
+    );
+  }
+
+  public function setUp() {
+    $modules = array(
+      'fundraiser_sustainers',
+      'fundraiser_commerce',
+      'encrypt',
+    );
+    parent::setUp($modules);
+  }
+
+  public function testSnapshots() {
+    $today = new DateTime();
+    $insights = new FundraiserSustainersInsights();
+    $today_snapshot = $insights->getTodaysSnapshot();
+
+    $this->assertEqual($today_snapshot->getDate()->format('Y-m-d'), $today->format('Y-m-d'), 'Today\'s date and the snapshot date match.');
+
+    $snapshot = $insights->getSnapshot(new DateTime('2013-12-01'));
+    $this->assertEqual($snapshot->getDate(), new DateTime('2013-12-01'), 'Date reported by snapshot matches.');
+  }
+
+  public function testHistoricalReports() {
+    $insights = new FundraiserSustainersInsights();
+
+    $report = $insights->getHistoricalReport(new DateTime('2014-11-01'), new DateTime('2014-12-01'));
+    $this->debugReport($report, 30);
+
+    $last_ten_days = $insights->getHistoricalReportPreset('10 days');
+    $this->debugReport($last_ten_days, 11);
+  }
+
+  public function testForecasts() {
+    $insights = new FundraiserSustainersInsights();
+
+    $report = $insights->getForecast(new DateTime('2016-11-01'), new DateTime('2016-12-01'));
+    $this->debugReport($report, 30);
+
+    $future_ten_days = $insights->getForecastPreset('10 days');
+    $this->debugReport($future_ten_days, 10);
+  }
+
+  public function testSnapshotData() {
+    $snapshot = new MockFundraiserSustainersDailySnapshot(new DateTime());
+
+    $this->assertIdentical($snapshot->getScheduledCharges(), 10);
+    $this->assertIdentical($snapshot->getScheduledValue(), 10000);
+
+    $this->assertIdentical($snapshot->getRetriedCharges(), 5);
+    $this->assertIdentical($snapshot->getRetriedValue(), 4000);
+
+    $this->assertIdentical($snapshot->getSuccessfulCharges(), 10);
+    $this->assertIdentical($snapshot->getSuccessfulValue(), 9000);
+
+    $this->assertIdentical($snapshot->getFailedRescheduledCharges(), 2);
+    $this->assertIdentical($snapshot->getFailedRescheduledValue(), 2000);
+
+    $this->assertIdentical($snapshot->getFailedAbandonedCharges(), 3);
+    $this->assertIdentical($snapshot->getFailedAbandonedValue(), 3000);
+
+    // These are really the only ones that do calculations.
+    $this->assertIdentical($snapshot->getFailedCharges(), 5);
+    $this->assertIdentical($snapshot->getFailedValue(), 5000);
+  }
+
+  protected function debugReport(FundraiserSustainersSnapshotReport $report, $count) {
+    $snapshots = $report->getSnapshots();
+    $this->assertEqual(count($snapshots), $count, 'Got the expected number of snapshots.');
+    foreach ($snapshots as $key => $snapshot) {
+      $this->assertEqual($key, $snapshot->getDate()->format('Y-m-d'), 'Array key for snapshot matches snapshot date.');
+    }
+  }
+}
+
+/**
+ * Class MockFundraiserSustainersDailySnapshot.
+ *
+ * Overrides the load method to make mock Snapshot data.
+ */
+class MockFundraiserSustainersDailySnapshot extends FundraiserSustainersDailySnapshot {
+
+  public function mockSnapshotDate() {
+    return array(
+      0 => array(
+        'scheduledCharges' => 10,
+        'scheduledValue' => 10000,
+        'retriedCharges' => 5,
+        'retriedValue' => 4000,
+        'successfulCharges' => 10,
+        'successfulValue' => 9000,
+        'failedRescheduledCharges' => 2,
+        'failedRescheduledValue' => 2000,
+        'failedAbandonedCharges' => 3,
+        'failedAbandonedValue' => 3000,
+      ),
+    );
+  }
+
+  protected function load() {
+    $data = $this->mockSnapshotDate()[0];
+    foreach ($data as $key => $value) {
+      $this->$key = $value;
+    }
+  }
+}

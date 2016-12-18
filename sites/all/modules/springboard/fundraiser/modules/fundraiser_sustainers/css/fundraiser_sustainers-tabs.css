@@ -1,0 +1,28 @@
+.webform-component-radios #edit-submitted-donation-recurs-monthly {
+    overflow: hidden; /* contain floats */
+}
+.webform-component-radios label[for=edit-submitted-donation-recurs-monthly] {
+    display: none;
+}
+.webform-component-radios #edit-submitted-donation-recurs-monthly .form-item {
+    float: left;
+    width: inherit;
+    clear: none;
+}
+.webform-component-radios #edit-submitted-donation-recurs-monthly input[type=radio] {
+    display: none;
+}
+.webform-component-radios #edit-submitted-donation-recurs-monthly label {
+    display: block;
+    padding: 0.3em 1.5em;
+    margin: 0 1em 0 0;
+    background: #ccc;
+    color: #666;
+}
+.webform-component-radios #edit-submitted-donation-recurs-monthly input:checked ~ label {
+    color: white;
+    background: #333;
+}
+.webform-component-radios #edit-submitted-donation-recurs-monthly input:not(:checked) ~ label:hover {
+    color: black;
+}

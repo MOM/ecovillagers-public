@@ -1,0 +1,123 @@
+<?php
+/**
+ * @file
+ * Fundraiser sustainer tests for health checks.
+ */
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+class FundraiserSustainersHealthChecksTestCase extends DrupalWebTestCase {
+  // Fake donation ID so we can cheat on creating sustainers.
+  protected $nextDid = 1;
+
+  // Fake master donation ID.
+  protected $masterDid = 1;
+
+  /**
+   * Implements getInfo(). Declares this test class to fundraiser testing.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser sustainers health checks',
+      'description' => 'Tests fundraiser sustainers health checks.',
+      'group' => 'Fundraiser Sustainers',
+    );
+  }
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp() {
+    // Without fundraiser_commerce being enabled here, we get an undefined
+    // offset because fundraiser_sustainers needs a module to provide a
+    // sustainer key path.
+    $additional_modules = array(
+      'fundraiser_commerce',
+      'fundraiser_sustainers',
+    );
+    parent::setUp($additional_modules);
+  }
+
+  /**
+   * Insert a stuck sustaienr and assert that the check finds it.
+   */
+  public function testStuckSustainerFound() {
+    $checks = new FundraiserSustainersHealthChecks();
+    $results = $checks->runChecks();
+
+    $this->assertEqual(count($results), 0, 'No stuck sustainers found.');
+
+    // Add a not-stuck sustainer whose next charege is 2 hours ago,
+    // a stuck sustainer whose next charge is 2 hours ago,
+    // and a stuck sustainer whose next charge is within the last hour.
+    // Only the second one should get counted as stuck.
+    $this->insertSustainerRecord(FALSE, REQUEST_TIME - 7200);
+    $stuck_did = $this->insertSustainerRecord(TRUE, REQUEST_TIME - 7200);
+    $this->insertSustainerRecord(TRUE, REQUEST_TIME - 60);
+
+    $checks = new FundraiserSustainersHealthChecks();
+    $results = $checks->runChecks();
+
+    $this->assertEqual(count($results), 1, 'One stuck sustainer found');
+    $item = $results[0];
+    $this->assertEqual($item['type'], 'fundraiser_sustainers');
+    $this->assertEqual($item['message'], 'The following sustainer donations are locked but not processed: %dids');
+    $this->assertEqual($item['variables'], array('%dids' => $stuck_did));
+    $this->assertEqual($item['severity'], WATCHDOG_CRITICAL);
+    $this->assertEqual($item['link_text'], t('Report'));
+    $this->assertEqual($item['link_url'], 'admin/springboard/reports/reconciliation/locked-not-processed-sustainers');
+
+  }
+
+  /**
+   * Insert unstuck sustainers and assert that the check doesn't report them.
+   */
+  public function testStuckSustainerNotFound() {
+    $checks = new FundraiserSustainersHealthChecks();
+    $results = $checks->runChecks();
+
+    $this->assertEqual(count($results), 0, 'No stuck sustainers found.');
+
+    // Add a few not-stuck sustainers at different times.
+    for ($i = 0; $i < 5; $i++) {
+      $this->insertSustainerRecord(FALSE, REQUEST_TIME - ($i * 3600));
+    }
+
+    $checks = new FundraiserSustainersHealthChecks();
+    $results = $checks->runChecks();
+
+    $this->assertEqual(count($results), 0, 'No stuck sustainers found');
+  }
+
+  /**
+   * Inserts a sustainer record into the DB.
+   *
+   * @param bool $stuck
+   *   Whether this should be a normal or stuck sustainer.
+   *
+   * @return int
+   *   The donation ID that was just saved.
+   */
+  protected function insertSustainerRecord($stuck = FALSE, $next_charge = REQUEST_TIME) {
+    $record = array(
+      'master_did' => $this->masterDid,
+      'did' => $this->nextDid++,
+      'next_charge' => $next_charge,
+      'gateway_resp' => 'success',
+      'attempts' => 1,
+      'sustainer_key' => 'example.com',
+    );
+
+    if ($stuck) {
+      $record['lock_id'] = 'blahblah';
+      $record['gateway_resp'] = 'processing';
+    }
+
+    $result = drupal_write_record('fundraiser_sustainers', $record);
+    $this->assertEqual($result, SAVED_NEW, 'New sustainer record saved.');
+
+    return $record['did'];
+  }
+
+}

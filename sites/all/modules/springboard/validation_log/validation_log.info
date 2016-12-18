@@ -1,0 +1,11 @@
+name = Validation log
+description = Provides a log of validation errors
+package = Jackson River Springboard - extras
+core = 7.x
+version = 7.x-4.x-dev
+files[] = tests/validation_log.test
+files[] = validation_log.install
+files[] = validation_log.jriver.inc
+files[] = validation_log.module
+files[] = validation_log.views.inc
+files[] = validation_log.views_default.inc

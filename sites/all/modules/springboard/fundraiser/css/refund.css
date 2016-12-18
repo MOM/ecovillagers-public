@@ -1,0 +1,9 @@
+fieldset {
+  width: 40%;
+  float: left;
+  margin: 0 10px !important;
+}
+
+fieldset:first-child .form-item label {
+  display: inline;
+}

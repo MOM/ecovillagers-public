@@ -1,0 +1,22 @@
+<?php
+/**
+ * @file
+ */
+
+/**
+ * Implements hook_install().
+ *
+ * Weight set to ensure module runs after pathauto has generated aliases. 
+ * This should guarantee aliases get generated correctly during node hooks.
+ */
+function webform_confirmation_alias_install() {
+  db_update('system')
+    ->fields(array(
+      'weight' => 10,
+    ))
+    ->condition(db_and()
+      ->condition('name', 'webform_confirmation_alias', '=')
+      ->condition('type', 'module', '=')
+    )
+    ->execute();
+}

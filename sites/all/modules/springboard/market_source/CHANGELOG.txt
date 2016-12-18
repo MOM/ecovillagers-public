@@ -1,0 +1,5 @@
+= 2013-02-22 Joel Rothschild <joel.rothschild@jacksonriver.com> =
+Added "persistence" checkbox to Market Source admin for custom fields and added value to Drupal variable array for that value. Added list of default fields to Market Source admin with configurable "persistence" checkbox and created new Drupal variable to save the results of the configuration for default fields. Updated the qa_keys variable that is sent to javascript to include an array with two values for each field: "value" and "persistence". Updated javascript to account for this variable changed. Added conditional to javascript to check that "persistence" = true before setting cookies. All persistence options default to TRUE to maintain original functionality when updating existing sites. (Corresponds to ACLU #495 in 6.x-3.0.)
+
+= Update 6001 =
+Webform has altered how hidden components are rendered. Existing Market Source components need their configuration updated so they are rendered as hidden form components instead of Form API values. See Assembla #453 (ACLU space) for more details.

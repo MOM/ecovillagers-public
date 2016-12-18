@@ -1,0 +1,651 @@
+<?php
+
+/**
+ * @file: install, uninstall && update functions
+ */
+
+/**
+ * Implements hook_install().
+ */
+function sb_social_install() {
+  $path = drupal_realpath(file_default_scheme() . '://') . '/social_images';
+  file_prepare_directory($path, FILE_CREATE_DIRECTORY);
+  _sb_social_install_profile_originating_share_field();
+  _sb_social_install_fieldmap_social_share();
+}
+
+
+function sb_social_uninstall() {
+  variable_del('springboard_social_services');
+  variable_del('springboard_social_addthis_profile_id');
+  variable_del('springboard_social_facebook_description');
+  variable_del('springboard_social_debug_mode');
+  variable_del('springboard_social_enabled_content_types');
+  variable_del('springboard_social_default_block_title');
+  variable_del('springboard_social_default_block_description');
+
+  db_query('DELETE FROM {variable} WHERE name LIKE :name', array(':name' => 'springboard_social_facebook%'));
+  db_query('DELETE FROM {variable} WHERE name LIKE :name', array(':name' => 'springboard_social_twittere%'));
+  db_query('DELETE FROM {variable} WHERE name LIKE :name', array(':name' => 'springboard_social_email%'));
+  db_query('DELETE FROM {variable} WHERE name LIKE :name', array(':name' => 'sb_social_market_source%'));
+  db_query('DELETE FROM {variable} WHERE name LIKE :name', array(':name' => 'springboard_social_ms%'));
+
+  // Purge any uploaded images associated with Social.
+  $result = db_query('SELECT fid FROM {file_usage} WHERE module = :module', array(':module' => 'sb_social'));
+  foreach ($result as $record) {
+    $file = file_load($record->fid);
+    if ($file) {
+      file_usage_delete($file, 'sb_social', NULL, NULL, 0);
+      file_delete($file);
+    }
+  }
+}
+
+/**
+ * Implements hook_schema().
+ */
+function sb_social_schema() {
+  $schema['sb_social_shares'] = array(
+    'description' => 'Stores data for share events',
+    'fields' => array(
+      'share_id' => array(
+        'description' => 'The node id.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'user id associated with webform submission',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'sid' => array(
+        'description' => 'webform submission id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'did' => array(
+        'description' => 'donation id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'nid' => array(
+        'description' => 'webform node id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'page_name' => array(
+        'description' => 'shared page name',
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+      'internal_name' => array(
+        'description' => 'shared page internal name',
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+      'type' => array(
+        'description' => 'share type',
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+      'market_source' => array(
+        'description' => 'share URL market source',
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+      'created' => array(
+        'description' => 'created timestamp',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'service' => array(
+        'description' => 'social sharing service',
+        'type' => 'varchar',
+        'length' => 60,
+      ),
+      'status' => array(
+        'description' => 'sync status',
+        'type' => 'varchar',
+        'length' => 40,
+      ),
+      'url' => array(
+        'description' => 'shared URL',
+        'type' => 'text',
+      ),
+      'sf_share_id' => array(
+        'description' => 'Salesforce Share ID',
+        'type' => 'varchar',
+        'length' => 60,
+      ),
+      'opportunity_id' => array(
+        'description' => 'Salesforce Opportunity ID',
+        'type' => 'varchar',
+        'length' => 60,
+      ),
+      'client_id' => array(
+        'description' => 'Client ID from the Springboard cookie (if available).',
+        'type' => 'varchar',
+        'length' => 31,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('share_id'),
+    'indexes' => array(
+      'sid' => array('sid'),
+    ),
+  );
+  $schema['sb_social_settings'] = array(
+    'description' => 'shared content settings for individual paths',
+    'fields' => array(
+      'sid' => array(
+        'description' => 'settings id',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'id' => array(
+        'description' => 'drupal id, path or node id.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'node, path, etc',
+        'type' => 'varchar',
+        'length' => '60',
+        'not null' => TRUE,
+      ),
+      'data' => array(
+        'description' => 'serialized settings array',
+        'type' => 'text',
+      ),
+    ),
+    'primary key' => array('sid'),
+    'indexes' => array(
+      'type' => array('type'),
+    ),
+  );
+  $schema['sb_social_path'] = array(
+    'description' => 'lookup table, provides numeric ID for individual drupal paths with settings.',
+    'fields' => array(
+      'pid' => array(
+        'description' => 'path id',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'path' => array(
+        'description' => 'drupal id, path or node id.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('pid'),
+    'indexes' => array(
+      'path' => array('path'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Add Originating Social Share field (sbp_social_originating_share) to user profiles.
+ */
+function _sb_social_install_profile_originating_share_field() {
+  module_load_include('inc', 'field', 'field.crud');
+  module_load_include('inc', 'field', 'field.info');
+  $field = _sb_social_originating_share_profile_field();
+  // Make sure the field doesn't already exist before creating.
+  if (!field_info_field($field['field_config']['field_name'])) {
+    field_create_field($field['field_config']);
+    drupal_set_message(t('%field_label field created.', array('%field_label' => 'Originating Social Share')));
+  }
+  // Make sure the field instance doesn't already exist for users before creating.
+  if (!field_info_instance('user', $field['field_instance']['field_name'], 'user')) {
+    field_create_instance($field['field_instance']);
+    drupal_set_message(t('%field_label field added to user profiles.', array('%field_label' => 'Originating Social Share')));
+  }
+  // Add the originating share to the market_source/webform_user mapping.
+  $map = variable_get('market_source_to_user_map', array());
+  $map['sbp_social_originating_share'] = 'social_referer_transaction';
+  variable_set('market_source_to_user_map', $map);
+}
+
+/**
+ * Add social share fieldmap.
+ */
+function _sb_social_install_fieldmap_social_share() {
+  if (module_exists('salesforce_mapping') && !salesforce_mapping_load('social_share')) {
+    $t = get_t();
+    $max_weight = db_query("SELECT MAX(weight) FROM {salesforce_mapping};")->fetchField();
+    $params = array(
+      'name' => 'social_share',
+      'label' => $t('Social shares'),
+      'salesforce_object_type' => 'Social_Share__c',
+      'salesforce_record_type' => 'default',
+      'drupal_entity_type' => 'sb_social_share',
+      'drupal_bundle' => 'sb_social_share',
+      'field_mappings' => array(),
+      'sync_triggers' => 3,
+      'push_async' => false,
+      'push_batch' => false,
+      'weight' => $max_weight ? ($max_weight + 1) : 0,
+    );
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'share_id'),
+      'salesforce_field' => array(
+        'label' => $t('Social Share ID'),
+        'name' => 'Social_Share_ID__c',
+        'inlineHelpText' => $t("ID of the Drupal social share action"),
+        'byteLength' => 765,
+        'length' => 255,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'sid'),
+      'salesforce_field' => array(
+        'label' => $t('Submission ID'),
+        'name' => 'Submission_ID__c',
+        'inlineHelpText' => $t("Submission ID from which this share originated"),
+        'byteLength' => 150,
+        'length' => 50,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'nid'),
+      'salesforce_field' => array(
+        'label' => $t('Shared Page Drupal ID'),
+        'name' => 'Shared_Page_Drupal_ID__c',
+        'inlineHelpText' => $t("Drupal node ID of the form/page from which this share occured"),
+        'byteLength' => 300,
+        'length' => 100,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'page_name'),
+      'salesforce_field' => array(
+        'label' => $t('Shared Page Name'),
+        'name' => 'Shared_Page_Name__c',
+        'inlineHelpText' => $t("Form or other page shared"),
+        'byteLength' => 765,
+        'length' => 255,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'internal_name'),
+      'salesforce_field' => array(
+        'label' => $t('Shared Page Name (Internal)'),
+        'name' => 'Shared_Page_Name_Internal__c',
+        'inlineHelpText' => $t("Internal/Drupal name of the shared form or page"),
+        'byteLength' => 765,
+        'length' => 255,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'type'),
+      'salesforce_field' => array(
+        'label' => $t('Social Share Type'),
+        'name' => 'Social_Share_Type__c',
+        'inlineHelpText' => $t("Type of share (e-mail, FB, etc.)"),
+        'byteLength' => 765,
+        'length' => 255,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'market_source'),
+      'salesforce_field' => array(
+        'label' => $t('Market Source'),
+        'name' => 'Market_Source__c',
+        'byteLength' => 225,
+        'length' => 75,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'service'),
+      'salesforce_field' => array(
+        'label' => $t('Social Network'),
+        'name' => 'Social_Network__c',
+        'byteLength' => 765,
+        'length' => 255,
+        'type' => 'picklist',
+        'soapType' => 'xsd:string',
+        'picklistValues' => array(
+          array('active' => true, 'defaultValue' => false, 'label' => 'Facebook', 'validFor' => null, 'value' => 'Facebook'),
+          array('active' => true, 'defaultValue' => false, 'label' => 'Google+', 'validFor' => null, 'value' => 'Google+'),
+          array('active' => true, 'defaultValue' => false, 'label' => 'Pinterest', 'validFor' => null, 'value' => 'Pinterest'),
+          array('active' => true, 'defaultValue' => false, 'label' => 'Twitter', 'validFor' => null, 'value' => 'Twitter'),
+        ),
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'url'),
+      'salesforce_field' => array(
+        'label' => $t('Share URL'),
+        'name' => 'Share_URL__c',
+        'inlineHelpText' => $t("URL of the shared item"),
+        'byteLength' => 765,
+        'length' => 255,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'share_name'),
+      'salesforce_field' => array(
+        'label' => $t('Social Share Name'),
+        'name' => 'Name',
+        'defaultedOnCreate' => true,
+        'nameField' => true,
+        'byteLength' => 240,
+        'length' => 80,
+        'type' => 'string',
+        'soapType' => 'xsd:string',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'user'),
+      'salesforce_field' => array(
+        'label' => $t('Sharing Contact'),
+        'name' => 'Contact_sharer__c',
+        'inlineHelpText' => $t("Constituent who performed this share action"),
+        'byteLength' => 18,
+        'length' => 18,
+        'nillable' => false,
+        'updateable' => false,
+        'referenceTo' => array('Contact'),
+        'relationshipName' => 'Contact_sharer__r',
+        'relationshipOrder' => 0,
+        'type' => 'reference',
+        'soapType' => 'tns:ID',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'submission'),
+      'salesforce_field' => array(
+        'label' => $t('Originating Action'),
+        'name' => 'Originating_Actions__c',
+        'byteLength' => 18,
+        'length' => 18,
+        'referenceTo' => array('Actions__c'),
+        'relationshipName' => 'Originating_Actions__r',
+        'type' => 'reference',
+        'soapType' => 'tns:ID',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'donation'),
+      'salesforce_field' => array(
+        'label' => $t('Originating Donation'),
+        'name' => 'Opportunity_ID__c',
+        'inlineHelpText' => $t("The donation which originated this social share"),
+        'byteLength' => 18,
+        'length' => 18,
+        'referenceTo' => array('Opportunity'),
+        'relationshipName' => 'Opportunity_ID__r',
+        'type' => 'reference',
+        'soapType' => 'tns:ID',
+      ),
+    ));
+    $params['field_mappings'][] = _sb_social_install_fieldmap_social_share_field_mapping(array(
+      'drupal_field' => array('fieldmap_value' => 'share_date'),
+      'salesforce_field' => array(
+        'label' => $t('Share Date'),
+        'name' => 'Share_Date__c',
+        'inlineHelpText' => $t("Date when this share occurred"),
+        'byteLength' => 0,
+        'length' => 0,
+        'type' => 'datetime',
+        'soapType' => 'xsd:dateTime',
+      ),
+    ));
+    $mapping = entity_create('salesforce_mapping', $params);
+    $mapping->save();
+  }
+}
+
+/**
+ * Helper: return default field mapping parameters with the given data superimposed.
+ */
+function _sb_social_install_fieldmap_social_share_field_mapping($overrides) {
+  return array_replace_recursive(
+    array(
+      'drupal_field' => array('fieldmap_type' => 'property'),
+      'salesforce_field' => array(
+        'autoNumber' => false,
+        'calculated' => false,
+        'calculatedFormula' => null,
+        'cascadeDelete' => false,
+        'caseSensitive' => false,
+        'controllerName' => null,
+        'createable' => true,
+        'custom' => true,
+        'defaultValue' => null,
+        'defaultValueFormula' => null,
+        'defaultedOnCreate' => false,
+        'dependentPicklist' => false,
+        'deprecatedAndHidden' => false,
+        'digits' => 0,
+        'displayLocationInDecimal' => false,
+        'externalId' => false,
+        'filterable' => true,
+        'groupable' => true,
+        'htmlFormatted' => false,
+        'idLookup' => false,
+        'inlineHelpText' => '',
+        'nameField' => false,
+        'namePointing' => false,
+        'nillable' => true,
+        'permissionable' => true,
+        'picklistValues' => array(),
+        'precision' => 0,
+        'referenceTo' => array(),
+        'relationshipName' => null,
+        'relationshipOrder' => null,
+        'restrictedDelete' => false,
+        'restrictedPicklist' => false,
+        'scale' => 0,
+        'sortable' => true,
+        'unique' => false,
+        'updateable' => true,
+        'writeRequiresMasterRead' => false,
+      ),
+      'key' => false,
+      'direction' => 'drupal_sf',
+      'drupal_sf' => 'always',
+      'sf_drupal' => 'never',
+    ),
+    $overrides
+  );
+}
+
+/**
+ * Adds the max_length setting to the Originating Share field.
+ *
+ * In earlier updates this was missing and caused notices on user/register
+ * because the widget for textfields was looking for the max_length setting.
+ *
+ * @throws FieldException
+ */
+function sb_social_add_maxlength_to_originating_share() {
+  module_load_include('inc', 'field', 'field.crud');
+  $field_name = 'sbp_social_originating_share';
+
+  $field = array(
+    'field_name' => $field_name,
+    'settings' => array(
+      'max_length' => 10,
+    ),
+  );
+  field_update_field($field);
+  drupal_set_message(t('%field_label field updated with max_length setting.', array('%field_label' => 'Originating Social Share')));
+}
+
+/**
+ * Add indexes to tables.
+ */
+function sb_social_update_7001() {
+  db_add_index('sb_social_shares', 'sid', array('sid'));
+  db_add_index('sb_social_settings', 'type', array('type'));
+
+  return t('Added index to {sb_social_shares} and {sb_social_settings} tables.');
+}
+
+/**
+ * Add social tracker fields.
+ */
+function sb_social_update_7002() {
+  db_add_field('sb_social_shares', 'market_source', array('type' => 'varchar', 'length' => 255, 'description' => 'Share URL market source'));
+  db_add_field('sb_social_shares', 'page_name', array('type' => 'varchar', 'length' => 255, 'description' => 'shared page name'));
+  db_add_field('sb_social_shares', 'internal_name', array('type' => 'varchar', 'length' => 255, 'description' => 'shared page internal name'));
+  db_add_field('sb_social_shares', 'type', array('type' => 'varchar', 'length' => 255, 'description' => 'share type'));
+
+  return t('Added columns to {sb_social_shares}');
+}
+
+/**
+ * Add sb_social_path table
+ */
+function sb_social_update_7003() {
+  $schema['sb_social_path'] = array(
+    'description' => 'lookup table, provides numeric ID for individual drupal paths with settings.',
+    'fields' => array(
+      'pid' => array(
+        'description' => 'path id',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'path' => array(
+        'description' => 'drupal id, path or node id.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('pid'),
+    'indexes' => array(
+      'path' => array('path'),
+    ),
+  );
+  db_create_table('sb_social_path', $schema['sb_social_path']);
+}
+
+/**
+ * Add columns for Salesforce IDs
+ */
+function sb_social_update_7004() {
+  db_add_field('sb_social_shares', 'sf_share_id', array('type' => 'varchar', 'length' => 60, 'description' => 'Salesforce Share ID'));
+  db_add_field('sb_social_shares', 'opportunity_id', array('type' => 'varchar', 'length' => 60, 'description' => 'Salesforce Opportunity ID'));
+}
+
+/**
+ * Adds lookup table to track webform submissions and donation ids associated with a share.
+ */
+function sb_social_update_7005() {
+  $schema['sb_social_submissions'] = array(
+    'description' => 'lookup table, stores webform submission id and donation id for submissions related to a share',
+    'fields' => array(
+      'share_id' => array(
+        'description' => 'share id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'sid' => array(
+        'description' => 'webform submission id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'did' => array(
+        'description' => 'donation id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+  );
+  db_create_table('sb_social_submissions', $schema['sb_social_submissions']);
+}
+
+/*
+ * Add did column to shares table
+ */
+function sb_social_update_7006() {
+  $field = array(
+    'description' => 'donation id',
+    'type' => 'int',
+    'unsigned' => TRUE,
+    'not null' => TRUE,
+    'default' => 0,
+  );
+  db_add_field('sb_social_shares', 'did', $field);
+
+}
+
+/**
+ * Drop the deprecated {sb_social_submissions} table.
+ */
+function sb_social_update_7007() {
+  db_drop_table('sb_social_submissions');
+}
+
+/**
+ * Add Originating Social Share field (sbp_social_originating_share) to user profiles.
+ */
+function sb_social_update_7008() {
+  _sb_social_install_profile_originating_share_field();
+}
+
+/**
+ * Add Social Share field mapping if one doesn't already exist.
+ */
+function sb_social_update_7009() {
+  _sb_social_install_fieldmap_social_share();
+}
+
+/**
+ * Add client_id column to shares table
+ */
+function sb_social_update_7010() {
+  $field = array(
+    'description' => 'Client ID from the Springboard cookie (if available).',
+    'type' => 'varchar',
+    'length' => 31,
+    'not null' => TRUE,
+    'default' => '',
+  );
+  db_add_field('sb_social_shares', 'client_id', $field);
+}
+
+/**
+ * Add max_length setting to Originating Social Share field.
+ */
+function sb_social_update_7011() {
+  sb_social_add_maxlength_to_originating_share();
+}

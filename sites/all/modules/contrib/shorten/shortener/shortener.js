@@ -25,7 +25,7 @@ Drupal.behaviors.shortener = {
       else {
         $(this).html(Drupal.t('expand'));
       }
-      $a.toggleClass('shortener-short').toggleClass('shortener-long');
+      $a.toggleClass('shortener-short shortener-long');
     });
   }
 }

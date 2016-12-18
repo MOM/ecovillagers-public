@@ -1,0 +1,88 @@
+<?php
+
+/**
+ * @file
+ * Applies a namespace to every external id field's value so that multiple
+ * sites can integrate with a single Salesforce org. Avoids id collisions.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function salesforce_namespace_menu() {
+  $items['admin/config/salesforce/salesforce-namespace'] = array(
+    'title' => 'Namespacing',
+    'description' => 'Configuration settings for the Salesforce namespace module.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('salesforce_namespace_settings'),
+    'access arguments' => array('administer salesforce namespace'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'includes/salesforce_namespace.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function salesforce_namespace_permission() {
+  return array(
+    'administer salesforce namespace' => array(
+      'description' => t('Configure settings for the Salesforce namespace module.'),
+      'title' => t('Configure Salesforce namespace'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_salesforce_queue_create_item_alter().
+ */
+function salesforce_namespace_salesforce_queue_create_item_alter(&$data) {
+  if ($object_type = $data['object_type']) {
+    // Extract the external id fields from the object type.
+    $external_id_fields = salesforce_namespace_get_external_id_fields($object_type);
+
+    // Loop over each external id field and if that field is in the object go
+    // ahead and append a namespace to the field's value.
+    foreach ($external_id_fields as $field) {
+      if (array_key_exists($field, $data['sobject']->fields)) {
+        $data['sobject']->fields[$field] = salesforce_namespace_apply_namespace($data['sobject']->fields[$field]);
+      }
+    }
+  }
+}
+
+/**
+ * Appends the configued namespace to a field's value.
+ *
+ * @param mixed $value
+ *   The original value of the external id field.
+ */
+function salesforce_namespace_apply_namespace($value) {
+  $namespace = variable_get('salesforce_namespace_namespace', '0001');
+  return $namespace . $value;
+}
+
+/**
+ * Returns all sobject fields that have been configured as external ids.
+ *
+ * @param string $object_type
+ *   The sobject type whose fields to examine.
+ */
+function salesforce_namespace_get_external_id_fields($object_type) {
+  $sfapi = salesforce_get_api();
+  $sobject = $sfapi->objectDescribe($object_type);
+  $external_id_fields = array();
+
+  if (!empty($sobject)) {
+    foreach ($sobject['fields'] as $field) {
+      if ($field['externalId']) {
+        $external_id_fields[] = $field['name'];
+      }
+    }
+  }
+
+  return $external_id_fields;
+}

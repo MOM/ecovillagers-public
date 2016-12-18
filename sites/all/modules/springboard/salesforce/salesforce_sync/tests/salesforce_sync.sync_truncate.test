@@ -1,0 +1,242 @@
+<?php
+/**
+ * @file
+ * Test long string truncation of item strings in Salesforce batches.
+ */
+
+class SalesforceSyncTruncateTestCase extends DrupalUnitTestCase {
+
+  /**
+   * @var \SalesforceSync
+   */
+  protected $sfs;
+
+  /**
+   * Implements getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Item String Truncation',
+      'description' => 'Test string truncation on Salesforce Sync batch item fields.',
+      'group' => 'Salesforce Sync',
+    );
+  }
+
+  /**
+   * Implements setUp().
+   *
+   * These files are needed as dependencies of SalesforceSync, but they are
+   * mocked below this class.
+   */
+  public function setUp() {
+    parent::setUp();
+    module_load_include('inc', 'salesforce_sync', 'includes/salesforce_sync.sync');
+    module_load_include('inc', 'salesforce_sync', 'includes/salesforce_sync.tokens');
+    module_load_include('inc', 'salesforce_soap', 'salesforce_soap');
+
+    $this->sfs = new SalesforceSync(new MockSalesforce(), new MockSalesforceSoapPartner());
+  }
+
+  /**
+   * Tests truncate when the settings is off.
+   *
+   * In this case Name, FirstName, and LastName should still be truncated,
+   * while other fields should not.
+   */
+  public function testStringTruncateSettingDisabled() {
+    global $conf;
+    $conf['salesforce_sync_truncate_long_strings'] = FALSE;
+
+    $expected = array(
+      'Name' => 'my',
+      'FirstName' => 'tenchars',
+      'LastName' => 'alsotencha',
+      'junk' => 'Really long string that is over the limit.',
+    );
+
+    $items = array();
+
+    $item = new stdClass();
+    $item->object_type = 'myItem';
+    $item->sobject = new stdClass();
+    $item->sobject->fields = array(
+      'Name' => 'my name is long',
+      'FirstName' => 'tenchars&lt;',
+      'LastName' => 'alsotenchars',
+      'junk' => 'Really long string that is over the limit.',
+    );
+
+    $items[] = $item;
+
+    $batch = array(
+      'items' => $items,
+    );
+
+    $this->sfs->batchTruncateLongStrings($batch);
+
+    $this->assertTrue($batch['long_strings_truncated'], 'The long_strings_truncated flag on the batch is correct.');
+
+    foreach ($batch['items'] as $item) {
+      foreach ($item->sobject->fields as $name => $value) {
+        $this->assertEqual($value, $expected[$name]);
+      }
+    }
+
+  }
+
+  /**
+   * Test truncate when the setting is on.
+   */
+  public function testStringTruncateSettingEnabled() {
+    global $conf;
+    $conf['salesforce_sync_truncate_long_strings'] = TRUE;
+
+    $expected = array(
+      'Name' => 'my',
+      'FirstName' => 'first name',
+      'LastName' => 'last name ',
+      'junk' => 'long string with ',
+      'tricky' => 'This is a string with ',
+    );
+
+    $items = array();
+
+    $item = new stdClass();
+    $item->object_type = 'myItem';
+    $item->sobject = new stdClass();
+    $item->sobject->fields = array(
+      'Name' => 'myname',
+      'FirstName' => 'first name is more than ten characters',
+      'LastName' => 'last name is more than ten characters',
+      'junk' => 'long string with &amp; that will get truncated',
+      'tricky' => 'This is a string with &amp; and a ;',
+    );
+
+    $items[] = $item;
+
+    $batch = array(
+      'items' => $items,
+    );
+
+    $this->sfs->batchTruncateLongStrings($batch);
+
+    $this->assertTrue($batch['long_strings_truncated'], 'The long_strings_truncated flag on the batch is correct.');
+
+    foreach ($batch['items'] as $item) {
+      foreach ($item->sobject->fields as $name => $value) {
+        $this->assertEqual($value, $expected[$name]);
+      }
+    }
+
+  }
+}
+
+/**
+ * Class MockSalesforce
+ *
+ * A mock Salesforce class that overrides methods so we don't have to
+ * have a working Salesforce connection in order to run tests.
+ */
+class MockSalesforce extends Salesforce {
+
+  /**
+   * Overrides the constructor.
+   */
+  public function __construct() {
+
+  }
+
+  /**
+   * Override objectDescribe().
+   *
+   * @param string $name
+   *   The object name. Not used.
+   *
+   * @return array
+   *   Canned fields info.
+   */
+  public function objectDescribe($name) {
+    $fields = array();
+
+    $field = array(
+      'name' => 'Name',
+      'type' => 'string',
+      'length' => 2,
+    );
+    $fields[] = $field;
+
+    $field = array(
+      'name' => 'FirstName',
+      'type' => 'string',
+      'length' => 10,
+    );
+    $fields[] = $field;
+
+    $field = array(
+      'name' => 'LastName',
+      'type' => 'string',
+      'length' => 10,
+    );
+    $fields[] = $field;
+
+    $field = array(
+      'name' => 'junk',
+      'type' => 'textarea',
+      'length' => 20,
+    );
+    $fields[] = $field;
+
+    $field = array(
+      'name' => 'tricky',
+      'type' => 'textarea',
+      'length' => 25,
+    );
+    $fields[] = $field;
+
+    $object = array(
+      'fields' => $fields,
+    );
+
+    return $object;
+  }
+
+  /**
+   * Overrides isAuthorized().
+   *
+   * @return bool
+   *   TRUE to pretend we're authorized.
+   */
+  public function isAuthorized() {
+    return TRUE;
+  }
+}
+
+/**
+ * Class MockSalesforceSoapPartner
+ *
+ * A mock SalesforceSoapPartner class so we don't have to have a working
+ * Salesforce connection.
+ */
+class MockSalesforceSoapPartner extends SalesforceSoapPartner {
+
+  /**
+   * Overrides the constructor.
+   */
+  public function __construct() {
+
+  }
+
+  /**
+   * This is called by SalesforceSync but isn't used for our tests.
+   */
+  public function getUserInfo() {
+
+  }
+
+  /**
+   * This is called by SalesforceSync but isn't used for our tests.
+   */
+  public function setQueryOptions($sync_options) {
+
+  }
+}

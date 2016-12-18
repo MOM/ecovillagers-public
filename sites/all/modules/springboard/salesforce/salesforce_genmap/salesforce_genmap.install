@@ -1,0 +1,182 @@
+<?php
+
+/**
+ * @file
+ * Install hooks and schema
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function salesforce_genmap_schema() {
+  $schema['salesforce_genmap_map'] = array(
+    'description' => 'Object to Salesforce mappings',
+    'fields' => array(
+      'mid' => array(
+        'description' => 'Map id of the map.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'nid' => array(
+        'description' => 'Node id of the webform node to which this map applies.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'map_handler' => array(
+        'description' => 'Module that handles field mapping for this map.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'default' => 'salesforce_genmap',
+      ),
+      'salesforce_object_type' => array(
+        'description' => 'The Salesforce object type for this mapping.',
+        'type' => 'varchar',
+        'length' => '100',
+        'not null' => TRUE,
+      ),
+      'salesforce_record_type' => array(
+        'description' => 'The Salesforce record type for this mapping.',
+        'type' => 'varchar',
+        'length' => '100',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'salesforce_dedupe_field' => array(
+        'description' => 'The Salesforce field that will be used for UPSERT',
+        'type' => 'varchar',
+        'length' => '100',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'field_map' => array(
+        'description' => 'A serialized object that stores the field mappings.',
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => TRUE,
+        'serialize' => TRUE,
+      ),
+      'sync_options' => array(
+        'description' => 'A serialized array describing the map\'s syncing options.',
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => TRUE,
+        'serialize' => TRUE,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the salesforce_map was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'updated' => array(
+        'description' => 'The Unix timestamp when the salesforce_map was most recently saved.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'locked' => array(
+        'description' => 'A boolean indicating whether the administrator may delete this mapping.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'status' => array(
+        'description' => 'The exportable status of the entity.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0x01,
+      ),
+      'module' => array(
+        'description' => 'The name of the providing module if the entity has been defined in code.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('mid'),
+    'indexes' => array(
+      'nid' => array('nid'),
+      'nid_map_handler' => array('nid', 'map_handler'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_update_dependencies()
+ */
+function salesforce_genmap_update_dependencies() {
+  $dependencies = array();
+
+  // This update depends on Market Source device info fields existing.
+  $dependencies['salesforce_genmap'][7002] = array(
+    'market_source' => 7002,
+  );
+
+  return $dependencies;
+}
+
+/**
+ * Add indexes to tables.
+ */
+function salesforce_genmap_update_7001() {
+  db_add_index('salesforce_genmap_map', 'nid_map_handler', array('nid', 'map_handler'));
+
+  return t('Added index to {salesforce_genmap_map} table.');
+}
+
+/**
+ * Create Salesforce mappings for Market Source device info fields.
+ */
+function salesforce_genmap_update_7002(&$sandbox) {
+  $path = libraries_get_path('salesforce');
+  require_once $path . '/soapclient/SforcePartnerClient.php';
+
+  // Update Salesforce mappings for webforms provided by these modules:
+  if (!isset($sandbox['progress'])) {
+    $sandbox['progress'] = 0;
+    $sandbox['current_mid'] = 0;
+    $sandbox['max'] = db_query('SELECT COUNT(`mid`) FROM {salesforce_genmap_map} WHERE `module` IN(:module1, :module2, :module3)',
+      array(
+        ':module1' => 'salesforce_donation',
+        ':module2' => 'salesforce_message_action',
+        ':module3' => 'salesforce_petition',
+        ))->fetchField();
+  }
+
+  $result = db_select('salesforce_genmap_map', 'map')
+      ->fields('map', array('mid', 'nid', 'map_handler', 'module'))
+      ->condition('map.module', array('salesforce_donation', 'salesforce_message_action', 'salesforce_petition'), 'IN')
+      ->condition('map.mid', $sandbox['current_mid'], '>')
+      ->range(0, 5)
+      ->orderBy('mid', 'ASC')
+      ->execute();
+
+  while ($record = $result->fetchAssoc()) {
+    $map = salesforce_genmap_load_map($record['nid'], $record['map_handler']);
+
+    // Set the map key based on the module name.
+    $map_key = ($record['module'] == 'salesforce_donation') ? 'salesforce_webform_map' : 'webform_map';
+
+    $map->field_map[$map_key]['device_type'] = 'Device_Type__c';
+    $map->field_map[$map_key]['device_name'] = 'Device_Name__c';
+    $map->field_map[$map_key]['device_os'] = 'Device_OS__c';
+    $map->field_map[$map_key]['device_browser'] = 'Device_Browser__c';
+
+    salesforce_genmap_save_map($map, $record['map_handler']);
+
+    $sandbox['progress']++;
+    $sandbox['current_mid'] = $record['mid'];
+  }
+
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+
+  if ($sandbox['#finished'] >= 1) {
+    return t('Device info field mappings have been added to salesforce_genmap records.');
+  }
+}

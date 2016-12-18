@@ -1,0 +1,667 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the fundraiser module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function fundraiser_install() {
+  variable_set('fundraiser_development_mode', 1);
+  variable_set('commerce_default_currency', 'USD');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function fundraiser_schema() {
+  $schema['fundraiser'] = array(
+    'description' => 'Stores data for donation_form nodes.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'receipt_email_from' => array(
+        'description' => 'The name that will appear in the from line in the receipt email.',
+        'type' => 'varchar',
+        'length' => '100',
+        'not null' => FALSE,
+      ),
+      'receipt_email_address' => array(
+        'description' => 'The from email address that will be used in the receipt email.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'receipt_email_subject' => array(
+        'description' => 'The subject line of the receipt email.',
+        'type' => 'varchar',
+        'length' => '100',
+        'not null' => FALSE,
+      ),
+      'receipt_email_message' => array(
+        'description' => 'The message that will appear in the receipt email.',
+        'type' => 'text',
+        'not null' => FALSE,
+      ),
+      'donation_amounts' => array(
+        'description' => 'A comma delimited string of ask amounts to be displayed on the donation form.',
+        'type' => 'varchar',
+        'length' => '1024',
+        'not null' => FALSE,
+      ),
+      'show_other_amount' => array(
+        'description' => 'Flag to toggle the other amount field on and off.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'ask_for_quantity' => array(
+        'description' => 'Flag to toggle the quantity field on and off.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'minimum_donation_amount' => array(
+        'description' => 'The minimum donation amount the donation form will accept.',
+        'type' => 'numeric',
+        'not null' => FALSE,
+        'precision' => '15',
+        'scale' => '3',
+      ),
+      'gateways' => array(
+        'description' => 'The gateway configurations the donation form will accept.',
+        'type' => 'text',
+        'not null' => FALSE,
+      ),
+      'default_amount' => array(
+        'description' => 'Ask amount for the donation form to default to.',
+        'type' => 'numeric',
+        'not null' => FALSE,
+        'precision' => '15',
+        'scale' => '3',
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  $schema['fundraiser_donation'] = array(
+    'description' => 'Store primary donation information.',
+    'fields' => array(
+      'did' => array(
+        'description' => 'Donation ID - other tables call it order_id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'nid' => array(
+        'description' => 'Originating fundraiser node',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'Donating user',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'sid' => array(
+        'description' => 'Submission identifier',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'status' => array(
+        'description' => 'The status of the donation in the charge system.',
+        'type' => 'varchar',
+        'length' => '255',
+        'default' => 'no_status',
+        'not null' => TRUE,
+      ),
+      'amount' => array(
+        'description' => 'The amount of the donation in the charge system.',
+        'type' => 'float',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'currency' => array(
+        'description' => 'The currency type of the donation in the charge system.',
+        'type' => 'varchar',
+        'length' => '10',
+        'default' => 'USD',
+        'not null' => TRUE,
+      ),
+      'gateway' => array(
+        'description' => 'The payment gateway the donation form uses to process credit cards.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'txn_id' => array(
+        'description' => 'The transaction id of the donation.',
+        'type' => 'varchar',
+        'length' => '55',
+        'not null' => FALSE,
+      ),
+      'form_url' => array(
+        'description' => 'The full url of the donation form that the order was created from.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the donation was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the donation was most recently updated.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'card_id' => array(
+        'description' => 'The cardonfile card ID used to process this donation',
+        'type' => 'int',
+      ),
+      // @todo Add transaction information here with the gateway.
+    ),
+    'primary key' => array('did'),
+    'indexes' => array(
+      'changed' => array('changed'),
+      'gateway' => array('gateway'),
+      'nid' => array('nid'),
+      'uid' => array('uid'),
+      'status' => array('status'),
+      'sid' => array('sid'),
+      'txn_id' => array('txn_id'),
+      'changed_status' => array('changed', 'status'),
+      'gateway_txn_id' => array('gateway', 'txn_id'),
+      'nid_sid' => array('nid', 'sid'),
+      'nid_uid' => array('nid', 'uid'),
+    ),
+  );
+  $schema['fundraiser_refund'] = array(
+    'description' => 'Stores information about refunds made on donations',
+    'fields' => array(
+      'rid' => array(
+        'description' => 'Primary key: refund ID',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'did' => array(
+        'description' => 'Donation ID, for the donation record being refunded',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'receipt_id' => array(
+        'description' => 'Remote ID for the given credit transaction',
+        'type' => 'varchar',
+        'length' => '55',
+        'not null' => FALSE,
+      ),
+      'status' => array(
+        'description' => 'The status of the refund in the charge system.',
+        'type' => 'varchar',
+        'length' => '255',
+        'default' => 'no_status',
+        'not null' => TRUE,
+      ),
+      'amount' => array(
+        'description' => 'Amount of the refund (positive)',
+        'type' => 'float',
+        'not null' => FALSE,
+      ),
+      'currency' => array(
+        'description' => 'The currency type of the refund in the charge system.',
+        'type' => 'varchar',
+        'length' => '25',
+        'default' => 'USD',
+        'not null' => TRUE,
+      ),
+      'txn_id' => array(
+        'description' => 'Transaction ID of the refund',
+        'type' => 'varchar',
+        'length' => '55',
+        'not null' => FALSE,
+      ),
+      'reason' => array(
+        'description' => 'Reason for the refund',
+        'type' => 'text',
+        'not null' => FALSE,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the refund was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'changed' => array(
+        'description' => 'The Unix timestamp when the refund was most recently updated.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('rid'),
+    'indexes' => array(
+      'did' => array('did'),
+      'receipt_id' => array('receipt_id'),
+    ),
+  );
+  $schema['fundraiser_tracking'] = array(
+    'description' => 'Store conversion & pageview information for donation forms.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Donation Form node ID',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'pageviews' => array(
+        'description' => 'Number of times the donation form has been viewed.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'conversions' => array(
+        'description' => 'Number of times the donation form has been submitted successfully.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'local_failures' => array(
+        'description' => 'Number of times form submission has resulted in form_set_error().',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'gateway_failures' => array(
+        'description' => 'Number of times submission has resulted in a failure reported by the payment gateway.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_update_last_removed().
+ */
+function fundraiser_update_last_removed() {
+  // We've removed versions of this module prior to 7.x-4.x.
+  // The next update function is fundraiser_update_7000().
+  return 6309;
+}
+
+/**
+ * 7.x branch updates below.
+ */
+
+/**
+ * D7 upgrade.
+ *
+ * Copy donation information out of Ubercart orders
+ *   and into a location where fundraiser can track it.
+ */
+function fundraiser_update_7000() {
+  // Create new donation table.
+  $donation_table = fundraiser_schema();
+  db_create_table('fundraiser_donation', $donation_table['fundraiser_donation']);
+  // Get all existing fundraiser donation information,
+  // and load the fundriaser_donation table with it all.
+  // From ubercart's order tables.
+  $donations = db_query('SELECT o.order_id, f.nid, o.uid FROM {uc_orders} o ' .
+   'LEFT JOIN {uc_order_products} p ON o.order_id = p.order_id ' .
+   'LEFT JOIN {fundraiser} f ON p.nid = f.nid ');
+  foreach ($donations as $donation) {
+    if (isset($donation->order_id) && isset($donation->nid) && isset($donation->uid)) {
+      $record = array(
+        'did' => $donation->order_id,
+        'nid' => $donation->nid,
+        'uid' => $donation->uid,
+      );
+      // Add gateway and transaction information from webform.
+      // The table doesn't go away yet, because we will still need it
+      // for fundraiser_sustainer.
+      // But we can throw a signal that fundraiser is done with it
+      // to let sustainer delete.
+      variable_set('fundraiser_port_webform_done', TRUE);
+      $gateway_infos = db_query('SELECT * FROM {fundraiser_webform_order} WHERE order_id = :did',
+        array(':did' => $donation->order_id));
+      foreach ($gateway_infos as $gateway_info) {
+        $record['sid'] = $gateway_info->sid;
+        $record['gateway'] = $gateway_info->gateway;
+        $record['txn_id'] = $gateway_info->txn_id;
+      }
+      // The table doesn't go away yet, because we will still need it
+      // for fundraiser_sustainer.
+      // But we can throw a signal that fundraiser is done with it
+      // to let sustainer delete.
+      variable_set('fundraiser_port_recurring_done', TRUE);
+      $gateway_infos = db_query('SELECT * FROM {fundraiser_recurring} WHERE order_id = :did',
+        array(':did' => $donation->order_id));
+      foreach ($gateway_infos as $gateway_info) {
+        $record['gateway'] = $gateway_info->gateway;
+        $record['txn_id'] = $gateway_info->txn_id;
+      }
+      drupal_write_record('fundraiser_donation', $record);
+    }
+  }
+
+  // Rename the table columns that used to be called order to donation.
+  $did_field = array(
+    'did' => array(
+      'description' => 'This specific recurring order id.',
+      'type' => 'int',
+      'unsigned' => TRUE,
+      'not null' => TRUE,
+    ),
+  );
+  db_drop_index('fundraiser_refund', 'refund_order_id');
+  db_change_field('fundraiser_refund', 'order_id', 'did', $did_field);
+  db_add_index('fundraiser_refund', 'refund_did', array('did'));
+
+  // Drop the gateway field on fundraisers.
+  db_drop_field('fundraiser', 'gateway');
+  return array();
+}
+
+/**
+ * Add new field to the fundraiser table, for quantity support.
+ */
+function fundraiser_update_7001() {
+  $field = array(
+    'ask_for_quantity' => array(
+      'description' => 'Flag to toggle the quantity field on and off.',
+      'type' => 'int',
+      'size' => 'tiny',
+      'not null' => FALSE,
+      'default' => 0,
+    ),
+  );
+  db_add_field('fundraiser', 'ask_for_quantity', $field['ask_for_quantity']);
+  return array();
+}
+
+/**
+ * Switch internal_name field to a content field.
+ */
+function fundraiser_update_7002() {
+  // Add the internal name content field to all fundraiser node types.
+  $types = node_type_get_types();
+  foreach ($types as $type => $type_info) {
+    if (fundraiser_is_donation_type($type)) {
+      module_load_include('inc', 'fundraiser', 'includes/fundraiser.fields');
+      _fundraiser_add_default_fields($type);
+    }
+  }
+
+  $results = db_query('SELECT nid, internal_name FROM {fundraiser}');
+
+  if ($results->rowCount()) {
+    foreach ($results as $record) {
+      $node = node_load($record->nid);
+      $node->field_fundraiser_internal_name[$node->language][0]['value'] = $record->internal_name;
+      node_save($node);
+    }
+  }
+
+  // Drop the internal_name field from the fundraiser table.
+  db_drop_field('fundraiser', 'internal_name');
+}
+
+/**
+ * Add indexes to tables.
+ */
+function fundraiser_update_7003() {
+  db_add_index('fundraiser_donation', 'changed', array('changed'));
+  db_add_index('fundraiser_donation', 'gateway', array('gateway'));
+  db_add_index('fundraiser_donation', 'nid', array('nid'));
+  db_add_index('fundraiser_donation', 'uid', array('uid'));
+  db_add_index('fundraiser_donation', 'status', array('status'));
+  db_add_index('fundraiser_donation', 'sid', array('sid'));
+  db_add_index('fundraiser_donation', 'txn_id', array('txn_id'));
+  db_add_index('fundraiser_donation', 'changed_status', array('changed', 'status'));
+  db_add_index('fundraiser_donation', 'gateway_txn_id', array('gateway', 'txn_id'));
+  db_add_index('fundraiser_donation', 'nid_sid', array('nid', 'sid'));
+  db_add_index('fundraiser_donation', 'nid_uid', array('nid', 'uid'));
+
+  db_add_index('fundraiser_refund', 'did', array('did'));
+  db_add_index('fundraiser_refund', 'receipt_id', array('receipt_id'));
+
+  return t('Added indexes to {fundraiser_donation} and {fundraiser_refund} tables.');
+}
+
+/**
+ * Increase length of donation amounts in {fundraiser}.
+ */
+function fundraiser_update_7004() {
+  db_change_field('fundraiser', 'donation_amounts', 'donation_amounts', array(
+    'type' => 'varchar',
+    'length' => '255',
+    'not null' => FALSE,
+  ));
+}
+
+/**
+ * Increase length of donation amounts in {fundraiser} to 1024.
+ */
+function fundraiser_update_7005() {
+  db_change_field('fundraiser', 'donation_amounts', 'donation_amounts', array(
+    'description' => 'A comma delimited string of ask amounts to be displayed on the donation form.',
+    'type' => 'varchar',
+    'length' => '1024',
+    'not null' => FALSE,
+  ));
+}
+
+/**
+ * Set the site wide default currency to USD if it is not set.
+ */
+function fundraiser_update_7006() {
+  $t = get_t();
+  $currency = variable_get('commerce_default_currency', NULL);
+  if (is_null($currency)) {
+    variable_set('commerce_default_currency', 'USD');
+    drupal_set_message($t('The site-wide default currency was set to USD.'));
+  }
+  else {
+    drupal_set_message($t('The current site-wide default currency is %currency.', array('%currency' => $currency)));
+  }
+}
+
+/**
+ * Add the currency node field (and internal name field if it's missing).
+ */
+function fundraiser_update_7007() {
+  module_load_include('inc', 'fundraiser', 'includes/fundraiser.fields');
+  $t = get_t();
+  $replacements = array(
+    '%currency' => commerce_default_currency(),
+  );
+
+  // Add the currency field to all fundraiser node types.
+  $types = node_type_get_types();
+  foreach ($types as $type => $type_info) {
+    if (fundraiser_is_donation_type($type)) {
+      _fundraiser_add_default_fields($type);
+      $replacements['%type'] = $type;
+      drupal_set_message($t('The currency field has been added to the %type content type with a defautl value of %currency', $replacements));
+    }
+  }
+}
+
+/**
+ * Uninstall the fundraiser_multi_currency module if it is enabled.
+ */
+function fundraiser_update_7008() {
+  if (module_exists('fundraiser_multi_currency')) {
+    module_disable(array('fundraiser_multi_currency'), FALSE);
+    drupal_uninstall_modules(array('fundraiser_multi_currency'), FALSE);
+  }
+
+  if (db_table_exists('fundraiser_currencies')) {
+    db_drop_table('fundraiser_currencies');
+  }
+}
+
+/**
+ * Add default_amount field to {fundraiser} and populate from webform components.
+ */
+function fundraiser_update_7009() {
+  $field = array(
+    'default_amount' => array(
+      'description' => 'Ask amount for the donation form to default to.',
+      'type' => 'numeric',
+      'not null' => FALSE,
+      'precision' => '15',
+      'scale' => '3',
+    ),
+  );
+  db_add_field('fundraiser', 'default_amount', $field['default_amount']);
+  // Look up each webform's "amount" component and pull the value.
+  if (module_exists('fundraiser_webform')) {
+    foreach (db_query('SELECT nid FROM {fundraiser}')->fetchCol() as $nid) {
+      $amount_component = _fundraiser_webform_get_component_by_nid_key($nid, 'amount');
+      if (!empty($amount_component->value) && is_numeric($amount_component->value)) {
+        db_query(
+          "UPDATE {fundraiser} SET default_amount=:default_amount WHERE nid=:nid",
+          array(':default_amount' => $amount_component->value, ':nid' => $nid)
+        );
+      }
+    }
+  }
+}
+
+/**
+ * Add card_id field to fundraiser_donation.
+ */
+function fundraiser_update_7010() {
+  $field = array(
+    'description' => 'The cardonfile card ID used to process this donation',
+    'type' => 'int',
+  );
+  db_add_field('fundraiser_donation', 'card_id', $field);
+  db_add_index('fundraiser_donation', 'card_id', array('card_id'));
+}
+
+/**
+ * Batch update records to add card_id field.
+ */
+/** Commented out because this update takes too long
+    to run in a site with a lot of donations. We'll
+    examine a real-time approach in the next release.
+function fundraiser_update_7011(&$sandbox) {
+  // No action necessary if cardonfile isn't enabled 
+  if (!module_exists('commerce_cardonfile')) {
+    return;
+  }
+  $ret = array();
+  $cards = &drupal_static(__FUNCTION__);
+
+  if (!isset($sandbox['progress'])) {
+    // The count of donations visited so far.
+    $sandbox['progress'] = 0;
+    // Total donations that must be visited. Select donations that have a status
+    // of "payment_received" but no card_id.
+    $sandbox['max'] = db_query('SELECT COUNT(did) FROM {fundraiser_donation} WHERE card_id IS NULL AND status = :status', array(
+      ':status' => 'payment_received',
+    ))->fetchField();
+    // A place to store messages during the run.
+    $sandbox['messages'] = array();
+    // Last donation read via the query.
+    $sandbox['current_donation'] = -1;
+  }
+
+  // Process donations by groups of 25 (arbitrary value).
+  $limit = 25;
+
+  // Retrieve the next group of donations to update.
+  $result = db_select('fundraiser_donation', 'fd')
+    ->fields('fd', array('did', 'uid'))
+    ->orderBy('fd.did', 'ASC')
+    ->condition('fd.did', $sandbox['current_donation'], '>')
+    ->condition('fd.status', 'payment_received', '=')
+    ->isNull('card_id')
+    ->range(0, $limit)
+    ->execute()
+    ->fetchAll();
+
+  foreach ($result as $row) {
+    $sandbox['progress']++;
+    $sandbox['current_donation'] = $row->did;
+
+    $card_id = NULL;
+
+    if (empty($cards[$row->uid])) {
+      $user_cards = commerce_cardonfile_load_multiple_by_uid($row->uid);
+    }
+    else {
+      $user_cards = $cards[$row->uid];
+    }
+    $cards_n = count($user_cards);
+
+    if ($cards_n == 1) {
+      // If the user only has one card, we can just set it on the donation
+      // record right away.
+      $card = array_shift($user_cards);
+      $card_id = $card->card_id;
+    }
+    else {
+      // Otherwise we'll need to grab the card_id from the order record.
+      $order = commerce_order_load($row->did);
+      $data = _fundraiser_commerce_order_data_retrieve($order->data['fundraiser_commerce']);
+      $card_id = $data['cardonfile'];
+    }
+
+    if (empty($card_id)) {
+      // Worst case time-wise, since the card_id wasn't set in the order for
+      // some reason, we'll need to try a last-ditch effort to load the donation
+      // and get the card_id from a fundraiser_commerce function.
+      $donation = fundraiser_donation_get_donation($row->did);
+      $card = _fundraiser_commerce_donation_cardonfile_card($donation);
+      if (!empty($card)) {
+        $card_id = $card->card_id;
+      }
+    }
+
+    if (empty($card_id) || !is_numeric($card_id)) {
+      // Nothing found, we'll have to skip this donation.
+      watchdog('fundraiser', 'No card was found for donation @did while updating {fundraiser} for update 7011.', array(
+        '@did' => $row->did,
+      ), WATCHDOG_NOTICE);
+      continue;
+    }
+
+    db_query('UPDATE {fundraiser_donation} SET card_id = :card_id WHERE did = :did', array(
+      ':card_id' => $card_id,
+      ':did' => $row->did,
+    ));
+  }
+
+  // Set the "finished" status, to tell batch engine whether this function
+  // needs to run again. If you set a float, this will indicate the progress
+  // of the batch so the progress bar will update.
+  $sandbox['#finished'] = ($sandbox['progress'] >= $sandbox['max']) ? TRUE : ($sandbox['progress'] / $sandbox['max']);
+
+  if ($sandbox['#finished']) {
+    return t("Donations have been updated with their card_id values.");
+  }
+}
+*/

@@ -1,0 +1,102 @@
+<?php
+/**
+ * @file
+ * fundraiser_tickets.module
+ */
+
+/**
+ * Implements hook_salesforce_queue_process_items_alter().
+ */
+function fundraiser_tickets_salesforce_salesforce_queue_process_items_alter(&$items, $queue) {
+  if (!empty($items)) {
+    // Loop through the items looking for the type we need to prevent from syncing.
+    foreach ($items as $delta => $item) {
+      if ($item->module == 'salesforce_donation' && $item->delta == 'donation') {
+
+        // Check to see if this was an add on donation.
+        $add_on = db_query("SELECT original_nid, original_did FROM {fundraiser_tickets_add_on_donations} WHERE
+          add_on_did = :add_on_did", array(':add_on_did' => $item->drupal_id))->fetchObject();
+
+        // If it is an add on, look up the field that will be used to create a relationship
+        // to the parent.
+        if (!empty($add_on->original_did) && is_numeric($add_on->original_did)) {
+          $custom_fields = variable_get('fundraiser_tickets_salesforce_fields', array());
+          $field_name = !empty($custom_fields[$add_on->original_nid]) ? $custom_fields[$add_on->original_nid] : '';
+          if (!empty($field_name)) {
+            $item->sobject->fields[$field_name] = sprintf('[Opportunity:donation:%d]', $add_on->original_did);
+
+            // Finally, check to see if the original donation has exported. If it hasn't
+            // remove the add-on from the batch.
+            $mapped = salesforce_sync_load_map(array(
+              'module' => 'salesforce_donation',
+              'delta' => 'donation',
+              'drupal_id' => $add_on->original_did,
+              'object_type' => 'Opportunity',
+            ));
+
+            if (empty($mapped)) {
+              unset($items[$delta]);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Alter the node form to add Salesforce-relation field.
+ */
+function fundraiser_tickets_salesforce_form_node_form_alter(&$form, &$form_state) {
+  if (fundraiser_tickets_is_ticket_type($form['type']['#value']) && arg(2) == 'tickets') {
+    // Get the list of field options.
+    $sfapi = salesforce_get_api();
+    $options = array();
+    $options[''] = '-- Please Select --';
+    if ($sfapi->isAuthorized()) {
+      $object_info = $sfapi->objectDescribe('Opportunity');
+      foreach ($object_info['fields'] as $field) {
+        if ($field['type'] == 'reference' && $field['referenceTo'][0] == 'Opportunity') {
+          $options[$field['name']] = $field['label'];
+        }
+      }
+    }
+
+    // Set the default value.
+    $custom_fields = variable_get('fundraiser_tickets_salesforce_fields', array());
+    $default = !empty($custom_fields[$form['#node']->nid]) ? $custom_fields[$form['#node']->nid] : '';
+
+    // Salesforce relation field
+    $form['fr_tickets_donation_salesforce_field'] = array(
+      '#type' => 'select',
+      '#title' => 'Salesforce field to relate add-on to original donation',
+      '#options' => $options,
+      '#default_value' => $default,
+      '#required' => FALSE,
+      '#weight' => 45,
+      '#description' => t('We will use this field to relate the add-on donation to its parent in Salesforce.'),
+    );
+
+    // Submit handler to set the value if it changes.
+    $form['#submit'][] = 'fundraiser_tickets_salesforce_tickets_form_submit';
+  }
+}
+
+/**
+ * Submit handler to set variable
+ */
+function fundraiser_tickets_salesforce_tickets_form_submit($form, $form_state) {
+  $field_value = $form_state['values']['fr_tickets_donation_salesforce_field'];
+  $custom_fields = variable_get('fundraiser_tickets_salesforce_fields', array());
+
+  if ($field_value != '') {
+    $custom_fields[$form['#node']->nid] = $field_value;
+  }
+  else {
+    unset($custom_fields[$form['#node']->nid]);
+  }
+
+  variable_set('fundraiser_tickets_salesforce_fields', $custom_fields);
+}

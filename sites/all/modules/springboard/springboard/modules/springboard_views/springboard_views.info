@@ -1,0 +1,23 @@
+name = "Springboard Views"
+description = "Adds views integration for Springboard."
+package = "Jackson River Springboard"
+
+core = 7.x
+version = 7.x-4.x-dev
+
+dependencies[] = "aggregator"
+dependencies[] = "views"
+dependencies[] = "date"
+dependencies[] = "date_api"
+dependencies[] = "date_popup"
+dependencies[] = "date_views"
+dependencies[] = "views_bulk_operations"
+dependencies[] = "views_data_export"
+dependencies[] = "views_watchdog"
+
+files[] = springboard_views.views.inc
+files[] = handlers/fundraiser_handler_field_donation_amounts.inc
+files[] = handlers/queue_api_handler_field_batch_id.inc
+files[] = handlers/springboard_webform_hidden_component_values.inc
+files[] = handlers/fundraiser_handler_filter_fundraiser_gateways.inc
+files[] = tests/springboard_views.test

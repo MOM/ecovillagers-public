@@ -1,0 +1,10 @@
+name = Springboard Social Action
+description = Send targeted social media messages to elected officials or other custom targets.
+core = 7.x
+package = Springboard Advocacy
+dependencies[] = webform_user
+dependencies[] = sba_message
+dependencies[] = springboard_target
+dependencies[] = oauth_common
+dependencies[] = encrypt
+dependencies[] = springboard_taxonomy

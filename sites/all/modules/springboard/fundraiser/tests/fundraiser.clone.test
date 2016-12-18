@@ -1,0 +1,155 @@
+<?php
+/**
+ * @file
+ * Fundraiser clone tests. Ensures cloning donation forms works as expected.
+ */
+
+/**
+ * Fundraiser cloning test class.
+ */
+class FundraiserCloneTest extends FundraiserSetup {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser clone',
+      'description' => 'Tests donation form cloning behaviors.',
+      'group' => 'Fundraiser',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($additional_modules = array()) {
+    parent::setUp(array('clone', 'webform_confirmations'));
+    // Make sure the new permissions for the content type get added to the permission cache.
+    $this->checkPermissions(array('create donation_form content'), TRUE);
+
+    // Set node clone's clone method to save-edit. This will throw up the confirmation page.
+    variable_set('clone_method', 'save-edit');
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Tests that the user map clones correctly.
+   */
+  public function testFundraiserCloneMap() {
+    $cloned_node = $this->fundraiserCloneNode();
+
+    // User maps verification.
+    $original_result = db_query('SELECT * FROM {webform_user_component_map} WHERE nid = :nid', array(':nid' => 1));
+    $cloned_result = db_query('SELECT * FROM {webform_user_component_map} WHERE nid = :nid', array(':nid' => 2));
+
+    $map_ids = array();
+    foreach ($cloned_result as $result) {
+      $map_ids[] = $result->map_id;
+    }
+
+    // Ensure the map_ids are the same in both maps (cids will be different).
+    foreach ($original_result as $result) {
+      $this->assertTrue(in_array($result->map_id, $map_ids), 'Profile field ' . $result->map_id . ' cloned correctly to new form.');
+    }
+  }
+
+  /**
+   * Tests that form components clone correclty. Really a function of the webform
+   * module but checking here just for fun.
+   */
+  public function testFundraiesrCloneComponents() {
+    $cloned_node = $this->fundraiserCloneNode();
+
+    // Check webform components.
+    $original_result = db_query('SELECT form_key, name, type FROM {webform_component} WHERE nid = :nid', array(':nid' => 1));
+    $cloned_result = db_query('SELECT form_key, name, type FROM {webform_component} WHERE nid = :nid', array(':nid' => 2));
+
+    $cloned_components = array();
+    foreach ($cloned_result as $result) {
+      $cloned_components[$result->form_key] = array(
+        'name' => $result->name,
+        'type' => $result->type,
+      );
+    }
+
+    // Ensure that all components are accounted for.
+    foreach ($original_result as $result) {
+      $this->assertTrue(array_key_exists($result->form_key, $cloned_components), 'Component with form key ' . $result->form_key . ' cloned correctly to new form.');
+    }
+  }
+
+  /**
+   * Ensures the confirmation page title clones correclty when webform_confirmations
+   * module is enabled.
+   */
+  public function testFundraierCloneConfirmationPage() {
+    $cloned_node = $this->fundraiserCloneNode();
+
+    // Check the page title of confirmation page for cloned node.
+    $result = db_query("SELECT confirmation_page_title FROM {webform_confirmations} WHERE nid = :nid", array(':nid' => 2));
+    $this->assertEqual('Custom thank you page title', $result->fetchObject()->confirmation_page_title, 'Confirmation page title cloned correctly.');
+  }
+
+  /**
+   * Tests that fundraiser specific data clones correctly.
+   */
+  public function testFundraiserCloneFundraiser() {
+    $cloned_node = $this->fundraiserCloneNode();
+
+    // General fundraiser configuration
+    $original = db_query('SELECT * FROM {fundraiser} WHERE nid = :nid', array(':nid' => 1))->fetchAssoc();
+    $cloned_data = db_query('SELECT * FROM {fundraiser} WHERE nid = :nid', array(':nid' => 2))->fetchAssoc();
+
+    // Compute a diff of the original and clone for comparison.
+    $clone_diff = array_diff($cloned_data, $original);
+    // The only things that should be different are ask amounts (known issue with webform)
+    //$this->assertTrue(array_key_exists('donation_amounts', $clone_diff), 'Donation amounts contains contains an extra value for other.');
+
+  }
+
+  /**
+   * Clones a donation form and returns the new node.
+   */
+  protected function fundraiserCloneNode() {
+    // create a user with cloning permissions
+    $user = $this->createFundraiserUser(array('clone donation form', 'clone node', 'clone own nodes', 'create donation form', 'create donation_form content', 'edit own donation_form content', 'edit any donation form'));
+
+    // Create a node to clone.
+    $node = $this->createDonationForm(array('uid' => $user->uid));
+
+    // Add a custom title to the confirmation page (this is cheating a bit).
+    db_update('webform_confirmations')
+    ->fields(array(
+      'confirmation_page_title' => 'Custom thank you page title',
+    ))
+    ->condition('nid', $node->nid, '=')
+    ->execute();
+
+    $this->drupalLogin($user);
+
+    $this->drupalGet('node/1');
+
+    // Click the clone link
+    $this->clickLink('Clone content');
+
+    // Make sure the confirmation form is displayed to the user.
+    $this->assertText('Are you sure you want to clone', 'The clone confirmation form is displayed.');
+
+    // Submit the confirmation form.
+    $this->drupalPost('node/1/clone', NULL, 'Clone');
+
+    // Assert that the cloned form is rendered in the node edit form.
+    $this->assertText('Edit Donation Form Clone of Test Donation Form', 'Donation form has been cloned and is rendered in a node edit form.');
+
+    // Return the cloned node.
+    return node_load(2);
+  }
+
+}

@@ -1,0 +1,7 @@
+
+TO DO LIST FOR FUTURE DEVELOPMENT
+---------------------------------
+
+1) Move away from using drupal_form_submit() to create the donations.
+  This may requires fundraiser to have a donation creation function
+  that may be called directly from this module.

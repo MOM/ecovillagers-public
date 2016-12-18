@@ -1,0 +1,624 @@
+<?php
+/**
+ * @file
+ * Provide options for form layouts in webforms.
+ */
+
+/**
+ * Implements hook_theme().
+ *
+ * Add a theme function for each template found.
+ */
+function form_layouts_theme($existing, $type, $theme, $path) {
+  $templates = form_layouts_info();
+  $theme = array();
+  foreach ($templates as $template) {
+    $theme[$template['theme']] = array(
+      'render element' => 'element',
+      'template' => $template['template'],
+      'path' => isset($template['path']) ? $template['path'] : $path . '/templates/',
+      'pattern' => $template['pattern'],
+    );
+  }
+  return $theme;
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter() for node_form().
+ *
+ * Adds a form layout select field to node add/edit forms where form layouts
+ * are enabled..
+ */
+function form_layouts_form_node_form_alter(&$form, &$form_state, $form_id) {
+  if (isset($form['#node']) && form_layouts_type_is_layouts_enabled($form['#node']->type)) {
+    // Share the "Display" fieldset with related modules (e.g., Page Wrappers).
+    if (empty($form['springboard_display'])) {
+      $form['springboard_display'] = array(
+          '#type' => 'fieldset',
+          '#title' => t('Display settings'),
+          '#collapsible' => TRUE,
+          '#collapsed' => FALSE,
+          '#group' => 'additional_settings',
+      );
+    }
+
+    $templates = form_layouts_info();
+
+    // Different layouts support fundraiser types or petiton types or general
+    // webform types.
+    $fundraiser_enabled = fundraiser_is_donation_type($form['#node']->type);
+
+    if (module_exists('springboard_petition')) {
+      $petition_enabled = springboard_petition_is_petition_type($form['#node']->type);
+    }
+    else {
+      $petition_enabled = FALSE;
+    }
+
+    if (module_exists('springboard_advocacy')) {
+      $advocacy_enabled = springboard_advocacy_is_action_type($form['#node']->type);
+    }
+    else {
+      $advocacy_enabled = FALSE;
+    }
+
+    $options = array();
+    foreach ($templates as $template) {
+      // Only show compatible layouts.
+      if (form_layouts_options_should_include_template_type($template['types'], $fundraiser_enabled, $petition_enabled, $advocacy_enabled)) {
+        $options[$template['theme']] = $template['name'];
+      }
+    }
+
+    $template = isset($form['nid']['#value']) ? form_layouts_get_node_template($form['nid']['#value']) : array();
+    $theme = '';
+    if (!empty($template)) {
+      $theme = $template['theme'];
+    }
+    $form['springboard_display']['form_layouts'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Form layout settings'),
+      '#description' => t('Select the form layout for this content. Defaults to one-column layout.'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+    );
+    $form['springboard_display']['form_layouts']['form_layouts'] = array(
+      '#type' => 'select',
+      '#title' => t('Form layout'),
+      '#options' => $options,
+      '#default_value' => $theme,
+      '#weight' => -4,
+    );
+  }
+}
+
+/**
+ * Determine if a layout should be displayed as an option on the node form.
+ *
+ * @param array $template_types
+ *   The types supported by the template.
+ *   For example, 'webform', 'petition', 'fundraiser'.
+ * @param bool $fundraiser_enabled
+ *   Whether the content type is fundraiser enabled.
+ * @param bool $petition_enabled
+ *   Whether the content type is petition enabled.
+ *
+ * @return bool
+ *   TRUE if this template type should be displayed in the list of
+ *   layout options.
+ */
+function form_layouts_options_should_include_template_type($template_types, $fundraiser_enabled, $petition_enabled, $advocacy_enabled) {
+  if ($fundraiser_enabled && in_array('fundraiser', $template_types)) {
+    return TRUE;
+  }
+  elseif ($petition_enabled && in_array('petition', $template_types)) {
+    return TRUE;
+  }
+  elseif ($advocacy_enabled && in_array($advocacy_enabled, $template_types)) {
+    return TRUE;
+  }
+  elseif (!$fundraiser_enabled && !$petition_enabled && !$advocacy_enabled && in_array('webform', $template_types)) {
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * Implements hook_node_load().
+ *
+ * Make sure the layout gets loaded.
+ */
+function form_layouts_node_load($nodes, $types) {
+  foreach ($nodes as $nid => $node) {
+    if (form_layouts_type_is_layouts_enabled($node->type)) {
+      $template = form_layouts_get_node_template($nid);
+      $nodes[$nid]->form_layouts = $template['theme'];
+    }
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function form_layouts_node_insert($node) {
+  form_layouts_node_update($node);
+}
+
+/**
+ * Implements hook_node_update().
+ *
+ * Save the layout name to the DB table.
+ */
+function form_layouts_node_update($node) {
+  if (form_layouts_type_is_layouts_enabled($node->type) && isset($node->form_layouts)) {
+
+    $layout = new FormLayout($node->nid);
+    if (!is_null($layout->getNid())) {
+      $layout->update($node->form_layouts);
+    }
+    else {
+      $layout->create($node->nid, $node->form_layouts);
+    }
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function form_layouts_node_delete($node) {
+  $layout = new FormLayout($node->nid);
+  $layout->delete();
+}
+
+/**
+ * Implements hook_node_view().
+ *
+ * If we have a general webform or petition layout, change the node theme.
+ * Otherwise it's a fundraiser only layout and so change the webform theme.
+ */
+function form_layouts_node_view($node, $view_mode, $langcode) {
+
+  if (form_layouts_type_is_layouts_enabled($node->type) && isset($node->form_layouts)) {
+    $template = form_layouts_get_node_template($node->nid);
+
+    if (!isset($template['template']) || $template['template'] == 'one-column' || form_layouts_template_themes_webform($template)) {
+      // Don't do anything on donation forms for one column.
+      // Or if we're theming the webform do that in the form alter
+      // instead of here.
+      return;
+    }
+    else {
+      // Otherwise we are theming the entire node.
+      $node->content['#theme'] = $node->form_layouts;
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for webform_client forms.
+ */
+function form_layouts_form_webform_client_form_alter(&$form, &$form_state, $form_id) {
+  if (form_layouts_type_is_layouts_enabled($form['#node']->type) && isset($form['#node']->form_layouts) && arg(2) != 'submission') {
+    $nid = $form['#node']->nid;
+    $template = form_layouts_get_node_template($nid);
+
+    if (form_layouts_template_themes_webform($template)) {
+      $form['#theme'] = array($template['theme'] . '_' . $nid, $template['theme']);
+      $form['#attributes']['class'][] = 'form-layouts';
+      $form['#attributes']['class'][] = $template['template'];
+    }
+  }
+}
+
+/**
+ * Implements hook_form_layouts_info().
+ *
+ * Adds some basic form layouts for fundraiser enabled types, petition enabled
+ * types, and generic webforms.
+ */
+function form_layouts_form_layouts_info() {
+  $templates = array();
+
+  // One column is a special case and doesn't change anything,
+  // except for the hide title setting.
+  $templates['one_column'] = array(
+    'name' => t('One column'),
+    'types' => array('fundraiser'),
+    'theme' => 'one_column',
+    'pattern' => 'one_column_\'0-9\'+',
+    'template' => 'one-column',
+    'path' => drupal_get_path('module', 'form_layouts') . '/templates',
+    'hide title' => FALSE,
+  );
+
+  $templates['two_column_donation'] = array(
+    'name' => t('Two column: donation form'),
+    'types' => array('fundraiser'),
+    'theme' => 'two_column_donation',
+    'pattern' => 'two_column_donation_\'0-9\'+',
+    'template' => 'two-column-donation',
+    'path' => drupal_get_path('module', 'form_layouts') . '/templates',
+    'hide title' => FALSE,
+  );
+
+  $templates['two_column_webform_form_left'] = array(
+    'name' => t('Two column: webform with the form on the left'),
+    'types' => array('webform'),
+    'theme' => 'two_column_webform_form_left',
+    'pattern' => 'two_column_webform_form_left_\'0-9\'+',
+    'template' => 'two-column-webform-form-left',
+    'path' => drupal_get_path('module', 'form_layouts') . '/templates',
+    'hide title' => TRUE,
+  );
+
+  $templates['two_column_webform_form_right'] = array(
+    'name' => t('Two column: webform with the form on the right'),
+    'types' => array('webform'),
+    'theme' => 'two_column_webform_form_right',
+    'pattern' => 'two_column_webform_form_right_\'0-9\'+',
+    'template' => 'two-column-webform-form-right',
+    'path' => drupal_get_path('module', 'form_layouts') . '/templates',
+    'hide title' => TRUE,
+  );
+
+  $templates['one_column_webform_form_top'] = array(
+    'name' => t('One column: webform with the form on the top'),
+    'types' => array('webform'),
+    'theme' => 'one_column_webform_form_top',
+    'pattern' => 'one_column_webform_form_top_\'0-9\'+',
+    'template' => 'one-column-webform-form-top',
+    'path' => drupal_get_path('module', 'form_layouts') . '/templates',
+    'hide title' => TRUE,
+  );
+
+  $templates['two_column_hybrid_donation'] = array(
+    'name' => t('Hybrid two column: donation form'),
+    'types' => array('fundraiser'),
+    'theme' => 'two_column_hybrid_donation',
+    'pattern' => 'two_column_hybrid_donation_\'0-9\'+',
+    'template' => 'two-column-hybrid-donation',
+    'path' => drupal_get_path('module', 'form_layouts') . '/templates/',
+    'hide title' => FALSE,
+  );
+
+  if (module_exists('springboard_petition')) {
+    $templates = array_merge(_springboard_petition_get_form_layouts_templates(), $templates);
+  }
+
+  $templates['two_column_left_right'] = array(
+    'name' => t('Two column: left-right fieldsets'),
+    'types' => array('fundraiser'),
+    'theme' => 'two_column_left_right',
+    'pattern' => 'two_column_left_right_\'0-9\'+',
+    'template' => 'two-column-left-right',
+    'path' => drupal_get_path('module', 'form_layouts') . '/templates/',
+    'hide title' => FALSE,
+  );
+
+  return $templates;
+}
+
+/**
+ * Returns the template array that contains which layout the webform uses.
+ *
+ * @param int $nid
+ *   The node id for the template to look up.
+ *
+ * @return bool|array
+ *   The form layout template array, or FALSE.
+ */
+function form_layouts_get_node_template($nid) {
+  $layout = new FormLayout($nid);
+  $theme = $layout->getName();
+  return form_layouts_get_node_template_by_name($theme);
+}
+
+/**
+ * Returns the template array given a template name.
+ *
+ * @param string $name
+ *   The name of the template, as returned by FormLayout::getName().
+ *
+ * @return bool|array
+ *   The form layout template array, or FALSE;
+ */
+function form_layouts_get_node_template_by_name($name) {
+  $templates = form_layouts_info();
+
+  return isset($templates[$name]) ? $templates[$name] : FALSE;
+}
+
+/**
+ * Returns a list of available webform, fundraiser, and petition templates.
+ *
+ * @see form_layouts_form_layouts_info()
+ */
+function form_layouts_info() {
+  static $templates;
+  if (empty($templates)) {
+    $templates = module_invoke_all('form_layouts_info');
+    drupal_alter('form_layouts_info', $templates);
+  }
+
+  return $templates;
+}
+
+/**
+ * Implements hook_preprocess_HOOK() for two-column-left-right.tpl.php.
+ */
+function form_layouts_preprocess_two_column_left_right(&$vars) {
+  form_layouts_fundraiser_preprocess($vars);
+}
+
+/**
+ * Implements hook_preprocess_HOOK() for two-column-donation.tpl.php.
+ */
+function form_layouts_preprocess_two_column_donation(&$vars) {
+  form_layouts_fundraiser_preprocess($vars);
+}
+
+/**
+ * Implements hook_preprocess_HOOK() for two-column-hybrid-donation.tpl.php.
+ */
+function form_layouts_preprocess_two_column_hybrid_donation(&$vars) {
+  form_layouts_fundraiser_preprocess($vars);
+}
+
+/**
+ * Preprocess function that breaks a fundraiser form into its fieldsets.
+ */
+function form_layouts_fundraiser_preprocess(&$vars) {
+
+  // Initialize the fieldsets with an empty string so the template won't
+  // complain if one of the fieldsets doesn't exist.
+  $fieldsets = array(
+    'donation_fieldset',
+    'donor_information_fieldset',
+    'billing_information_fieldset',
+    'payment_information_fieldset',
+    'tribute_fieldset',
+    );
+  foreach ($fieldsets as $key) {
+    $vars[$key] = '';
+  }
+
+  if (isset($vars['element']['submitted']['donation'])) {
+    $vars['donation_fieldset'] = drupal_render($vars['element']['submitted']['donation']);
+  }
+
+  if (isset($vars['element']['submitted']['donor_information'])) {
+    $vars['donor_information_fieldset'] = drupal_render($vars['element']['submitted']['donor_information']);
+  }
+
+  if (isset($vars['element']['submitted']['billing_information'])) {
+    $vars['billing_information_fieldset'] = drupal_render($vars['element']['submitted']['billing_information']);
+  }
+
+  if (isset($vars['element']['submitted']['payment_information'])) {
+    $vars['payment_information_fieldset'] = drupal_render($vars['element']['submitted']['payment_information']);
+  }
+
+  if (isset($vars['element']['submitted']['tribute_information'])) {
+    $vars['tribute_fieldset'] = drupal_render($vars['element']['submitted']['tribute_information']);
+  }
+
+  // Place in a location the end template can pick up.
+  $vars['form'] = $vars['element'];
+
+}
+
+/**
+ * Determines if the given content type is enabled for form layouts.
+ *
+ * @param int $type
+ *   The machine name of a content type.
+ *
+ * @return bool
+ *   TRUE if the content type is form layouts enabled.
+ */
+function form_layouts_type_is_layouts_enabled($type) {
+  return (bool) variable_get('form_layouts_' . $type, 0);
+}
+
+/**
+ * Determine if a template is meant to theme the webform or the entire node.
+ *
+ * @param array $template
+ *   The template array.  Just need the type.
+ *
+ * @return bool
+ *   TRUE if the template is meant to theme the webform and not the whole node.
+ */
+function form_layouts_template_themes_webform($template) {
+  if (isset($template['types']) && (in_array('fundraiser', $template['types'])
+      || in_array('sba_message_action', $template['types'])
+      || in_array('sba_social_action', $template['types']))) {
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * Implements hook_form_alter() for node_type_form().
+ *
+ * Alter content type settings to add "Enable form layouts?" checkbox.
+ */
+function form_layouts_form_node_type_form_alter(&$form, &$form_state) {
+
+  if (isset($form['type'])) {
+    $form['form_layouts'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Form layout settings'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+      '#group' => 'additional_settings',
+    );
+
+    if (!empty($form['#node_type']->type)) {
+      $default_value = form_layouts_type_is_layouts_enabled($form['#node_type']->type);
+    }
+    else {
+      $default_value = FALSE;
+    }
+
+    $form['form_layouts']['form_layouts'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Enable form layouts'),
+      '#default_value' => $default_value,
+      '#description' => t('Allow selection of predefined webform templates for this content type. If checked this content type will be webform enabled if it is not already.'),
+    );
+
+    $form['#submit'][] = 'form_layouts_form_node_type_form_submit';
+  }
+}
+
+/**
+ * Submit handler for the node type form.
+ *
+ * If form layouts are enabled, ensure webform is also enabled.
+ */
+function form_layouts_form_node_type_form_submit($form, $form_state) {
+  $type = $form_state['values']['type'];
+
+  if ($form_state['values']['form_layouts']) {
+    // Enable webform for this type if it's not enabled..
+    $webform_types = webform_variable_get('webform_node_types');
+    $webform_key = array_search($type, $webform_types);
+    if ($webform_key === FALSE) {
+      $webform_types[] = $type;
+      variable_set('webform_node_types', $webform_types);
+      drupal_set_message('Webform has been enabled for this content type.');
+    }
+  }
+}
+
+/**
+ * Implements hook_node_type_delete().
+ *
+ * Remove this node type from being form layouts enabled.
+ */
+function form_layouts_node_type_delete($info) {
+  variable_del('form_layouts_' . $info->type);
+}
+
+/**
+ * Implements hook_page_alter().
+ */
+function form_layouts_page_alter(&$page) {
+
+  // Define the module path for use below.
+  $mod_path = drupal_get_path('module', 'form_layouts');
+
+  // Global node.
+  $node = menu_get_object();
+
+  // Not admin path.
+  if ($node && !path_is_admin(current_path())) {
+    // Only if form layouts is enabled.
+    if (form_layouts_type_is_layouts_enabled($node->type)) {
+
+      // Custom form layout css.
+      $form_layouts_css = array(
+        '#attached' => array(
+          'css' => array(
+            $mod_path . '/css/form-layouts.css' => array(
+              'group' => CSS_THEME,
+              'weight' => 9999,
+            ),
+          ),
+        ),
+      );
+      drupal_render($form_layouts_css);
+    }
+  }
+
+}
+
+/**
+ * Implements hook_preprocess_page().
+ */
+function form_layouts_preprocess_page(&$vars) {
+
+  // Global node.
+  $node = menu_get_object();
+  if ($node && !path_is_admin(current_path())) {
+    // Only if form layouts is enabled and the template wants the title hidden.
+    if (form_layouts_type_is_layouts_enabled($node->type) && form_layouts_should_hide_title($node)) {
+      // Unset the page title, we set it in the form layout template.
+      $vars['title'] = '';
+    }
+  }
+
+}
+
+/**
+ * Indicates whether the node should have its title hidden.
+ *
+ * This is so a form layout can decide if it wants to handle the title on its
+ * own. This is set in the hook_form_layouts_info() implementation that
+ * describes the template.
+ *
+ * @param object $node
+ *   The node we want to know about.
+ *
+ * @return bool
+ *   TRUE if we should hide the title for this node.
+ */
+function form_layouts_should_hide_title($node) {
+  $template = array();
+  if (isset($node->form_layouts)) {
+    $template = form_layouts_get_node_template_by_name($node->form_layouts);
+  }
+
+  return isset($template['hide title']) ? $template['hide title'] : FALSE;
+}
+
+/**
+ * Implements hook_preprocess_two_column_webform_form_left().
+ */
+function form_layouts_preprocess_two_column_webform_form_left(&$vars) {
+  // Dig the title out and create a var to render it in the template.
+  $vars['element']['title'] = $vars['element']['#node']->title;
+}
+
+/**
+ * Implements hook_preprocess_two_column_webform_form_right().
+ */
+function form_layouts_preprocess_two_column_webform_form_right(&$vars) {
+  // Dig the title out and create a var to render it in the template.
+  $vars['element']['title'] = $vars['element']['#node']->title;
+}
+
+/**
+ * Implements hook_preprocess_one_column_webform_form_top().
+ */
+function form_layouts_preprocess_one_column_webform_form_top(&$vars) {
+  // Dig the title out and create a var to render it in the template.
+  $vars['element']['title'] = $vars['element']['#node']->title;
+}
+
+/**
+ * Implements hook_preprocess_two_column_petition_form_left().
+ */
+function form_layouts_preprocess_two_column_petition_form_left(&$vars) {
+  // Dig the title out and create a var to render it in the template.
+  $vars['element']['title'] = $vars['element']['#node']->title;
+}
+
+/**
+ * Implements hook_preprocess_two_column_petition_form_right().
+ */
+function form_layouts_preprocess_two_column_petition_form_right(&$vars) {
+  // Dig the title out and create a var to render it in the template.
+  $vars['element']['title'] = $vars['element']['#node']->title;
+}
+
+/**
+ * Implements hook_preprocess_one_column_petition_form_top().
+ */
+function form_layouts_preprocess_one_column_petition_form_top(&$vars) {
+  // Dig the title out and create a var to render it in the template.
+  $vars['element']['title'] = $vars['element']['#node']->title;
+}

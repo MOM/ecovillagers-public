@@ -1,0 +1,457 @@
+<?php
+
+/**
+ * @file
+ * This module provides a client cookie to identify users returning to the site even if they are not logged into Drupal.
+ */
+
+define('SPRINGBOARD_COOKIE_NAME_DEFAULT', 'Springboard');
+define('SPRINGBOARD_COOKIE_EXPIRATION_DAYS_DEFAULT', 365);
+
+/**
+ * Implementation of hook_menu().
+ */
+function springboard_cookie_menu() {
+  $items['springboard_cookie/js/new'] = array(
+    'title' => '',
+    'page callback' => 'springboard_cookie_js_new_cookie',
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['user/%/springboard_cookie'] = array(
+    'title' => 'Springboard cookie',
+    'page callback' => 'springboard_cookie_inspect',
+    'page arguments' => array(1),
+    'access callback' => 'user_access',
+    'access arguments' => array('inspect springboard cookie'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function springboard_cookie_permission() {
+  return array(
+    'inspect springboard cookie' => array(
+      'title' => t('Inspect Springboard cookie'),
+      'description' => t('Inspect the content of the Springboard cookie for the current user.'),
+    ),
+  );
+}
+
+/**
+ * Renders information stored in the current computer's
+ * Springboard cookie.
+ */
+function springboard_cookie_inspect($uid) {
+  $cookie = springboard_cookie_get_cookie();
+  $output = array();
+  
+  $output['header'] = array(
+    '#type' => 'markup',
+    '#markup' => 'Springboard cookie debug info',
+    '#prefix' => '<h2>',
+    '#suffix' => '</h2>',
+  );
+
+  $output['cookie'] = array(
+    '#type' => 'markup',
+    '#markup' => print_r($cookie, TRUE),
+    '#prefix' => '<pre>',
+    '#suffix' => '</pre>',
+  );
+
+  return $output;  
+}
+
+/**
+ * Implementation of hook_init().
+ */
+function springboard_cookie_init() {
+  // Check the query string for an encrypted email address.
+  global $user;
+  if (isset($_GET['sbck']) && empty($user->uid)) {
+    $email = secure_prepopulate_decrypt($_GET['sbck']);
+    if (!empty($email)) {
+      // Quietly create a user account for this email, if there isn't one already.
+      $account = user_load_by_mail($email);
+      if (!$account) {
+          if (module_exists('email_registration')) {
+            // Strip off everything after the @ sign.
+            $name = preg_replace('/@.*$/', '', $name);
+            $name = email_registration_cleanup_username($name);
+            $name = email_registration_unique_username($name);
+          }
+          else {
+            $name = $email;
+          }
+        $user_fields = array(
+          'name' => $name,
+          'mail' => $email,
+          'init' => $email,
+          'pass' => user_password(8),
+          'status' => 1,
+        );
+        $account = user_save('', $user_fields);
+      }
+      // Tag the email address to the client cookie.
+      springboard_cookie_tag_client(array('email' => $email, 'uid' => $account->uid));
+      // Don't cache the response.
+      drupal_page_is_cacheable(FALSE);
+    }
+  }
+
+  // Make sure this client has a cookie and a client_id.
+  if (variable_get('cache', FALSE) && drupal_page_is_cacheable()) {
+    // Page can be cached, so send Javascript to make the client check itself for the cookie.
+    drupal_add_js(
+      array(
+        'springboard_cookie' => array(
+          'name' => variable_get('springboard_cookie_name', SPRINGBOARD_COOKIE_NAME_DEFAULT),
+        ),
+      ),
+      'setting'
+    );
+    drupal_add_js(drupal_get_path('module', 'springboard_cookie') . '/js/springboard_cookie.cacheable.js');
+  }
+  else {
+    // Page caching is disabled, so we can set the cookie with any response we please.
+    springboard_cookie_tag_client();
+  }
+}
+
+/**
+ * Implementation of hook_user_login().
+ */
+function springboard_cookie_user_login(&$edit, $account) {
+  // User login gives us an email and uid, so tag the client.
+  springboard_cookie_tag_client(array(
+    'email' => $account->mail,
+    'uid' => $account->uid,
+    'last_login' => time(),
+  ));
+
+  // When a user logs in rehydrate the entire cookie.
+  springboard_cookie_add_profile_values($account);
+}
+
+/**
+ * Implements hook_fundraiser_donation_post_submit_alter().
+ */
+function springboard_cookie_fundraiser_donation_post_submit_alter(&$form, &$form_state, &$donation) {
+  // Pull user data from the new donation and tag it to the client.
+  $new_data = array();
+  if ($donation->uid) {
+    $new_data['uid'] = $donation->uid;
+  }
+  if (!empty($donation->donation['mail'])) {
+    $new_data['email'] = $donation->donation['mail'];
+  }
+
+  springboard_cookie_tag_client($new_data);
+}
+
+/**
+ * Implementation of hook_sb_social_share_event_save().
+ */
+function springboard_cookie_sb_social_share_event_save($share_data) {
+  if (!empty($share_data['share_id'])) {
+    // Tag the client with this share_id.
+    springboard_cookie_tag_client(array(
+      'share_ids' => array($share_data['share_id'])
+    ));
+  }
+}
+
+/**
+ * Implements hook_springboard_quick_donate_optin_create().
+ */
+function springboard_cookie_springboard_quick_donate_optin_create($account, $donation, $card_id) {
+  springboard_cookie_tag_client(array(
+    'quick_donate' => array(
+      'optin_date' => time(),
+      'card_id' => $card_id,
+    ),
+  ));
+}
+
+/**
+ * Implements hook_action_success().
+ */
+function springboard_cookie_action_success($node, $contact, $data, $sid) {
+  // Add advocacy information to the cookie.
+  $action_data = array(
+    'advocacy' => array(
+      'last_action_nid' => $node->nid,
+      'last_action_sid' => $sid,
+      'last_action_date' => time(),
+      'last_action_type' => $node->type,
+    ),
+  );
+
+  springboard_cookie_tag_client($action_data);
+}
+
+/**
+ * Implements hook_user_update().
+ */
+function springboard_cookie_user_update(&$edit, $account, $category) {
+  global $user;
+
+  // This should prevent the cookie from being updated with someone
+  // elses information when using the user edit feature.
+  if ($user->uid == $account->uid) {
+    springboard_cookie_add_profile_values($account);
+  }
+}
+
+/**
+ * Extracts data from the account object and adds it to the profile
+ * array in the Springboard cookie.
+ *
+ * @param $account
+ *   The user account from which to extract profile values.
+ */
+function springboard_cookie_add_profile_values($account) {
+  $profile_data = array('profile' => array());
+  try {
+    $user_wrapper = entity_metadata_wrapper('user', $account);
+    $properties = $user_wrapper->getPropertyInfo();
+    
+    if (array_key_exists('sbp_salutation', $properties)) {
+      $profile_data['profile']['salutation'] = $user_wrapper->sbp_salutation->value();
+    }
+    if (array_key_exists('sbp_first_name', $properties)) {
+      $profile_data['profile']['first_name'] = $user_wrapper->sbp_first_name->value();
+    }
+    if (array_key_exists('sbp_last_name', $properties)) {
+      $profile_data['profile']['last_name'] = $user_wrapper->sbp_last_name->value();
+    }
+    if (array_key_exists('sbp_address', $properties)) {
+      $profile_data['profile']['address'] = $user_wrapper->sbp_address->value();
+    }
+    if (array_key_exists('sbp_address_line_2', $properties)) {
+      $profile_data['profile']['address_line_2'] = $user_wrapper->sbp_address_line_2->value();
+    }
+    if (array_key_exists('sbp_city', $properties)) {
+      $profile_data['profile']['city'] = $user_wrapper->sbp_city->value();
+    }
+    if (array_key_exists('sbp_state', $properties)) {
+      $profile_data['profile']['state'] = $user_wrapper->sbp_state->value();
+    }
+    if (array_key_exists('sbp_zip', $properties)) {
+      $profile_data['profile']['zip'] = $user_wrapper->sbp_zip->value();
+    }
+    if (array_key_exists('sbp_phone', $properties)) {
+      $profile_data['profile']['phone'] = $user_wrapper->sbp_phone->value();
+    }    
+  }
+  catch (EntityMetadataWrapperException $exc) {
+    watchdog('springboard_cookie', 'Error loading user profile data into cookie for card id %uid.', array('%uid' => $account->uid), WATCHDOG_ERROR);
+  }
+
+  springboard_cookie_tag_client($profile_data);
+}
+
+/**
+ * Implmentation of hook_form_alter().
+ */
+function springboard_cookie_form_alter(&$form, &$form_state, $form_id) {
+  // Add cookie settings to the Secure Prepopulate admin form.
+  if ($form_id == 'secure_prepopulate_admin_settings') {
+    $form['springboard_cookie'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Springboard cookie settings'),
+      '#weight' => 2,
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+    );
+    $form['springboard_cookie']['springboard_cookie_name'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Cookie name'),
+      '#default_value' => variable_get('springboard_cookie_name', SPRINGBOARD_COOKIE_NAME_DEFAULT),
+      '#description' => t('This will be the name of the Springboard cookie in the client browser cache.'),
+    );
+    $form['springboard_cookie']['springboard_cookie_expiration_days'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Days to expiration'),
+      '#default_value' => variable_get('springboard_cookie_expiration_days', SPRINGBOARD_COOKIE_EXPIRATION_DAYS_DEFAULT),
+      '#description' => t('The Springboard cookie will be set to expire after this number of days.'),
+    );
+    $form['#validate'][] = 'springboard_cookie_settings_validate';
+  }
+
+  // Add submission handler to Webform User-enabled webform.
+  if (module_exists('webform_user')) {
+    if (strpos($form_id, 'webform_client') !== FALSE && arg(2) != 'submission' && arg(4) != 'edit') {
+      $node = node_load($form['#node']->nid);
+      if (_webform_user_is_webform_user_node($node)) {
+        $form['#after_build'][] = 'springboard_cookie_webform_user_webform_after_build';
+      }
+    }
+  }
+}
+
+/**
+ * Settings form validation.
+ */
+function springboard_cookie_settings_validate($form, &$form_state) {
+  // Cookie name needs to be alphanumeric.
+  if (!preg_match("|^[a-zA-Z0-9_\\.]+\$|", $form_state['values']['springboard_cookie_name'])) {
+    form_set_error('springboard_cookie_name', t('Springboard cookie name must be alphanumeric.'));
+  }
+  $expiration_days = (float)$form_state['values']['springboard_cookie_expiration_days'];
+  if (!is_numeric($form_state['values']['springboard_cookie_expiration_days']) || $expiration_days < 0 || (int)$expiration_days != $expiration_days) {
+    form_set_error('springboard_cookie_expiration_days', t('Springboard cookie days to expiration must be an integer greater than zero.'));
+  }
+}
+
+/**
+ * Webform User-enabled webform after-build.
+ */
+function springboard_cookie_webform_user_webform_after_build($form, $form_state) {
+  // Add our submit handler. This way it will go last.
+  $form['#submit'][] = 'springboard_cookie_webform_user_webform_submit';
+  return $form;
+}
+
+/**
+ * Webform User-enabled webform submission.
+ */
+function springboard_cookie_webform_user_webform_submit($form, &$form_state) {
+  $node = node_load($form_state['values']['details']['nid']);
+  $submit_op = empty($node->webform['submit_text']) ? t('Submit') : $node->webform['submit_text'];
+  // Is the form completed?
+  if ($form_state['values']['op'] == $submit_op) {
+    // Tag the client cookie with the submitted email address and with the uid if there's a user account.
+    $fields = _webform_user_flatten_tree($form_state['values']['submitted_tree'], $node->nid);
+    $email = trim($fields['mail']);
+    $new_data = array('email' => $email);
+    if ($account = user_load_by_mail($email)) {
+      $new_data['uid'] = $account->uid;
+    }
+    springboard_cookie_tag_client($new_data);
+  }
+}
+
+/**
+ * Javascript callback: Send a new cookie via AJAX.
+ */
+function springboard_cookie_js_new_cookie() {
+  // Generate, serialize, and encrypt a new cookie.
+  springboard_cookie_tag_client();
+  $cookie = springboard_cookie_get_cookie();
+  $serialized = serialize($cookie);
+  $encrypted = secure_prepopulate_encrypt($serialized);
+
+  // Send it back as JSON.
+  drupal_json_output(array(
+    'cookie' => $encrypted,
+    'expires' => variable_get('springboard_cookie_expiration_days', SPRINGBOARD_COOKIE_EXPIRATION_DAYS_DEFAULT),
+    'path' => ini_get('session.cookie_path'),
+  ));
+  exit;
+}
+
+/**
+ * Tag the client with Springboard cookie data.
+ *
+ * If the client doesn't have a Springboard cookie, one will be created, including a client ID.
+ *
+ * @param array $new_data
+ *   An array of name/value pairs. If a string or numeric value contradicts the existing value for a
+ *   given name, then the existing cookie will be thrown out and this data will go into a new cookie
+ *   with a new client_id. For an array value, its unique contents will be added to any existing array
+ *   of the same name (and duplicate values will be ignored).
+ */
+function springboard_cookie_tag_client($new_data = array()) {
+  $extant_cookie = $new_cookie = springboard_cookie_get_cookie();
+  foreach ($new_data as $name => $value) {
+    if (isset($new_cookie[$name])) {
+      if (is_array($new_cookie[$name]) && is_array($new_data[$name])) {
+        // If the existing and new values are arrays, simply combine them.
+        $new_cookie[$name] = array_unique(array_merge($new_cookie[$name], $new_data[$name]));
+      }
+      elseif (strtolower($new_cookie[$name]) != strtolower($new_data[$name])) {  // Non-case-sensitive comparison.
+        // New data doesn't match data already in the client's cookie, so throw out the old cookie data and start fresh.
+        $new_cookie = $new_data;
+        break;
+      }
+    }
+    else {
+      // Add new data to the cookie.
+      $new_cookie[$name] = $new_data[$name];
+    }
+  }
+  // Make sure the cookie has a client ID.
+  if (!isset($new_cookie['client_id'])) {
+    $new_cookie['client_id'] = uniqid();
+  }
+  // Is the new cookie data different from what the client already has?
+  if ($extant_cookie != $new_cookie) {
+    // Send the new cookie to the client.
+    springboard_cookie_set_cookie($new_cookie);
+    // If we're getting a uid on this cookie the first time, then release the hounds.
+    if (!empty($new_cookie['uid']) && empty($extant_cookie['uid'])) {
+      module_invoke_all('springboard_cookie_uid', $new_cookie);
+    }
+  }
+}
+
+/**
+ * Fetch the Springboard cookie, decrypt, and return data.
+ *
+ * @return array $cookie_data
+ *   An array of name/value pairs from the client cookie. Includes data added during execution of the
+ *   current page request.
+ */
+function springboard_cookie_get_cookie() {
+  // Static-persist the cookie's data if/when it is set.
+  $cookie_data = &drupal_static(__FUNCTION__);
+
+  // First time? Look for the cookie.
+  if ($cookie_data === NULL) {
+    $cookie_data = array();
+    $cookie_name = variable_get('springboard_cookie_name', SPRINGBOARD_COOKIE_NAME_DEFAULT);
+    if (isset($_COOKIE[$cookie_name]) && !empty($_COOKIE[$cookie_name])) {
+      // Attempt to decrypt and deserialize
+      $decrypted = secure_prepopulate_decrypt($_COOKIE[$cookie_name]);
+      if (!empty($decrypted)) {
+        // Unserialize and make sure we got an array.
+        $unserialized = unserialize($decrypted);
+        if (is_array($unserialized)) {
+          $cookie_data = $unserialized;
+        } else {
+          watchdog('Springboard cookie', t("Springboard cookie didn't unserialize to an array: %data", array('%data' => $decrypted)));
+        }
+      }
+    }
+  }
+
+  // Return the cookie data.
+  return $cookie_data;
+}
+
+/**
+ * Set the Springboard cookie, encrypting the given data array and adding it to the HTTP response.
+ *
+ * Note: If you're trying to add data to the cookie, what you want is springboard_cookie_tag_client().
+ *
+ * @see springboard_cookie_tag_client()
+ */
+function springboard_cookie_set_cookie($cookie_data) {
+  // Update the getter's static cache.
+  $static_cache = &drupal_static('springboard_cookie_get_cookie');
+  $static_cache = $cookie_data;
+
+  // Serialize, encrypt, and add to the response.
+  $serialized = serialize($cookie_data);
+  $encrypted = secure_prepopulate_encrypt($serialized);
+  $cookie_name = variable_get('springboard_cookie_name', SPRINGBOARD_COOKIE_NAME_DEFAULT);
+  $expiration_days = variable_get('springboard_cookie_expiration_days', SPRINGBOARD_COOKIE_EXPIRATION_DAYS_DEFAULT);
+  setcookie($cookie_name, $encrypted, time() + 60 * 60 * 24 * $expiration_days, ini_get('session.cookie_path'));
+}

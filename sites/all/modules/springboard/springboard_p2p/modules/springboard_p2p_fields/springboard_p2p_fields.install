@@ -1,0 +1,150 @@
+<?php
+
+/**
+ * @file
+ * Install, uninstall, and schema definition for Springboard P2P fields.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function springboard_p2p_fields_schema() {
+  $schema = array();
+
+  $schema['springboard_p2p_fields_campaign_goals'] = array(
+    'description' => 'Campaign goals.',
+    'fields' => array(
+      'goal_set_id' => array(
+        'description' => 'The set of campaign goals that this goal belons to.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'The {node_type}.type.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'enabled' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+        'description' => 'Form type enabled status. (1 = enabled, 0 = disabled)',
+      ),
+      'nid' => array(
+        'description' => 'The {node}.nid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'campaign_id' => array(
+        'description' => 'The Salesforce campaign ID.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'goal_type' => array(
+        'description' => 'The goal type.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'goal_value' => array(
+        'description' => 'The goal value.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+        'unsigned' => TRUE,
+      ),
+    ),
+    'primary key' => array('goal_set_id', 'type'),
+    'foreign keys' => array(
+      'goal_node' => array(
+        'table' => 'node',
+        'columns' => array('nid' => 'nid'),
+      ),
+      'goal_node_type' => array(
+        'table' => 'node_type',
+        'columns' => array('type' => 'type'),
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_field_schema().
+ */
+function springboard_p2p_fields_field_schema($field) {
+  $schema = array();
+
+  switch ($field['type']) {
+    case 'springboard_p2p_fields_campaign_goals':
+      $schema = springboard_p2p_fields_campaign_goals_schema();
+      break;
+
+    case 'springboard_p2p_fields_personal_campaign_progress':
+      $schema = springboard_p2p_fields_personal_campaign_progress_schema();
+      break;
+
+  }
+
+  return $schema;
+}
+
+/**
+ * Schema definition for the campaign goals picker.
+ */
+function springboard_p2p_fields_personal_campaign_progress_schema() {
+
+  return array(
+    'columns' => array(
+      'amount' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'description' => 'The donation amount attributed to this personal campaign.',
+        'default' => 0,
+      ),
+      'submissions' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'description' => 'The number of submissions attributed to this personal campaign.',
+        'default' => 0,
+      ),
+    ),
+  );
+}
+
+/**
+ * Schema definition for the campaign goals picker.
+ */
+function springboard_p2p_fields_campaign_goals_schema() {
+
+  return array(
+    'columns' => array(
+      'goal_set_id' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+      ),
+    ),
+    'indexes' => array(
+      'goal_set_id' => array('goal_set_id'),
+    ),
+    'foreign keys' => array(
+      'goal_set_id' => array(
+        'table' => 'springboard_p2p_fields_campaign_goals',
+        'columns' => array('goal_set_id' => 'goal_set_id'),
+      ),
+    ),
+  );
+}

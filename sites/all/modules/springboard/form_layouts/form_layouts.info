@@ -1,0 +1,8 @@
+name = Form Layouts
+description = Provides layouts for webform enabled forms (1 column, 2 column, etc.)
+core = 7.x
+package = Jackson River Springboard - extras
+dependencies[] = webform
+dependencies[] = fundraiser
+version = 7.x-4.x-dev
+files[] = FormLayout.class.php

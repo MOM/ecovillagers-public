@@ -1,0 +1,576 @@
+<?php
+
+/**
+ * @file
+ * Core & contrib hooks.
+ */
+
+/**
+ * Implements hook_init().
+ *
+ * Add support for CORS headers.
+ */
+function springboard_api_init() {
+  if (variable_get('springboard_api_enable_cors', FALSE)) {
+    $method = $_SERVER['REQUEST_METHOD'];
+    if (isset($_SERVER['HTTP_ORIGIN'])) {
+      drupal_add_http_header('Access-Control-Allow-Origin', $_SERVER['HTTP_ORIGIN']);
+    }
+    if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS'])) {
+      drupal_add_http_header('Access-Control-Allow-Headers', $_SERVER['HTTP_ACCESS_CONTROL_REQUEST_HEADERS']);
+    }
+    if (isset($_SERVER['HTTP_ACCESS_CONTROL_REQUEST_METHOD'])) {
+      drupal_add_http_header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    }
+    if ($method == 'OPTIONS') {
+      exit;
+    }
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function springboard_api_permission() {
+  return array(
+    'administer springboard api' => array(
+      'title' => t('Administer Springboard API'),
+      'description' => t('Perform administration tasks for Springboard API.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_api_menu() {
+  $items = array();
+  $items['admin/config/services/springboard_api'] = array(
+    'title' => 'Springboard API',
+    'description' => 'Configure Springboard API settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_api_admin_settings'),
+    'access arguments' => array('administer springboard api'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'includes/springboard_api.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_services_resources().
+ */
+function springboard_api_services_resources() {
+  $resource = array(
+    // future development.
+    /*'springboard-donation' => array(
+      'operations' => array(
+        'create' => array(
+          'help' => 'Create a donation',
+          'file' => array(
+            'type' => 'inc',
+            'module' => 'springboard_api',
+            'name' => 'resources/springboard_api.donation_resources',
+          ),
+          'callback' => 'springboard_api_donation_resource_create',
+          'args' => array(
+            array(
+              'name' => 'donation',
+              'optional' => FALSE,
+              'source' => 'data',
+              'description' => 'The node data to create',
+              'type' => 'array',
+            ),
+          ),
+          'access callback' => 'springboard_api_donation_resource_access',
+          'access arguments' => array('create'),
+          'access arguments append' => TRUE,
+        ),
+      ),
+    ),*/
+    'springboard-forms' => array(
+      'operations' => array(
+        'retrieve' => array(
+          'help' => 'Retrieve detailed information about a specific form.',
+          'file' => array(
+            'type' => 'inc',
+            'module' => 'springboard_api',
+            'name' => 'resources/springboard_api.form_resources',
+          ),
+          'callback' => 'springboard_api_form_resource_retrieve',
+          'access callback' => 'springboard_api_form_resource_access',
+          'access arguments' => array('retrieve'),
+          'access arguments append' => TRUE,
+          'args' => array(
+            array(
+              'form_id' => 'nid',
+              'optional' => FALSE,
+              'source' => array('path' => 0),
+              'type' => 'int',
+              'description' => 'The node id of the form to get',
+            ),
+            // Future development.
+            /*
+            array(
+              'name' => 'op',
+              'type' => 'array',
+              'description' => '',
+              'source' => array('param' => 'op'),
+              'optional' => TRUE,
+              'default value' => array(),
+            ),*/
+            array(
+              'name'         => 'api_key',
+              'type'         => 'string',
+              'description'  => t('API key.'),
+              'source'       => array('param' => 'api_key'),
+              'optional'     => TRUE,
+              'default value' => NULL,
+            ),
+          ),
+        ),
+        'index' => array(
+          'help' => 'List avaialble forms',
+          'file' => array(
+            'type' => 'inc',
+            'module' => 'springboard_api',
+            'name' => 'resources/springboard_api.form_resources',
+          ),
+          'callback' => 'springboard_api_form_resource_index',
+          'access callback' => 'springboard_api_form_resource_access',
+          'access arguments' => array('index'),
+          'access arguments append' => TRUE,
+          'args' => array(
+            array(
+              'name'         => 'node_type',
+              'type'         => 'int',
+              'description'  => t('filter index values by the following node type.'),
+              'source'       => array('param' => 'node_type'),
+              'optional'     => TRUE,
+            ),
+            array(
+              'name'         => 'api_key',
+              'type'         => 'string',
+              'description'  => t('API key.'),
+              'source'       => array('param' => 'api_key'),
+              'optional'     => TRUE,
+              'default value' => NULL,
+            ),
+          ),
+        ),
+      ),
+      'actions' => array(
+        'submit' => array(
+          'help' => 'Submit a webform via the API',
+          'file' => array(
+            'type' => 'inc',
+            'module' => 'springboard_api',
+            'name' => 'resources/springboard_api.form_resources',
+          ),
+          'callback' => 'springboard_api_form_action_submit',
+          'access callback' => 'springboard_api_form_resource_access',
+          'access arguments' => array('submit'),
+          'access arguments append' => TRUE,
+          'args' => array(
+            array(
+              'name'         => 'nid',
+              'type'         => 'int',
+              'description'  => t('node id of the form to submit.'),
+              'source'       => array('param' => 'form_id'),
+              'optional'     => FALSE,
+            ),
+            array(
+              'name'         => 'api_key',
+              'type'         => 'string',
+              'description'  => t('API key.'),
+              'source'       => array('param' => 'api_key'),
+              'optional'     => TRUE,
+              'default value' => NULL,
+            ),
+            array(
+              'name' => 'submission',
+              'optional' => FALSE,
+              'source' => 'data',
+              'description' => 'Weform submission data.',
+              'type' => 'array',
+            ),
+          ),
+        ),
+        // Future development.
+     /* 'render' => array(
+          'help' => 'request a rendered form',
+          'file' => array(
+            'type' => 'inc',
+            'module' => 'springboard_api',
+            'name' => 'resources/springboard_api.form_resources',
+          ),
+          'callback' => 'springboard_api_form_action_render',
+          'access callback' => 'springboard_api_form_resource_access',
+          'access arguments' => array('render'),
+          'access arguments append' => TRUE,
+          'args' => array(
+            array(
+              'name' => 'nid',
+              'optional' => FALSE,
+              'source' => array('path' => 0),
+              'type' => 'int',
+              'description' => 'The node id of the webform to submit.',
+            ),
+            array(
+              'name' => 'wrapper',
+              'optional' => TRUE
+              'source' => 'data',
+              'description' => 'page wrapper id.',
+              'type' => 'array',
+            ),
+            array(
+              'name'         => 'api_key',
+              'type'         => 'string',
+              'description'  => t('API key.'),
+              'source'       => array('param' => 'app_id'),
+              'optional'     => TRUE,
+            ),
+          ),
+        ),*/
+      ),
+    ),
+  );
+  return $resource;
+}
+
+/**
+ * Implements hook_ctools_plugin_directory().
+ */
+function springboard_api_ctools_plugin_directory($owner, $plugin_type) {
+  if ($owner = 'springboard_api') {
+    return "plugins/$plugin_type";
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_type().
+ */
+function springboard_api_ctools_plugin_type() {
+  $plugins['api_management_services'] = array(
+    'load themes' => TRUE,
+  );
+
+  return $plugins;
+}
+
+/**
+ * List available service management plugins.
+ */
+function springboard_api_list_management_services() {
+  $services = array();
+  $plugins = springboard_api_get_available_plugins();
+  foreach ($plugins as $plugin) {
+    if (isset($plugin['name']) && isset($plugin['title'])) {
+      $services[$plugin['name']] = $plugin['title'];
+    }
+  }
+  return $services;
+
+}
+
+/**
+ * Retrieve the currently enabled service management plugin.
+ */
+function springboard_api_get_enabled_management_service() {
+  if ($enabled_service = variable_get('springboard_api_management_service', 0)) {
+    $plugins = springboard_api_get_available_plugins();
+    foreach ($plugins as $plugin) {
+      if ($plugin['name'] === $enabled_service) {
+        return $plugin;
+      }
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Get service management plugin definitions.
+ */
+function springboard_api_get_available_plugins() {
+  $plugins = array();
+  ctools_include('plugins');
+  $plugins = ctools_get_plugins('springboard_api', 'api_management_services');
+  return $plugins;
+}
+
+/**
+ * Access callback for form resources.
+ *
+ * Checks validation & throttling with enabled service management plugin.
+ *
+ * @param string $op
+ *   Endpoint requested.
+ *
+ * @param mixed $data
+ *   Any other argument data passed by Services.
+ */
+function springboard_api_form_resource_access($op, $data) {
+  // TODO: track API key.
+  $api_key = !empty($data[1]) ? $data[1] : '';
+  if ($op == 'submit' && !_springboard_api_is_secure()) {
+    springboard_api_log_service_usage($op, FALSE, NULL, $api_key);
+    return services_error(t('SSL is required to submit data.'), 406);
+  }
+  $service = springboard_api_get_enabled_management_service();
+  if (isset($service['authentication_callback']) && function_exists($service['authentication_callback'])) {
+    $func = $service['authentication_callback'];
+    $access = $func($op, $data);
+    if (!$access) {
+      springboard_api_log_service_usage($op, FALSE, NULL, $api_key);
+      return services_error(t('Access denied.'), 406);
+    }
+  }
+  springboard_api_log_service_usage($op, TRUE, NULL, $api_key);
+  return TRUE;
+}
+
+/**
+ * Get form node & field information for a requested form.
+ */
+function springboard_api_get_form_details($nid) {
+  $node = node_load($nid);
+  if (is_object($node)) {
+    // Fish for internal name.
+    $lang = $node->language;
+    $internal_name = isset($node->field_fundraiser_internal_name) ? $node->field_fundraiser_internal_name[$lang][0]['safe_value'] : '';
+    // High level form node details.
+    // Pre-load CSRF token so its available for any followup submit calls.
+    $form_details = array(
+      'nid' => $node->nid,
+      'title' => $node->title,
+      'internal_name' => $internal_name,
+      'type' => $node->type,
+      'body' => $node->body,
+      'fields' => array(),
+      'token' => drupal_get_token('services'),
+    );
+    // Build form field list.
+    foreach ($node->webform['components'] as $cid => $component) {
+      // Skip fieldsets.
+      if ($component['type'] == 'fieldset') {
+        continue;
+      }
+      // Each webform component type has a render function that generates the
+      // form api array for that component type.
+      // We're using this function to generate the form api code for each
+      // component in the webform.
+      // The fapi array is then parsed for information like type, required,
+      // default value, etc.
+      // In this way we can analyze standard and custom component types
+      // regardless of what modules created them.
+      $func = '_webform_render_' . $component['type'];
+      if (function_exists($func)) {
+        $fapi = $func($component);
+        // Time and grid components have an additional process functions that
+        // render their child form elements.
+        if ($component['type'] == 'time' || $component['type'] == 'grid') {
+          foreach ($fapi['#process'] as $process) {
+            $fapi = $process($fapi);
+          }
+        }
+        if ($component['type'] == 'date') {
+          if (!isset($fapi['#attributes'])) {
+            $fapi['#attributes'] = NULL;
+          }
+        }
+        $save = &$form_details['fields'][$component['form_key']];
+        $save['form_key'] = $component['form_key'];
+        _springboard_api_parse_component_fapi($save, $fapi, $component['type']);
+      }
+    }
+    return $form_details;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Examine the Form API array generated for a given webform component.
+ *
+ * @param array $save
+ *   Storage variable, passed by reference to permit recursion.
+ *
+ * @param mixed $fapi
+ *   Form API array data to parse.
+ */
+function _springboard_api_parse_component_fapi(&$save, $fapi, $component_type = NULL) {
+  if (isset($fapi['#type']) && $fapi['#type'] == 'date') {
+    $fapi = form_process_date($fapi);
+  }
+  $save = array(
+    'label' => isset($fapi['#title']) ? $fapi["#title"] : '',
+    'type' => isset($fapi['#type']) ? $fapi['#type'] : '',
+    'description' => isset($fapi['#description']) ? $fapi['#description'] : '',
+    'default value' => isset($fapi['#default_value']) ? $fapi['#default_value'] : '',
+    'accepted values' => isset($fapi['#options']) ? $fapi['#options'] : '',
+    'required' => isset($fapi['#required']) ? $fapi['#required'] : 0,
+  );
+  // If component default hasn't been found check #value
+  if (empty($save['default value'])) {
+    $save['default value'] = isset($fapi['#value']) ? $fapi['#value'] : '';
+  }
+  // Grid components rely on a theme function to render, so we're stashing
+  // the extra info contained in the form api definition here.
+  if ($component_type == 'grid') {
+    $save['grid questions'] = isset($fapi['#grid_questions']) ? $fapi['#grid_questions'] : array();
+    $save['grid options'] = isset($fapi['#grid_options']) ? $fapi['#grid_options'] : array();
+  }
+
+  // Recursion on any nested elements.
+  $children = element_children($fapi);
+  foreach ($children as $key) {
+    _springboard_api_parse_component_fapi($save[$key], $fapi[$key], $component_type);
+  }
+}
+
+/**
+ * Convert submission flat array to nested array.
+ *
+ * @param array $submission
+ *   Associative array of field keys and submitted values.
+ *
+ * @param mixed $node
+ *   Webform node the data will be submitted to.
+ *
+ * @return array
+ *   Returns a nested array of submission values formatted for consumption by
+ *   the submit endpoint.
+ */
+function _springboard_api_convert_submission($submission, $node) {
+  $converted_submission = array();
+
+  foreach ($node->webform['components'] as $cid => $component) {
+    $form_key = $component['form_key'];
+    // Skip fieldsets & markup.
+    if ($component['type'] == 'fieldset' || $component['type'] == 'markup') {
+      continue;
+    }
+    // Building on the technique used in springboard_api_get_form_details(),
+    // here we analyze the structure of each form element for information on
+    // how to structure submission data sent as a flat array.
+    $func = '_webform_render_' . $component['type'];
+    if (function_exists($func)) {
+      $fapi = $func($component);
+      // Time and grid components have an additional process functions that
+      // render their child form elements.
+      if ($component['type'] == 'time' || $component['type'] == 'grid') {
+        foreach ($fapi['#process'] as $process) {
+          $fapi = $process($fapi);
+        }
+      }
+      if ($component['type'] == 'date') {
+        if (!isset($fapi['#attributes'])) {
+          $fapi['#attributes'] = NULL;
+        }
+      }
+      // "checkboxes" and "select_multiple" components require even single
+      // values to be submitted as an array.
+      if (isset($submission[$form_key])) {
+        if ($component['type'] == 'select' && $component['extra']['multiple'] == 1) {
+          if (!is_array($submission[$form_key])) {
+            $submission[$form_key] = array($submission[$form_key]);
+          }
+        }
+      }
+      _springboard_api_convert_fapi($converted_submission, $fapi, $submission, $form_key);
+    }
+  }
+  return $converted_submission;
+}
+
+/**
+ * The guts of the submission conversion function.
+ *
+ * Stuffed into another function because recursion.
+ */
+function _springboard_api_convert_fapi(&$converted_submission, $fapi, $submission, $form_key) {
+  // Current field key correlates with a value in the submission, add it to
+  // the data conversion array.
+  if (isset($submission[$form_key])) {
+    $converted_submission[$form_key] = $submission[$form_key];
+  }
+  $child_elements = element_children($fapi);
+  // This is how the nested data structure is built. Components that expect
+  // nested data have child elements in their rendered form api array.
+  foreach ($child_elements as $key) {
+    _springboard_api_convert_fapi($converted_submission[$form_key], $fapi[$key], $submission, $key);
+  }
+}
+
+/**
+ * Unpack webform component "extra" data.
+ *
+ * @param string $items
+ *   Raw "extra" string.
+ *
+ * @return mixed
+ *   Returns unpacked array of data.
+ */
+function _springboard_api_parse_extra_items($items) {
+  $parts = explode("\n", $items);
+  foreach ($parts as $part) {
+    $sub = explode('|', $part);
+
+    $values[$sub[0]] = $sub[1];
+  }
+  return $values;
+}
+
+/**
+ * Lookup payment method field information.
+ *
+ * @param array $component
+ *   Payment methods webform component.
+ *
+ * @return mixed
+ *   Returns payment field array or FALSE if no payment methods are found.
+ */
+function _springboard_api_get_payment_field_info($component) {
+  $payment_methods = array_filter($component['extra']['payment_methods'], '_fundraiser_webform_payment_method_array_filter_enabled');
+  if (is_array($payment_methods)) {
+    foreach ($payment_methods as $type => $gateway_details) {
+      $gateway = _fundraiser_gateway_info($gateway_details['id']);
+      if (isset($gateway['field info callback']) && function_exists($gateway['field info callback'])) {
+        $func = $gateway['field info callback'];
+        $field_info = $func();
+        $payment_fields[$type] = $field_info;
+      }
+    }
+    return $payment_fields;
+  }
+  return FALSE;
+}
+
+/**
+ * Log API request.
+ *
+ * @param string $op
+ *   API operation being requested (index, retrieve, submit).
+ * @param null $data
+ *   Optional data passed by Services.
+ */
+function springboard_api_log_service_usage($op, $access, $data = NULL, $api_key = NULL) {
+  $record = array(
+    'time' => time(),
+    'access' => $access,
+    'remote_ip' => ip_address(),
+    'api_key' => $api_key,
+    'referrer' => isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'unknown',
+    'endpoint' => $op,
+    'data' => serialize($data),
+  );
+  drupal_write_record('springboard_api_tracker', $record);
+}
+
+/**
+ * Helper function. Check if the current page is SSL protected.
+ */
+function _springboard_api_is_secure() {
+  return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') ? TRUE : FALSE;
+}

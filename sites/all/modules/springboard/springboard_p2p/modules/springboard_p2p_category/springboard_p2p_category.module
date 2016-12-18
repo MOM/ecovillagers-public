@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the Springboard P2P Category feature.
+ */
+
+include_once 'springboard_p2p_category.features.inc';

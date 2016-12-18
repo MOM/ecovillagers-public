@@ -1,0 +1,107 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for validating Drupal to Salesforce data conversions.
+ */
+
+module_load_include('test', 'salesforce_queue', 'tests/salesforce_queue');
+
+/**
+ * Ensure salesforce_sync converts data formats properly.
+ */
+class SalesforceSyncFormatsTestCase extends SalesforceQueueTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Data Format Conversions',
+      'description' => 'Ensures proper data conversions between Drupal and Salesforce.',
+      'group' => 'Salesforce Sync',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    parent::setUp($modules, $permissions);
+
+    // Initiate a queue and processor.
+    $this->queue = salesforce_queue_load();
+    $this->processor = salesforce_queue_load_processor($this->queue);
+
+    // Set up the processor's Salesforce connection.
+    // This is special for simpletest due to the access token being stored in
+    // the session.
+    $this->processor->setSalesforceApi($this->salesforceConnect());
+    $this->processor->setSalesforceSoap();
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Test true values are converted to XML compatible strings.
+   */
+  public function testBooleanTrueConversion() {
+    $this->queue->createItem($this->createCampaignQueueItem(TRUE));
+
+    $batch = $this->queue->claimBatch();
+    $item = $batch[0];
+    $this->queue->releaseBatch($item->leaseKey);
+
+    // Run item through conversion process.
+    $this->processor->salesforceSync->convertToSalesforceFormat($item);
+
+    // Assert true value has been converted to a 1.
+    $this->assertEqual(1, $item->sobject->fields['IsActive'], 'True value converted to 1.');
+
+  }
+
+  /**
+   * Test false values are converted to XML compatible strings.
+   */
+  public function testBooleanFalseConversion() {
+    $this->queue->createItem($this->createCampaignQueueItem(FALSE));
+
+    $batch = $this->queue->claimBatch();
+    $item = $batch[0];
+    $this->queue->releaseBatch($item->leaseKey);
+
+    // Run item through conversion process.
+    $this->processor->salesforceSync->convertToSalesforceFormat($item);
+
+    // Assert false value has been converted to a 0.
+    $this->assertEqual(0, $item->sobject->fields['IsActive'], 'False value converted to 0.');
+  }
+
+  /**
+   * Creates a campaign queue item.
+   */
+  protected function createCampaignQueueItem($active = FALSE) {
+    $fields = array(
+      'Name' => 'Campaign Name',
+      'IsActive' => $active,
+    );
+    $sobject = new SalesforceObject('Campaign', $fields);
+
+    $queue_item = array(
+      'drupal_id' => 3432,
+      'module' => 'Node',
+      'delta' => 'Campaign',
+      'operation' => 'CREATE',
+      'object_type' => 'Campaign',
+      'sobject' => $sobject,
+    );
+
+    return $queue_item;
+  }
+
+}

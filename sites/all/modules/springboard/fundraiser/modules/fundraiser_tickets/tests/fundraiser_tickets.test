@@ -1,0 +1,90 @@
+<?php
+/**
+ * @file
+ * Fundraiser module web tests, test creating and submitting a form.
+ */
+
+// Include the setup test class.
+module_load_include('test', 'fundraiser', 'tests/fundraiser.setup');
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+class FundraiserTicketsFunctionalTest extends FundraiserSetup {
+
+  /**
+   * Implements getInfo(). Declares this test class to fundraiser testing.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser Tickets functional tests',
+      'description' => 'Tests fundraiser tickets behavior.',
+      'group' => 'Fundraiser',
+    );
+  }
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp($addtional_modules = array()) {
+
+    // Call the parent to set all of the base modules up.
+    $additional_modules = array(
+    );
+    parent::setUp($additional_modules);
+    $this->createTicketingContentType();
+  }
+
+  /**
+   * Create a content type, verify fields and product are created properly.
+   */
+  public function testFundraiserTicketsCreateContentType() {
+
+  }
+
+
+  /**
+   * Create the donation_form type.
+   */
+  protected function createTicketingContentType() {
+    $type = node_type_set_defaults();
+    $type->name = t('Test Ticketing Type');
+    $type->type = 'test_ticketing_type';
+    $type->description = t('Test provided ticketing content type.');
+    $type->title_label = t('Title');
+    $type->has_title = ($type->title_label != '');
+    $type->base = 'node_content';
+    $type->custom = TRUE;
+    $type->modified = TRUE;
+    $type->module = 'fundraiser';
+    // Save or reset persistent variable values.
+    $variables = array(
+      'node_submitted' => 0,
+      'comment' => COMMENT_NODE_HIDDEN,
+      'fundraiser' => 1,
+      'fundraiser_tickets' => 1,
+      'webform_user' => 1,
+      'webform_user_default_fields' => array(
+      'webform_user_all_profile_fields' => 'webform_user_all_profile_fields',
+      ),
+    );
+    foreach ($variables as $key => $value) {
+      $variable_new = $key . '_' . $type->type;
+      if (is_array($value)) {
+        $value = array_keys(array_filter($value));
+      }
+      variable_set($variable_new, $value);
+    }
+    $status = node_type_save($type);
+    node_types_rebuild();
+    node_add_body_field($type);
+    // Add as a webform.
+    $webform_node_types = variable_get('webform_node_types', array('webform'));
+    $webform_node_types_primary = variable_get('webform_node_types_primary', array('webform'));
+    $webform_node_types = array_merge($webform_node_types, array('test_ticketing_type'));
+    $webform_node_types_primary = array_merge($webform_node_types_primary, array('test_ticketing_type'));
+    variable_set('webform_node_types', array_unique($webform_node_types));
+    variable_set('webform_node_types_primary', array_unique($webform_node_types_primary));
+  }
+
+}

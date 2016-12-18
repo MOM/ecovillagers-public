@@ -1,0 +1,12 @@
+name = Fundraiser upsell salesforce integration
+description = Sets field values for upsold and recurring donations in Salesforce.
+core = 7.x
+package = Jackson River Springboard - extras
+dependencies[] = fundraiser
+dependencies[] = fundraiser_sustainers
+dependencies[] = fundraiser_upsell
+dependencies[] = market_source
+dependencies[] = salesforce_genmap
+dependencies[] = salesforce_queue
+dependencies[] = salesforce_sync
+version = 7.x-4.x-dev

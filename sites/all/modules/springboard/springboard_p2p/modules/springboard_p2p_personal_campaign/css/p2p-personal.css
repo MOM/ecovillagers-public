@@ -1,0 +1,344 @@
+/* Video */
+
+.embedded-video {
+
+}
+
+.pane-video,
+#p2p-comment-pane,
+.pane-org-intro {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px dotted #acacac;
+}
+
+.donate-button {
+  margin: 10px 0;
+}
+
+/* Comments */
+
+#p2p-comment-pane {
+  margin: 0 0 60px 0;
+}
+
+#p2p-comment-pane .pane-content ul li {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#p2p-comment-pane .pane-content ul li.personal-campaign-comment-list {
+  position: relative;
+  margin: 0 0 28px 0;
+}
+
+.p2p-comment-name-amount-wrapper {
+  display: inline-block;
+  padding-right: 3%;
+  width: 17%;
+  vertical-align: top;
+}
+
+span.p2p-comment-date {
+  display: block;
+  margin: 6px 0 0 0;
+  font-weight: bold;
+}
+
+.p2p-comment-text-wrapper {
+  position: relative;
+  display: inline-block;
+  margin-top: 8px;
+  padding: 10px 10px 4px 25px;
+  min-height: 56px;
+  width: 76%;
+  border: 1px solid #d3d7d9;
+  vertical-align: top;
+}
+
+.p2p-comment-text-wrapper:before {
+  position: absolute;
+  top: 24px;
+  left: 11px;
+  color: #0285b0;
+  content: "\f0e5";
+  font-size: 41px;
+  font-family: FontAwesome;
+  -webkit-transform: scaleX(-1);
+  -moz-transform: scaleX(-1);
+  -ms-transform: scaleX(-1);
+  transform: scaleX(-1);
+}
+
+p.p2p-comment-text {
+  margin: 0 0 0 45px;
+}
+
+.p2p-comment-date span {
+  display: block;
+}
+
+.p2p-comment-name,
+.p2p-comment-amount {
+  display: block;
+}
+
+h3.p2p-comment-name {
+  margin: 0 0 6px 0;
+  padding: 0;
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.p2p-comment-amount {
+  display: table;
+  padding: 4px 10px;
+  background: #e67e22;
+  color: #fff;
+  font-weight: bold;
+}
+
+#p2p-comment-pane h2 {
+  margin: 0 0 20px 0;
+  padding-bottom: 10px;
+}
+
+/* progress side bar */
+
+.fa-calendar.amount-icon {
+  position: absolute;
+  top: 8px;
+  right: 7px;
+  display: block;
+  width: 50px;
+  height: 50px;
+  color: #859596;
+  text-align: right;
+  font-size: 19px;
+}
+
+.pane-progress .panel-pane {
+  margin: 8px 0 6px 0;
+}
+
+.panel-pane-wrapper.pane-progress {
+  position: relative;
+  margin: 0 0 20px 0;
+  padding: 10px;
+  border: 1px solid #a6a6a6;
+}
+
+.field-name-field-p2p-campaign-images {
+  margin-bottom: 10px;
+}
+
+.personal-campaign-call-to-action {
+  text-align: center;
+}
+
+.personal-campaign-call-to-action a {
+  position: relative;
+  display: inline-block;
+  margin: 8px 0 4px 0;
+  padding: 5px 10px;
+  border: 0;
+  background: #859596;
+  color: #fff;
+  vertical-align: top;
+  text-align: center;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.personal-campaign-call-to-action a:after {
+  position: relative;
+  top: 1px;
+  padding: 0px 0 0 10px;
+  color: #fffe00;
+  content: "\f061";
+  text-decoration: inherit;
+  font-weight: normal;
+  font-style: normal;
+  font-family: FontAwesome;
+}
+
+.personal-campaign-call-to-action a:hover {
+  outline: none;
+  background: #2980b9;
+  text-decoration: none;
+}
+
+/* donor roll */
+
+.panel-pane.pane-recent-donors {
+  position: relative;
+  margin: 0 0 20px 0;
+  padding: 6px;
+  border: 1px solid #a6a6a6;
+}
+
+.field-name-field-p2p-campaign-images.field-type-image {
+  padding: 5px;
+  border: 1px solid #a6a6a6;
+}
+
+.fa-user.donor-icon {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: block;
+  width: 50px;
+  height: 50px;
+  color: #859596;
+  text-align: right;
+  font-size: 23px;
+}
+
+.panel-pane.pane-personal-campaign-goal {
+  margin: 0 0 10px 0;
+}
+
+/* Basic jQuery Slider essential styles */
+
+ul.bjqs {
+  position: relative;
+  display: none;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+li.bjqs-slide {
+  position: absolute;
+  display: none;
+}
+
+ul.bjqs-controls {
+  z-index: 9999;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+ul.bjqs-controls.v-centered li a {
+  position: absolute;
+}
+
+ul.bjqs-controls.v-centered li.bjqs-next a {
+  right: 6px;
+}
+
+ul.bjqs-controls.v-centered li a:hover {
+  text-decoration: none;
+}
+
+ul.bjqs-controls.v-centered li.bjqs-next a:after {
+  position: relative;
+  top: 1px;
+  padding: 0px 0 0 10px;
+  color: #fffe00;
+  content: "\f054";
+  text-decoration: inherit;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 34px;
+  font-family: FontAwesome;
+}
+
+ul.bjqs-controls.v-centered li.bjqs-next a:hover:after,
+ul.bjqs-controls.v-centered li.bjqs-prev a:hover:after {
+  color: #ccc;
+}
+
+ul.bjqs-controls.v-centered li.bjqs-prev a {
+  left: 0;
+}
+
+ul.bjqs-controls.v-centered li.bjqs-prev a:after {
+  position: relative;
+  top: 1px;
+  padding: 0px 0 0 10px;
+  color: #fffe00;
+  content: "\f053";
+  text-decoration: inherit;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 34px;
+  font-family: FontAwesome;
+}
+
+ol.bjqs-markers {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  list-style: none;
+}
+
+ol.bjqs-markers.h-centered {
+  text-align: center;
+}
+
+ol.bjqs-markers li {
+  display: inline;
+}
+
+ol.bjqs-markers li a {
+  display: inline-block;
+}
+
+p.bjqs-caption {
+  position: absolute;
+  bottom: 0;
+  display: block;
+  margin: 0;
+  padding: 2px 0 2px 9px;
+  width: 100%;
+  background: #c6d2d3;
+  color: #5b5b5b;
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.field.field-name-body {
+  padding: 0 5% 0 0;
+}
+
+/******************  Media queries, these should go last */
+
+@media (min-width: 769px) {
+
+}
+
+@media (max-width: 980px) {
+
+  .p2p-comment-text-wrapper {
+    width: 74%;
+  }
+
+}
+
+@media (max-width: 768px) {
+
+  .field-name-field-p2p-campaign-images.field-type-image {
+    border: none;
+  }
+
+  .p2p-comment-name-amount-wrapper {
+    width: 28%;
+  }
+
+  .comment-arrow {
+    display: none;
+  }
+
+  .p2p-comment-text-wrapper {
+    width: 95%;
+  }
+
+}
+
+@media (max-width: 480px) {
+
+}

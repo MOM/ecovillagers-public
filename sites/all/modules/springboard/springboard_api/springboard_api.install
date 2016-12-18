@@ -1,0 +1,96 @@
+<?php
+
+/**
+ * @file
+ * Install/uninstall hooks & db schema.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function springboard_api_schema() {
+  $schema['springboard_api_tracker'] = array(
+    'description' => 'API usage log',
+    'fields' => array(
+      'time' => array(
+        'description' => 'call time',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'access' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'api_key' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'remote_ip' => array(
+        'description' => 'IP of the remote requestor.',
+        'type' => 'varchar',
+        'length' => 20,
+        'not null' => TRUE,
+      ),
+      'referrer' => array(
+        'description' => 'referrer URL',
+        'type' => 'varchar',
+        'length' => 255,
+      ),
+      'endpoint' => array(
+        'description' => 'endpoint called',
+        'type' => 'varchar',
+        'length' => 60,
+        'not null' => TRUE,
+      ),
+      'data' => array(
+        'description' => 'arguments supplied to API endpoint',
+        'type' => 'text',
+      ),
+    ),
+    'indexes' => array('time' => array('time')),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function springboard_api_uninstall() {
+  variable_del('springboard_api_management_service');
+  variable_del('springboard_api_test_service_track_usage');
+  variable_del('springboard_api_test_service_enable_throttling');
+  variable_del('springboard_api_test_service_throttle_limit');
+}
+
+/**
+ * Implements hook_update_N().
+ */
+
+/**
+ * Add API key and access columns to tracker table.
+ */
+function springboard_api_update_7001() {
+  $access = array(
+    'type' => 'int',
+    'size' => 'tiny',
+    'unsigned' => TRUE,
+    'not null' => TRUE,
+    'default' => 0,
+  );
+  db_add_field( 'springboard_api_tracker', 'access', $access);
+
+}
+
+function springboard_api_update_7002() {
+  $api_key = array(
+    'type' => 'varchar',
+    'length' => 255,
+    'not null' => TRUE,
+  );
+  db_add_field( 'springboard_api_tracker', 'api_key', $api_key);
+}

@@ -1,0 +1,28 @@
+language: php
+
+php:
+  - 5.3
+  - 5.5
+
+mysql:
+  database: drupal
+  username: root
+  encoding: utf8
+
+before_script:
+  - "mysql -e 'create database drupal;'"
+  - pear channel-discover pear.drush.org
+  - pear install drush/drush
+  - phpenv rehash
+  - cd ..
+  - git clone https://github.com/JacksonRiver/Springboard-Build.git build
+  - drush make build/springboard-mtsb.make springboard_build
+  - cd springboard_build
+  - chmod -R 777 sites/default
+  - rm -rf profiles/sbsetup
+  - mv ../springboard profiles/sbsetup
+
+script:
+  - drush si sbsetup install_configure_form.update_status_module='array(FALSE,FALSE)' --db-url=mysql://root:@127.0.0.1/drupal --account-name=admin --account-pass=thepass --site-mail=admin@example.com --site-name="springboard build" --yes
+  - drush cc all --yes
+  - drush status

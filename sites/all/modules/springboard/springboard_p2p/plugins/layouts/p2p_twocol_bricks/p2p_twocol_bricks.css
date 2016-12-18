@@ -1,0 +1,88 @@
+
+.panel-2col-bricks {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.panel-2col-bricks .panel-col-top,
+.panel-2col-bricks .panel-col-middle,
+.panel-2col-bricks .panel-col-bottom {
+  clear: both;
+  width: 99.9%;
+}
+
+.panel-2col-bricks .panel-col-top .inside,
+.panel-2col-bricks .panel-col-middle .inside {
+  margin-bottom: .5em;
+}
+
+.panel-2col-bricks .panel-col-first {
+  display: inline-block;
+  padding-right: 2%;
+  width: 69.1%;
+  vertical-align: top;
+}
+
+* html .panel-2col-bricks .panel-col-first {
+  width: 70.9%;
+}
+
+.panel-2col-bricks .panel-col-first .inside {
+  margin: 0 .5em .5em 0;
+}
+
+.page-admin .panel-2col-bricks .panel-col-last {
+  display: inline-block;
+  width: 28.5%;
+  vertical-align: top;
+}
+
+.panel-2col-bricks .panel-col-last {
+  display: inline-block;
+  width: 28%;
+  vertical-align: top;
+}
+
+.panel-2col-bricks .panel-col-last .inside {
+  margin: 0 0 .5em .5em;
+}
+
+.panel-2col-bricks .panel-separator {
+  margin: 0;
+}
+
+.panel-middle-top-left {
+  display: inline-block;
+  width: 53.1%;
+  vertical-align: top;
+}
+
+.panel-middle-top-left.no-middle-top-right {
+  width: 99%;
+}
+
+.panel-middle-top-right {
+  display: inline-block;
+  width: 45.5%;
+  vertical-align: top;
+}
+
+.page-admin-structure-pages .panel-panel.panel-middle-top-wrapper {
+  margin-bottom: 10px;
+}
+
+.page-admin-structure-pages .panel-middle-top-right {
+  width: 36.3%;
+}
+
+/* Media queries */
+
+@media (max-width: 768px) {
+
+  html .panel-2col-bricks .panel-panel,
+  .panel-middle-top-left,
+  .panel-middle-top-right {
+    width: 99%;
+  }
+
+}

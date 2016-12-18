@@ -1,0 +1,527 @@
+/* Hosted Springboard Styles */
+
+/* validation style fixs */
+.div-title {
+  font-weight: bold;
+}
+.control-group {
+  width:100%;
+  clear:both;
+  float:left;
+}
+#edit-submitted-donation-recurs-monthly .form-type-radio .description {
+  margin: 10px 0 0;
+}
+#edit-submitted-donation-amount .control-group,
+#edit-submitted-donation-recurring-amount .control-group {
+  width:auto;
+  clear:none;
+  margin-right:10px;
+}
+#edit-submitted-donation-amount .control-group input,
+#edit-submitted-donation-recurring-amount .control-group input {
+  margin-top:3px;
+}
+#edit-submitted-donation-amount .control-group label.option,
+#edit-submitted-donation-recurring-amount .control-group label.option {
+  margin-left:4px;
+  float: left;
+}
+#edit-submitted-donation-amount .control-group label.option .form-required,
+#edit-submitted-donation-recurring-amount .control-group label.option .form-required {
+  display: none;  /* addresses core bug https://www.drupal.org/node/1239930 */
+}
+.control-group select,
+.control-group input {
+  display:block;
+  float:left;
+  clear:none;
+}
+.control-group .input-append input,
+.control-group .input-prepend input {
+  display: inline;
+}
+.control-group .input-prepend input,
+.control-group .input-append input {
+  float:none;
+}
+.control-group.success .error.valid,
+.control-group.error .error {
+  display:block;
+  float:left;
+  clear:none;
+}
+.control-group.error {
+  background:none; 
+  color:#333;
+}
+.control-group.error label {
+  color:#8c2e0b;
+}
+.control-group.success .error.valid {
+  color:#468847;
+  text-indent: -9999px;
+  text-transform: uppercase;
+  font-size:0;
+  line-height: 0;
+  background: transparent url(../img/input-complete.png) no-repeat 0 0;
+  width:14px;
+  height:15px;
+  margin-left:6px;
+  margin-top:8px;
+}
+.control-group.error .error {
+  display: inline;
+  margin-left:6px;
+  margin-top:6px;
+}
+.control-group .description {
+  clear:both;
+}
+.control-group .spacer {
+  margin-left:10px;
+}
+.span6,
+[class*="span"] {
+  margin-left:0;
+}
+#webform-component-donation label[for="edit-submitted-donation-other-amount"],
+#webform-component-donation label[for="edit-submitted-donation-recurring-other-amount"] {
+  float:left;
+  clear:none;
+  margin-right: 12px;
+  margin-top: 5px;
+}
+#webform-component-donation .field-prefix {
+  float: left;
+  clear: none;
+  margin-top: 5px;
+  margin-right: 4px;
+}
+.fundraiser_submit_message img {
+  margin-right: 6px;
+  margin-bottom: 4px;
+}
+.webform-client-form input[disabled] {
+  background-color: buttonface;
+}
+
+/* Premium items */
+.view-form-premiums {
+  position: relative;
+  overflow: hidden;
+  width:410px;
+}
+.view-form-premiums .views-row {
+  width:149px;
+  height: 292px;
+  margin-left:14px;
+  float:left;
+  clear:none;
+  margin-bottom:0;
+  cursor: pointer;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  position: relative;
+}
+.view-form-premiums .views-row.selected,
+.view-form-premiums .views-row:hover {
+  background-color: #ffffff;
+  border: 1px solid #cccccc;
+  -webkit-border-radius: 3px;
+     -moz-border-radius: 3px;
+          border-radius: 3px;
+  -webkit-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
+     -moz-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
+          box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
+  -webkit-transition: border linear 0.2s, box-shadow linear 0.2s;
+     -moz-transition: border linear 0.2s, box-shadow linear 0.2s;
+      -ms-transition: border linear 0.2s, box-shadow linear 0.2s;
+       -o-transition: border linear 0.2s, box-shadow linear 0.2s;
+          transition: border linear 0.2s, box-shadow linear 0.2s;
+  border-color: rgba(82, 168, 236, 0.8);
+  outline: 0;
+  outline: thin dotted \9;
+  /* IE6-9 */
+
+  -webkit-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(82, 168, 236, 0.6);
+     -moz-box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(82, 168, 236, 0.6);
+          box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075), 0 0 8px rgba(82, 168, 236, 0.6);
+}
+#prev.left {
+  left:4px;
+  background-color: #cccccc;
+  color: #000;
+  text-decoration: none;
+  font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+#next.right {
+  right:4px;
+  background-color: #cccccc;
+  color: #000;
+  text-decoration: none;
+  font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+}
+.caroufredsel_wrapper {
+  min-width:358px; 
+}
+
+#selected-icon {
+  width:14px;
+  height:15px;
+  display: block;
+  background: transparent url(../img/input-complete.png) no-repeat 0 0;
+  position: absolute;
+  top:10px;
+  right:10px;
+}
+.front h1.page-title {
+  display: none;
+}
+.front header.container {
+  margin:50px auto 30px;
+}
+.not-front header.container {
+  margin:50px auto 10px;
+}
+/* Standardized form and font styles for Springboard forms */
+.node-type-petition .webform-client-form,
+.field-name-field-petition-message,
+.node-type-petition .field-name-body,
+.node-type-donation-form .field-name-body {
+    padding: 0 10px;
+    max-width: 630px;
+}
+.node-type-petition .webform-client-form {
+    margin: 0 0 0 10px;
+}
+.field-name-field-petition-message,
+.node-type-petition .field-name-body {
+    margin: 0 10px 0 0;
+}
+.field-name-field-petition-message {
+    margin-top: 20px;
+    border-top: #E0E0E0 solid 1px;
+    padding-top: 20px;
+}
+.node-type-petition .node {
+    margin-bottom: 20px;
+    border-bottom: #E0E0E0 solid 1px;
+    padding-bottom: 20px;
+}
+.fundraiser-donation-form {
+    margin-top: 5px;
+}
+.webform-component-fieldset {
+  float:left;
+  clear:both;
+  width:100%;
+  margin-bottom: 5px;
+}
+.node-type-donation-form .fieldset-wrapper {
+    padding: 0 10px;
+}
+.node-type-donation-form fieldset#edit-submitted-payment-information-payment-fields-credit .fieldset-wrapper {
+    padding: 0;
+}
+.node-type-donation-form legend {
+    font-size: 22px;
+    font-weight: bold;
+}
+.node-type-petition label,
+.node-type-donation-form label {
+    font-size: 16px;
+}
+.node-type-petition label.option,
+.node-type-donation-form label.option {
+    margin-left: 5px;
+}
+.node-type-donation-form select {
+    width: 280px;
+}
+
+.node-type-donation-form textarea, 
+.node-type-donation-form input[type="text"], 
+.node-type-donation-form input[type="password"], 
+.node-type-donation-form input[type="datetime"], 
+.node-type-donation-form input[type="datetime-local"], 
+.node-type-donation-form input[type="date"], 
+.node-type-donation-form input[type="month"], 
+.node-type-donation-form input[type="time"], 
+.node-type-donation-form input[type="week"], 
+.node-type-donation-form input[type="number"], 
+.node-type-donation-form input[type="email"], 
+.node-type-donation-form input[type="url"], 
+.node-type-donation-form input[type="search"], 
+.node-type-donation-form input[type="tel"], 
+.node-type-donation-form input[type="color"], 
+.node-type-donation-form .uneditable-input {
+    width: 268px;
+}
+.node-type-petition textarea,
+.node-type-petition input[type="text"],
+.node-type-petition input[type="email"],
+.node-type-petition input.input-medium,
+.node-type-petition .uneditable-input {
+    width: 370px;
+}
+.node-type-petition select.input-medium {
+    width: 390px;
+}
+.node-type-donation-form input.input-medium,
+.node-type-donation-form select.input-medium {
+    width: 150px;
+}
+.node-type-petition input.input-small,
+.node-type-petition select.input-small,
+.node-type-donation-form input.input-small,
+.node-type-donation-form select.input-small {
+    width: 90px;
+}
+.node-type-petition .description,
+.node-type-donation-form .description {
+    font-size: 12px;
+    line-height: 16px;
+    color: #898989;
+    max-width: 470px;
+}
+.node-type-donation-form .fundraiser_submit_message {
+    margin-left: 10px;
+}
+.node-type-petition .form-actions,
+.node-type-donation-form .form-actions {
+    background: none;
+    border: 0px;
+    padding: 0;
+}
+
+.node-type-petition input[type="submit"].btn, 
+.node-type-donation-form input[type="submit"].btn {
+    padding: 20px 0;
+    margin-left: 10px;
+    width: 298px;
+    text-transform: uppercase;
+    font-size: 22px;
+    color: #fff;
+    font-weight: bold;
+    text-shadow: 2px -1px 1px rgba(55, 123, 42, 1);
+    background: #65d34a;
+    background: url(data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiA/Pgo8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDEgMSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ibm9uZSI+CiAgPGxpbmVhckdyYWRpZW50IGlkPSJncmFkLXVjZ2ctZ2VuZXJhdGVkIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeDE9IjAlIiB5MT0iMCUiIHgyPSIwJSIgeTI9IjEwMCUiPgogICAgPHN0b3Agb2Zmc2V0PSIyMCUiIHN0b3AtY29sb3I9IiM2NWQzNGEiIHN0b3Atb3BhY2l0eT0iMSIvPgogICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNTljMTQzIiBzdG9wLW9wYWNpdHk9IjEiLz4KICA8L2xpbmVhckdyYWRpZW50PgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9InVybCgjZ3JhZC11Y2dnLWdlbmVyYXRlZCkiIC8+Cjwvc3ZnPg==);
+    background: -moz-linear-gradient(top,  #65d34a 20%, #59c143 100%);
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(20%,#65d34a), color-stop(100%,#59c143));
+    background: -webkit-linear-gradient(top,  #65d34a 20%,#59c143 100%);
+    background: -o-linear-gradient(top,  #65d34a 20%,#59c143 100%);
+    background: -ms-linear-gradient(top,  #65d34a 20%,#59c143 100%);
+    background: linear-gradient(to bottom,  #65d34a 20%,#59c143 100%);
+    filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#65d34a', endColorstr='#59c143',GradientType=0 );
+    border: 0px;
+}
+.node-type-petition input[type="submit"].btn {
+    margin-left: 0;
+    width: 390px;
+}
+
+div.donation-processing-wrapper {
+  width: auto;
+  clear: both;
+  float: none;
+  padding: 0px;
+}
+
+.node-type-petition div.donation-processing-wrapper, 
+.node-type-donation-form div.donation-processing-wrapper {
+  padding: 20px 0;
+  margin-left: 10px;
+  margin-bottom: 30px;
+  width: 298px;
+  background: #65d34a;
+  background: url(data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiA/Pgo8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDEgMSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ibm9uZSI+CiAgPGxpbmVhckdyYWRpZW50IGlkPSJncmFkLXVjZ2ctZ2VuZXJhdGVkIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeDE9IjAlIiB5MT0iMCUiIHgyPSIwJSIgeTI9IjEwMCUiPgogICAgPHN0b3Agb2Zmc2V0PSIyMCUiIHN0b3AtY29sb3I9IiM2NWQzNGEiIHN0b3Atb3BhY2l0eT0iMSIvPgogICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjNTljMTQzIiBzdG9wLW9wYWNpdHk9IjEiLz4KICA8L2xpbmVhckdyYWRpZW50PgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9InVybCgjZ3JhZC11Y2dnLWdlbmVyYXRlZCkiIC8+Cjwvc3ZnPg==);
+  background: -moz-linear-gradient(top,  #65d34a 20%, #59c143 100%);
+  background: -webkit-gradient(linear, left top, left bottom, color-stop(20%,#65d34a), color-stop(100%,#59c143));
+  background: -webkit-linear-gradient(top,  #65d34a 20%,#59c143 100%);
+  background: -o-linear-gradient(top,  #65d34a 20%,#59c143 100%);
+  background: -ms-linear-gradient(top,  #65d34a 20%,#59c143 100%);
+  background: linear-gradient(to bottom,  #65d34a 20%,#59c143 100%);
+  filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#65d34a', endColorstr='#59c143',GradientType=0 );
+  border: 0px;
+  -moz-border-radius: 4px;
+  -webkit-border-radius: 4px;
+  border-radius: 4px;
+  
+  position: relative;
+}
+
+.node-type-petition div.donation-processing-wrapper .donation-processing-spinner, 
+.node-type-donation-form div.donation-processing-wrapper .donation-processing-spinner{
+  background: transparent url("../img/loader.gif") no-repeat left bottom;
+  background-size: cover;
+  display: inline-block;
+  height: 7px;
+  margin: 0 0 0 3px;
+  width: 16px;
+}
+
+div.donation-processing-wrapper p {
+  display: block;
+  margin: 0px;
+  padding: 0px;
+}
+
+div.donation-processing-wrapper p.donation-processing {
+  text-transform: uppercase;
+  font-size: 22px;
+  color: #fff;
+  font-weight: bold;
+  text-shadow: 2px -1px 1px rgba(55, 123, 42, 1);
+  text-align: center;
+}
+
+#webform-component-tickets table {
+    width: 100%;
+}
+
+#webform-component-tickets th {
+    border-bottom: 0px;
+    font-size: 16px;
+    padding-bottom: 5px;
+}
+#webform-component-tickets tr.even,
+#webform-component-tickets tr.odd {
+    border-bottom: solid 1px #E5E5E5;
+}
+#webform-component-tickets tr.even:last-child,
+#webform-component-tickets tr.odd:last-child {
+    border-bottom: 0px;
+    font-size: 16px;
+    font-weight: bold;
+}
+#webform-component-tickets tr.odd {
+    background-color: #F0F0F0;
+}
+#webform-component-tickets tr.odd:last-child,
+#webform-component-tickets tr.even {
+    background-color: #fff;
+}
+#webform-component-tickets td { 
+    padding: 10px;
+}
+#webform-component-tickets .control-group {
+    margin-bottom: 0px;
+    margin-top: 10px;
+}
+#webform-component-tickets select {
+    width: 120px;
+}
+
+@media (min-width: 768px) {
+    .node-type-petition textarea,
+    .node-type-petition input[type="text"],
+    .node-type-petition input[type="email"],
+    .node-type-petition input.input-medium,
+    .node-type-petition .uneditable-input,
+    .node-type-petition input[type="submit"].btn,
+    .node-type-donation-form .two-column-donation .span6 textarea, 
+    .node-type-donation-form .two-column-donation .span6 input[type="text"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="password"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="datetime"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="datetime-local"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="date"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="month"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="time"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="week"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="number"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="email"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="url"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="search"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="tel"], 
+    .node-type-donation-form .two-column-donation .span6 input[type="color"], 
+    .node-type-donation-form .two-column-donation .span6 .uneditable-input,
+    .node-type-donation-form .two-column-donation .span6 input.input-large,
+    .node-type-donation-form .two-column-donation .span6 input[type="submit"].btn {
+        width: 97%;
+    }
+    .node-type-petition select.input-medium,
+    .node-type-donation-form .two-column-donation .span6 select {
+        width: 100%;
+    }
+    
+    .node-type-donation-form .two-column-donation .span6 input.input-medium,
+    .node-type-donation-form .two-column-donation .span6 select.input-medium,
+    .node-type-petition input.input-small,
+    .node-type-petition select.input-small,
+    .node-type-donation-form .two-column-donation .span6 input.input-small, 
+    .node-type-donation-form .two-column-donation .span6 select.input-small {
+        width: 48%;
+    }    
+}
+
+@media screen and (max-width: 767px) {
+  .view-form-premiums {
+    position: relative;
+    overflow: hidden;
+    width:280px;
+  }
+  .caroufredsel_wrapper {
+    min-width:180px !important;
+    width:180px !important;
+    margin-left:46px !important;
+  }
+}
+
+@media (max-width: 480px) {
+    .node-type-petition textarea,
+    .node-type-petition input[type="text"],
+    .node-type-petition input[type="email"],
+    .node-type-petition input.input-medium,
+    .node-type-petition .uneditable-input,
+    .node-type-petition input[type="submit"].btn,
+    .node-type-donation-form textarea, 
+    .node-type-donation-form input[type="text"], 
+    .node-type-donation-form input[type="password"], 
+    .node-type-donation-form input[type="datetime"], 
+    .node-type-donation-form input[type="datetime-local"], 
+    .node-type-donation-form input[type="date"], 
+    .node-type-donation-form input[type="month"], 
+    .node-type-donation-form input[type="time"], 
+    .node-type-donation-form input[type="week"], 
+    .node-type-donation-form input[type="number"], 
+    .node-type-donation-form input[type="email"], 
+    .node-type-donation-form input[type="url"], 
+    .node-type-donation-form input[type="search"], 
+    .node-type-donation-form input[type="tel"], 
+    .node-type-donation-form input[type="color"], 
+    .node-type-donation-form .uneditable-input,
+    .node-type-donation-form input.input-medium,
+    .node-type-donation-form select.input-medium,
+    .node-type-donation-form input[type="submit"].btn {
+        width: 100%;
+    }
+    .node-type-petition select,
+    .node-type-petition select.input-medium,
+    .node-type-donation-form select {
+        width: 103%;
+    }
+    .node-type-petition input.input-small,
+    .node-type-petition select.input-small,
+    .node-type-donation-form input.input-small, 
+    .node-type-donation-form select.input-small {
+        width: 48%;
+    } 
+}
+
+/* Fundraiser Upsell Modal */
+.close-modal-wrapper.top-close {
+    padding: 0;
+    margin: 0;
+    background: transparent;
+}
+
+.close-modal-wrapper.top-close a{
+    display: block;
+    text-indent: -9999px;
+    height: 16px;
+    width: 16px;
+    background: transparent url(../img/glyphicons-halflings.png) no-repeat -310px 0px;
+    padding: 0;
+    margin: .5em .8em;
+}

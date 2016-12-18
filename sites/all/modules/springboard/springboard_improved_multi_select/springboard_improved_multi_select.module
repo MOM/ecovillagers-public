@@ -1,0 +1,19 @@
+<?php
+/**
+ * @file
+ * Alters the JS included by improved_multi_select to use ours instead.
+ */
+
+/**
+ * Implements hook_js_alter().
+ */
+function springboard_improved_multi_select_js_alter(&$javascript) {
+  foreach ($javascript as $key => $value) {
+    if (strpos($key, 'improved_multi_select.js') !== FALSE) {
+      $javascript[$key]['data'] =
+        drupal_get_path('module', 'springboard_improved_multi_select') .
+        '/springboard_improved_multi_select.js';
+      break;
+    }
+  }
+}

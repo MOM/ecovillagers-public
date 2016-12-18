@@ -1,0 +1,12 @@
+{
+    "name": "warehousesdk/drupal",
+    "authors": [
+        {
+            "name": "Jackson River",
+            "email": "dev@jacksonriver.com"
+        }
+    ],
+    "require": {
+        "guzzlehttp/guzzle": "6.1.1"
+    }
+}

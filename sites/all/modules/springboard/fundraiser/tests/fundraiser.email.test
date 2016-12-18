@@ -1,0 +1,73 @@
+<?php
+/**
+ * @file
+ * Fundraiser module web email tests. Test email validation on the form.
+ */
+
+class FundraiserEmailTestCase extends FundraiserSetup {
+
+  /**
+   * Implements getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser Email tests',
+      'description' => 'Tests email validation on donation forms.',
+      'group' => 'Fundraiser',
+    );
+  }
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp($additional_modules = array()) {
+    parent::setUp($additional_modules);
+  }
+
+  /**
+   * Test the creation of a fundraiser form node.
+   */
+  public function testFundraiserFormEmailValidation() {
+    // Test the collective variety of emails. Failures.
+    $emails = array();
+    $emails[] = ''; // Empty string.
+    $emails[] = '@'; // Only the designator.
+    $emails[] = 'email'; // Only the name.
+    $emails[] = 'email@'; // Only the name and and designator.
+    $emails[] = '@com'; // Only the domain ending and designator.
+    $emails[] = '@example.com'; // Only the domain.
+    $emails[] = 'email@example'; // No domain ending.
+    $emails[] = 'email@.com'; // No domain.
+    $emails[] = '1Email!add@example.com'; // Invalid character in name.
+    $emails[] = '1Email+add@!example.com'; // Invalid character in domain.
+    $emails[] = '1Email+add@example.!com'; // Invalid character in domain ending.
+    $emails[] = '1Email+add@example.c'; // Too short domain ending.
+    $emails[] = '1Email+add@example.coooooom'; // Too long domain ending.
+    $emails[] = '1Email+add@example.c0m'; // Invalid character in domain ending.
+    foreach ($emails as $email) {
+      // Test each email address by sending it directly through fundraiser's email validation function.
+      $this->assertFalse(_fundraiser_validate_email($email), t('An invalid email address (@email) was not accepted.',
+          array('@email' => $email)), t('Fundraiser Email'));
+    }
+
+    // Test the collective variety of emails. Successes.
+    $emails = array();
+    $emails[] = 'email@example.com'; // Standard good email.
+    $emails[] = 'Email@example.com'; // Good email with capital.
+    $emails[] = '1Email.add@example.com'; // With additional punctuation.
+    $emails[] = '1Email_add@example.com'; // With additional punctuation.
+    $emails[] = '1Email%add@example.com'; // With additional punctuation.
+    $emails[] = '1Email-add@example.com'; // With additional punctuation.
+    $emails[] = '1Email+add@example.com'; // With additional punctuation.
+    $emails[] = '1Email+add@sub.example.com'; // Wih a sub-domain.
+    $emails[] = '1Email+add@sub-example.com'; // With additional punctuation.
+    $emails[] = '1Email+add@sub-example.cm'; // Minimum length domain ending.
+    $emails[] = '1Email+add@sub-example.coooom'; // Maximum length domain ending.
+    foreach ($emails as $email) {
+      // Test each email address by sending it directly through fundraiser's email validation function.
+      $this->assertTrue(_fundraiser_validate_email($email), t('A valid email address (@email) was accepted.',
+          array('@email' => $email)), t('Fundraiser Email'));
+    }
+  }
+
+}

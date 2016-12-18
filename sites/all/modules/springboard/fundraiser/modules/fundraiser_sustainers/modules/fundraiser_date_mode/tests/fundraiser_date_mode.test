@@ -1,0 +1,457 @@
+<?php
+
+/**
+ * @file
+ * Simpletest test class.
+ */
+
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+class FundraiserDateModeTest extends DrupalWebTestCase {
+
+  /**
+   * Implements getInfo(). Declares this test class to fundraiser testing.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser Date Mode',
+      'description' => 'Tests fundraiser date mode behavior.',
+      'group' => 'Fundraiser',
+    );
+  }
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp($additional_modules = array()) {
+    $enable_modules = array(
+      'fundraiser',
+      'fundraiser_webform', // Default testing environment.
+      'fundraiser_commerce', // Default testing environment.
+      'webform_user',
+      'commerce_product', // To remove when dependancies in commerce_authnet, commerce_payment resolved.
+      'commerce_product_reference', // To remove when dependancies in commerce_authnet, commerce_payment resolved.
+      'commerce_payment_example', // Gateway.
+      'commerce_cardonfile',
+      'encrypt',
+      'fundraiser_date_mode',
+      'salesforce_mapping',
+    );
+    $enable_modules = array_merge($enable_modules, $additional_modules);
+
+    // Call the parent to set all of the base modules up.
+    parent::setUp($enable_modules);
+
+    // Create a key file
+    variable_set('encrypt_secure_key_path', DRUPAL_ROOT . '/' . variable_get('file_public_path', conf_path() . '/files'));
+    variable_set('encrypt_default_method', 'mcrypt_rij_256');
+    $key_file = variable_get('encrypt_secure_key_path', '') . '/' . ENCRYPT_SECURE_KEY_FILE;
+    $open_file = fopen($key_file, 'wb');
+    $new_key = md5(uniqid(mt_rand(0, mt_rand()), TRUE)) . md5(uniqid(mt_rand(0, mt_rand()), TRUE));
+    // Create file with new key in it.
+    fwrite($open_file, $new_key);
+    fclose($open_file);
+
+    // Setup the environment to a default standard.
+    // $this->setupUserProfile();
+    // $this->setupWebformToUserMap();
+    $this->createDonationContentType();
+  }
+  /**
+   * Test admin form.
+   */
+
+
+
+
+  /**
+   * Test enabling date mode.
+   */
+   public function testFundraiserDateModeEnable() {
+     $account = $this->drupalCreateUser(array('administer fundraiser date mode'));
+     $this->drupalLogin($account);
+
+     $this->createFundraiserSustainer();
+     $current_date = _fundraiser_date_mode_explode_date(time());
+     $date = $current_date['day'] == 15 ? 16 : 15;
+     // turn date mode on.
+     variable_set('fundraiser_date_mode_set_date_mode', TRUE);
+     variable_set('fundraiser_date_mode_set_dates', $date);
+     variable_set('fundraiser_date_mode_set_seconds', 30);
+
+     // $this->drupalPost('admin/config/system/fundraiser/date-mode', $edit, t('Save configuration'));
+     // $this->assertTrue(variable_get('fundraiser_date_mode_set_date_mode', FALSE) == TRUE, t('Date mode enabled.'));
+     // $this->assertTrue(variable_get('fundraiser_date_mode_set_dates', '15') == $date, t('Process date set to:' . $date));
+     // confirm existing next_charge dates were copied correctly.
+     $original_series_data = fundraiser_date_mode_get_sustainer_series_data();
+     fundraiser_date_mode_update_date_mode_operation('date_mode_enabled', $date, time(), 1, 1, $original_series_data[1]);
+     $new_sustainer_data = fundraiser_date_mode_get_sustainer_series_data();
+     $date_cache = $this->retrieveDateCache();
+     foreach ($original_series_data[1]['series'] as $original_sustainer) {
+       $did = $original_sustainer['did'];
+        $cache_record = isset($date_cache[$did]) ? TRUE : FALSE;
+        $date_legit = isset($date_cache[$did]['original_next_charge']) && $date_cache[$did]['original_next_charge'] == $original_sustainer['next_charge'] ? TRUE : FALSE;
+        $this->assertTrue($cache_record && $date_legit, t('Original next charge date correctly stored by date mode'));
+     }
+
+     // confirm new next_charge dates all fall on the correct day of the month.
+     foreach ($new_sustainer_data[1]['series'] as $current_sustainer) {
+       $did = $current_sustainer['did'];
+       if ($current_sustainer['did'] == $current_sustainer['master_did']) {
+         // Skip master orders.
+         continue;
+       }
+       $next_charge_date = _fundraiser_date_mode_explode_date($current_sustainer['next_charge']);
+
+       if ($next_charge_date['month'] == $current_date['month'] && $next_charge_date['year'] == $current_date['year']) {
+         $this->assertTrue($next_charge_date['day'] != $date, t('Sustainer order in current month was passed over.'));
+       }
+       else {
+         $message = array(
+           '!original_date' => date('m/d/Y G:i:s', $date_cache[$did]['original_next_charge']),
+           '!new_date' =>  date('m/d/Y G:i:s', $current_sustainer['next_charge']),
+         );
+         $this->assertTrue($next_charge_date['day'] == $date, t('Sustainer order for !original_date correctly modified to !new_date', $message));
+       }
+     }
+
+     // create new sustainer series.
+
+     // confirm anniversary dates are saved to {fundraiser_date_mode_dates}
+
+     // confirm next_charge dates all fall on the correct day of the month.
+
+     // change date.
+     $date = 10;
+     // Get updated series data.
+     $this->assertTrue(TRUE, 'original<pre>' . print_r($original_series_data, TRUE) . '</pre>');
+     fundraiser_date_mode_update_date_mode_operation('date_mode_disabled', $date, NULL, 1, 1, $original_series_data[1]);
+     $new_series_data = fundraiser_date_mode_get_sustainer_series_data();
+
+     // confirm new next_charge dates all fall on the correct day of the month.
+     foreach ($new_series_data[1]['series'] as $key => $current_sustainer) {
+       $original_next_charge = $original_series_data[1]['series'][$key]['next_charge'];
+       $new_next_charge = $current_sustainer['next_charge'];
+      // $next_charge_date = _fundraiser_date_mode_explode_date($current_sustainer['next_charge']);
+       $message = array(
+         '!original_timestamp' => $original_next_charge,
+         '!original_date' => date('m/d/Y G:i:s', $original_series_data[1]['series'][$key]['next_charge']),
+         '!new_date' => date('m/d/Y G:i:s', $current_sustainer['next_charge']),
+         '!new_timestamp' => $new_next_charge,
+       );
+       $this->assertTrue(date('d', $original_next_charge) == date('d', $new_next_charge), t('Sustainer order for !original_date ( !original_timestamp ) correctly reverted !new_timestamp.', $message));
+     }
+
+   }
+
+  /**
+   * Test changing date mode charge date.
+   */
+  public function testFundraiserDateModeChangeDate() {
+
+  }
+
+  /**
+   * Test disabling date mode.
+   */
+  public function testFundraiserDateModeDisable() {
+
+  }
+
+  /**
+   * Test delta calculation code.
+   */
+  public function testFundraiserDateModeDelta() {
+    date_default_timezone_set('UTC');
+
+    $dates = array(
+      '1' => array(
+        'date' => '01/01/2014 01:01:01',
+        'timestamp' => 1388538061,
+        'expected deltas' => array(
+          '1' => 0,
+          '15' => 1209600, // + 14 days
+          '30' => 2505600, // + 29 days
+        ),
+      ),
+      '15' => array(
+        'date' =>'01/15/2014 01:01:01',
+        'timestamp' => 1389747661,
+        'expected deltas' => array(
+          '1' => -1209600, // - 14 days
+          '15' => 0,
+          '30' => 1296000, // + 15 days
+        ),
+      ),
+      '30' => array(
+        'date' => '01/30/2014 01:01:01',
+        'timestamp' => 1391043661,
+        'expected deltas' => array(
+          '1' => -2505600, // - 29 days
+          '15' => -1296000, // - 15 days
+          '30' => 0,
+        ),
+      ),
+    );
+
+    $charge_dates = array('1', '15', '30');
+    foreach ($dates as $start_day => $item) {
+      $start_date = _fundraiser_date_mode_explode_date($item['timestamp']);
+      foreach ($charge_dates as $charge_date) {
+        $delta = _fundraiser_date_mode_calculate_delta($item['timestamp'], $charge_date);
+        $message = t('Delta from !start_date to !charge_date is correct: !delta', array('!start_date' => $start_day, '!charge_date' => $charge_date, '!delta' => $delta));
+        $this->assertTrue($delta === (int) $dates[$start_day]['expected deltas'][$charge_date], $message);
+      }
+    }
+
+  }
+
+  /**
+   * Test order selection.
+   */
+  public function testFundraiserDateModeOrderSelection() {
+
+  }
+
+  /**
+   * Helper to create a fundraiser sustainer donation.
+   */
+  protected function createFundraiserSustainer() {
+    // Create a node.
+    $node = $this->createDonationForm();
+    // Post to the node.
+    $month = date('n', strtotime('+1 year'));
+    $year = date('Y', strtotime('+1 year'));
+    $post['submitted[payment_information][recurs_monthly][recurs]'] = 'recurs';
+    $post['submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]'] = $month;
+    $post['submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]'] = $year;
+    $post['submitted[donor_information][mail]'] = 'fundraiser_sustainer@example.com';
+    $this->submitDonation($node->nid, $post);
+  }
+
+  /**
+   * Create an example Fundraiser node.
+   */
+  protected function createDonationForm($node_configs = '') {
+    $fields = _fundraiser_field_info(TRUE);
+    // Create the node.
+    $node = new stdClass();
+    $node->is_new = 1;
+    $node->type = 'donation_form';
+    $node->language = LANGUAGE_NONE;
+    $node->uid = 1;
+    $node->title = 'Test Donation Form';
+    $node->field_fundraiser_internal_name = array($node->language => array(0 => array('value' => 'Test Donation Form')));
+    $node->status = 1;
+    $node->promote = 1;
+    $node->body['LANGUAGE_NONE'][0]['value'] = 'Donec placerat. Nullam nibh dolor, blandit sed, fermentum id, ' .
+      'imperdiet sit amet, neque. Nam mollis ultrices justo. Sed tempor. Sed vitae tellus. Etiam sem arcu, eleifend ' .
+      'sit amet, gravida eget, porta at, wisi. Nam non lacus vitae ipsum viverra pretium. Phasellus massa. Fusce ' .
+      'magna sem, gravida in, feugiat ac, molestie eget, wisi. Fusce consectetuer luctus ipsum. Vestibulum nunc. ' .
+      'Suspendisse dignissim adipiscing libero. Integer leo. Sed pharetra ligula a dui. Quisque ipsum nibh, ullamcorper ' .
+      'eget, pulvinar sed, posuere vitae, nulla. Sed varius nibh ut lacus. Curabitur fringilla. Nunc est ipsum, ' .
+      'pretium quis, dapibus sed, varius non, lectus. Proin a quam. Praesent lacinia, eros quis aliquam porttitor, ' .
+      'urna lacus volutpat urna, ut fermentum neque mi egestas dolor.';
+    $node->body['LANGUAGE_NONE'][0]['summary'] = 'Donec placerat. Nullam nibh dolor, blandit sed, fermentum id, imperdiet ' .
+      'sit amet, neque. Nam mollis ultrices justo. Sed tempor. Sed vitae tellus. Etiam sem arcu, eleifend sit amet, ' .
+      'gravida eget, porta at, wisi. Nam non lacus vitae ipsum viverra pretium. Phasellus massa. Fusce magna sem, gravida ' .
+      'in, feugiat ac, molestie eget, wisi.';
+    $node->body['LANGUAGE_NONE'][0]['format'] = 'filtered_html';
+    $node->webform = array(
+      'confirmation' => 'Thank you [donation:first_name] [donation:last_name] for your donation of [donation:currency:symbol][donation:amount].' . "\n" .
+      "\n" .
+      'The email address we have for you is: [donation:mail]' . "\n" .
+      "\n" .
+      'The address we have on record for you is:' . "\n" .
+      '[donation:address] [donation:address_line_2]' . "\n" .
+      '[donation:city], [donation:state] [donation:zip]' . "\n" .
+      '[donation:country]' . "\n" .
+      "\n" .
+      'Your card ending in [donation:card_number], expires [donation:card_expiration_month] / [donation:card_expiration_year]',
+      'confirmation_format' => 'filtered_html',
+      'redirect_url' => '<confirmation>',
+      'teaser' => 0,
+      'block' => 0,
+      'allow_draft' => 0,
+      'auto_save' => 0,
+      'submit_notice' => 1,
+      'submit_text' => t('Donate'),
+      'submit_limit' => -1,
+      'submit_interval' => -1,
+      'total_submit_limit' => -1,
+      'total_submit_interval' => -1,
+      'status' => 1,
+      'record_exists' => '',
+      'roles' => array(
+        '0' => 1,
+        '1' => 2,
+      ),
+      'emails' => array(),
+      'components' => array(),
+    );
+    $node->gateways = array(
+      'credit' => array(
+        'status' => 1,
+        'method' => 'credit',
+        'id' => 'commerce_payment_example|commerce_payment_commerce_payment_example',
+      ),
+    );
+    $node->amount_wrapper = array(
+      'donation_amounts' => array(
+        '0' => array(
+          'weight' => 0,
+          'amount' => 10,
+          'label' => '$10',
+          'remove' => 0,
+        ),
+        '1' => array(
+          'weight' => 1,
+          'amount' => 20,
+          'label' => '$20',
+          'remove' => 0,
+        ),
+        '2' => array(
+          'weight' => 2,
+          'amount' => 50,
+          'label' => '$50',
+          'remove' => 0,
+        ),
+        '3' => array(
+          'weight' => 3,
+          'amount' => 100,
+          'label' => '$100',
+          'remove' => 0,
+        ),
+      ),
+      'show_other_amount' => 1,
+      'ask_for_quantity' => 1,
+      'minimum_donation_amount' => 10,
+    );
+    $node->recurring_setting = 'user_choice';
+    $node->is_webform_user = 1;
+    $node->send_new_user_email = 0;
+
+    // Merge in configurations, if given.
+    if (!empty($node_configs)) {
+      // Cast both to arrays so we can merge them.
+      $node_configs = (array) $node_configs;
+      $node = (array) $node;
+      // Merge.
+      $node = array_merge($node, $node_configs);
+      // Cast back to an object for saving.
+      $node = (object) $node;
+    }
+    node_save($node);
+    if (module_exists('webform_confirmations')) {
+      // Save confirmation details.
+      $confirmation['nid'] = $node->nid;
+      $confirmation['confirmation_page_title'] = 'Thank you for your donation!';
+      _webform_confirmations_update($confirmation);
+    }
+    // Return the created node object.
+    return $node;
+  }
+
+  /**
+   * Create a standard post.
+   */
+  protected function submitDonation($nid, $post_config = '') {
+    // Standard post values.
+    $month = date('n');
+    $year = date('Y');
+    $post = array(
+      'submitted[donation][amount]' => 10,
+      'submitted[donation][other_amount]' => '',
+      'submitted[donor_information][first_name]' => $this->randomName(5),
+      'submitted[donor_information][last_name]' => $this->randomName(5),
+      'submitted[donor_information][mail]' => 'example@example.com',
+      'submitted[billing_information][address]' => $this->randomName(5),
+      'submitted[billing_information][address_line_2]' => $this->randomName(5),
+      'submitted[billing_information][city]' => $this->randomName(5),
+      'submitted[billing_information][country]' => 'US',
+      'submitted[billing_information][state]' => 'NC',
+      'submitted[billing_information][zip]' => '11111',
+      'submitted[payment_information][payment_fields][credit][card_number]' => '4111111111111111',
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]' => $month,
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]' => $year,
+      'submitted[payment_information][payment_fields][credit][card_cvv]' => '111',
+    );
+    // Merge in configurations, if given.
+    if (!empty($post_config)) {
+      // Cast both to arrays so we can merge them.
+      $post_config = (array) $post_config;
+      $post = array_merge($post, $post_config);
+    }
+    $this->drupalPost('node/' . $nid, $post, t('Donate'));
+  }
+
+  /**
+   * Create the donation_form type.
+   */
+  protected function createDonationContentType() {
+    $type = node_type_set_defaults();
+    $type->name = t('Donation Form');
+    $type->type = 'donation_form';
+    $type->description = t('Test provided donation form type.');
+    $type->title_label = t('Title');
+    $type->has_title = ($type->title_label != '');
+    $type->base = 'node_content';
+    $type->custom = TRUE;
+    $type->modified = TRUE;
+    $type->module = 'fundraiser';
+    // Save or reset persistent variable values.
+    $variables = array(
+      'node_submitted' => 0,
+      'comment' => COMMENT_NODE_HIDDEN,
+      'fundraiser' => 1,
+      'webform_user' => 1,
+      'webform_user_default_fields' => array(
+        'webform_user_all_profile_fields' => 'webform_user_all_profile_fields',
+      ),
+    );
+    foreach ($variables as $key => $value) {
+      $variable_new = $key . '_' . $type->type;
+      if (is_array($value)) {
+        $value = array_keys(array_filter($value));
+      }
+      variable_set($variable_new, $value);
+    }
+    $status = node_type_save($type);
+    node_types_rebuild();
+    node_add_body_field($type);
+    // Add as a webform.
+    $webform_node_types = variable_get('webform_node_types', array('webform'));
+    $webform_node_types_primary = variable_get('webform_node_types_primary', array('webform'));
+    $webform_node_types = array_merge($webform_node_types, array('donation_form'));
+    $webform_node_types_primary = array_merge($webform_node_types_primary, array('donation_form'));
+    variable_set('webform_node_types', array_unique($webform_node_types));
+    variable_set('webform_node_types_primary', array_unique($webform_node_types_primary));
+  }
+
+  /**
+   * Retrieve sustainer data.
+   */
+  protected function retrieveSustainerData() {
+    $sustainers_data = array();
+    $results = db_query('SELECT * FROM {fundraiser_sustainers}');
+    while ($record = $results->fetchAssoc()) {
+      $sustainers_data[] = $record;
+    }
+    return $sustainers_data;
+  }
+
+  /**
+   * Retrieve cached date info.
+   */
+  protected function retrieveDateCache() {
+    $data = array();
+    $results = db_query('SELECT * FROM {fundraiser_date_mode_dates}');
+    while ($record = $results->fetchAssoc()) {
+      $data[$record['did']] = $record;
+    }
+    return $data;
+  }
+}
+

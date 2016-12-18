@@ -1,0 +1,478 @@
+<?php
+
+/**
+ * The following functions need unit test coverage.
+ */
+
+/**
+ * @file
+ * Fundraiser module tests.
+ */
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+class FundraiserWebformUnitTestSetup extends DrupalWebTestCase {
+
+  /**
+   * Implemenation of setUp().
+   */
+  public function setUp() {
+    // Call the parent to set all of the base modules up.
+    parent::setUp( array(
+      'fundraiser_webform',
+    )
+    );
+  }
+}
+
+/**
+ * Fundraiser testing class.
+ */
+class FundraiserWebformUnitTestCase extends FundraiserWebformUnitTestSetup {
+
+  /**
+   * Implements getInfo(). Declares this test class to fundraiser testing.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser webform unit tests',
+      'description' => 'Tests fundraiser webform functions as unit tests.',
+      'group' => 'Fundraiser',
+    );
+  }
+
+  /**
+   * Unit test DB related functions.
+   */
+  public function testFundraiserWebformDBFunctions() {
+    $defaults = array(
+      'nid' => 1,
+      'cid' => 1,
+      'pid' => 0,
+      'form_key' => 'key_id',
+      'name' => 'Field name',
+      'type' => 'textfield',
+      'value' => 'Field value',
+      'extra' => serialize(array('Extra data')),
+      'mandatory' => 0,
+      'weight' => 0,
+    );
+    drupal_write_record('webform_component', $defaults);
+    // Now that we have a component on record we can test all the DB stuff against it.
+
+    // Test getting unserialized extra.
+    $retrieved = _fundraiser_webform_get_extra_by_key($defaults['nid'], 'key_id');
+    $this->assertEqual($retrieved, array('Extra data'), '_fundraiser_webform_get_extra_by_key() returned the correct unserialized result.', 'testFundraiserWebformDBFunctions');
+
+    // Add a second component row.
+    $defaults2 = $defaults;
+    $defaults2['cid'] = 2;
+    $defaults2['form_key'] = 'key_id_2';
+    drupal_write_record('webform_component', $defaults2);
+    $results = _fundraiser_webform_get_components_by_nid($defaults['nid']);
+    $count = 0;
+    $counted_for_nid = 0;
+    foreach ($results as $this_result) {
+      $count++;
+      if ($this_result->nid == $defaults['nid']) {
+        $counted_for_nid++;
+      }
+    }
+    $this->assertEqual($count, 2, '_fundraiser_webform_get_components_by_nid() returned the correct number of results.', 'testFundraiserWebformDBFunctions');
+    $this->assertEqual($counted_for_nid, $count, '_fundraiser_webform_get_components_by_nid() returned results for this nid.', 'testFundraiserWebformDBFunctions');
+
+    // Test retrieval of node component.
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($defaults['nid'], 'key_id_2');
+    $this->assertEqual($retrieved, (object) $defaults2, '_fundraiser_webform_get_component_by_nid_key() returned the correct result.', 'testFundraiserWebformDBFunctions');
+
+    // Test retrieval of a specific component.
+    $results = _fundraiser_webform_get_components_by_keys($defaults['nid'], array('key_id', 'key_id_2'));
+    $this->assertEqual($results[0], (object) $defaults, '_fundraiser_webform_get_components_by_keys() returned the correct field result.', 'testFundraiserWebformDBFunctions');
+    $this->assertEqual($results[1], (object) $defaults2, '_fundraiser_webform_get_components_by_keys() returned the correct field result.', 'testFundraiserWebformDBFunctions');
+    $count = 0;
+    foreach ($results as $this_result) {
+      $count++;
+    }
+    $this->assertEqual($count, 2, '_fundraiser_webform_get_components_by_keys() returned the correct number of results.', 'testFundraiserWebformDBFunctions');
+
+    // Test component deleteing.
+    _fundraiser_webform_delete_component($defaults2['nid'], $defaults2['form_key']);
+    $results = _fundraiser_webform_get_components_by_nid($defaults['nid']);
+    $count = 0;
+    foreach ($results as $this_result) {
+      $count++;
+    }
+    $this->assertEqual($count, 1, '_fundraiser_webform_delete_component() deleted the correct number of results.', 'testFundraiserWebformDBFunctions');
+    $this->assertEqual($this_result, (object) $defaults, '_fundraiser_webform_delete_component() deleted the correct field.', 'testFundraiserWebformDBFunctions');
+
+    // Test how many amount fields are retrieved.
+    _fundraiser_webform_delete_component($defaults['nid'], $defaults['form_key']);
+    $defaults['form_key'] = 'amount';
+    $defaults['type'] = 'select';
+    $defaults['cid'] = 1;
+    drupal_write_record('webform_component', $defaults);
+    $defaults['cid']++;
+    drupal_write_record('webform_component', $defaults);
+    $defaults['cid']++;
+    drupal_write_record('webform_component', $defaults);
+    $count = _fundraiser_webform_get_amount_count($defaults['nid']);
+    $this->assertEqual($count, 3, '_fundraiser_webform_get_amount_count() retrieved correct number of amount fields.', 'testFundraiserWebformDBFunctions');
+  }
+
+  /**
+   * Unit test component creation function - per field info declared by Fundraiser API.
+   */
+  public function testFundraiserWebformComponentFunctions() {
+    // First create test data, here, a donation content type and node to test against.
+    $fundraiser->nid = 1;
+    $fields['key_one'] = array(
+      '#title' => 'Key One',
+      '#type' => 'fieldset',
+      '#required' => 0,
+    );
+    $fields['key_one']['key_two'] = array(
+      '#title' => 'Key Two',
+      '#type' => 'select',
+      '#value' => '1',
+      '#required' => 1,
+      '#extra' => array(
+        'description' => 'Example Desc',
+        'items' => "1|one\n,2|two\n,3|three\n",
+        'width' => 10,
+        'field_prefix' => 'Example Prefix',
+        'private' => 0,
+      ),
+    );
+    $fields['key_one']['key_three'] = array(
+      '#title' => 'Key Three',
+      '#type' => 'textfield',
+      '#required' => 1,
+    );
+    $fields['key_one']['key_four'] = array(
+      '#title' => 'Key Four',
+      '#type' => 'fieldset',
+      '#required' => 0,
+    );
+    $fields['key_one']['key_four']['key_five'] = array(
+      '#title' => 'Key Five',
+      '#type' => 'textfield',
+      '#required' => 1,
+    );
+    $fields['key_six'] = array(
+      '#title' => 'Key Six',
+      '#type' => 'textfield',
+      '#required' => 0,
+    );
+    $child_weight = 0;
+    foreach ($fields as $field_key => $field) {
+      _fundraiser_webform_update_component($fundraiser, $field_key, $field, 0, $child_weight);
+      $child_weight++;
+    }
+    $keys = array('key_one', 'key_two', 'key_three', 'key_four', 'key_five', 'key_six');
+
+    // Then we test each field for existance and correctness.
+    $results = _fundraiser_webform_get_components_by_keys(1, $keys);
+    // For each result, we expect a component to exist.
+    $this->assertEqual(count($results), 6, '_fundraiser_webform_update_component() created the correct number of components.', 'testFundraiserWebformComponentFunctions');
+    // Check that keys have all correct data.
+    $this->assertEqual($results[0]->type, $fields['key_one']['#type'], '_fundraiser_webform_update_component() created the correct settings.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[1]->nid, 1, '_fundraiser_webform_update_component() created the correct settings.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[1]->pid, $results[0]->cid, '_fundraiser_webform_update_component() nested fields correctly.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[1]->form_key, 'key_two', '_fundraiser_webform_update_component() created the correct settings.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[1]->name, $fields['key_one']['key_two']['#title'], '_fundraiser_webform_update_component() created the correct settings.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[1]->type, $fields['key_one']['key_two']['#type'], '_fundraiser_webform_update_component() created the correct settings.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[1]->value, $fields['key_one']['key_two']['#value'], '_fundraiser_webform_update_component() created the correct settings.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[1]->extra, serialize($fields['key_one']['key_two']['#extra']), '_fundraiser_webform_update_component() created the correct settings.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[1]->mandatory, $fields['key_one']['key_two']['#required'], '_fundraiser_webform_update_component() created the correct settings.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($results[4]->pid, $results[3]->cid, '_fundraiser_webform_update_component() nested fields correctly down two levels.', 'testFundraiserWebformComponentFunctions');
+
+    // Check the paths are as expected.
+    $retrieved = _fundraiser_webform_walk_component_hierarchy(1, $results[0]->cid);
+    $expected = array('key_one');
+    $this->assertEqual($retrieved, $expected, '_fundraiser_webform_walk_component_hierarchy() got correct path from nested fields.', 'testFundraiserWebformComponentFunctions');
+    $retrieved = _fundraiser_webform_walk_component_hierarchy(1, $results[1]->cid);
+    $expected = array('key_one', 'key_two');
+    $this->assertEqual($retrieved, $expected, '_fundraiser_webform_walk_component_hierarchy() got correct path from nested fields.', 'testFundraiserWebformComponentFunctions');
+    $retrieved = _fundraiser_webform_walk_component_hierarchy(1, $results[2]->cid);
+    $expected = array('key_one', 'key_three');
+    $this->assertEqual($retrieved, $expected, '_fundraiser_webform_walk_component_hierarchy() got correct path from nested fields.', 'testFundraiserWebformComponentFunctions');
+    $retrieved = _fundraiser_webform_walk_component_hierarchy(1, $results[4]->cid);
+    $expected = array('key_one', 'key_four', 'key_five');
+    $this->assertEqual($retrieved, $expected, '_fundraiser_webform_walk_component_hierarchy() got correct path from nested fields.', 'testFundraiserWebformComponentFunctions');
+
+    $fields['key_six'] = array(
+      '#title' => 'Key Six New Name',
+      '#type' => 'textfield',
+      '#required' => 0,
+    );
+    _fundraiser_webform_update_component($fundraiser, 'key_six', $fields['key_six'], 0, 0);
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'key_six');
+    $this->assertEqual($retrieved->name, $fields['key_six']['#title'], '_fundraiser_webform_update_component() updated the field correctly.', 'testFundraiserWebformComponentFunctions');
+
+    // Test that the field_info_alter hook is adding field info properly.
+    $fields = array();
+    $fields['non_key'] = array(
+      '#title' => 'Not a listed key',
+      '#type' => 'textfield',
+      '#required' => 0,
+    );
+    $fields['amount'] = array(
+      '#title' => 'Listed key',
+      '#type' => 'textfield',
+      '#required' => 0,
+    );
+    fundraiser_webform_fundraiser_field_info_alter($fields);
+    $this->assertEqual(!isset($new_fields['non_key']['#email']), TRUE, 'fundraiser_webform_fundraiser_field_info_alter() altered fields correctly.', 'testFundraiserWebformComponentFunctions');
+    $this->assertEqual($new_fields['amount']['#email'], 1, 'fundraiser_webform_fundraiser_field_info_alter() altered fields correctly.', 'testFundraiserWebformComponentFunctions');
+  }
+
+  /**
+   * Unit test amount field creation as declared by Fundraiser API. Testing amounts separately b/c they're tricky.
+   * ALERT: This is technically an integration test of the Fundraiser Webform implementation of create callbacks in field creation.
+   */
+  public function testFundraiserWebformAmountFieldFunctions() {
+    $fundraiser->nid = 1;
+    $fundraiser->donation_amounts = array(
+      array('10', '$10'),
+      array('20', '$20'),
+      array('30', '$30'),
+    );
+    $fundraiser->show_other_amount = 1;
+    $fundraiser->minimum_donation_amount = 10;
+    $fields['donation'] = array(
+      '#title' => 'Donation',
+      '#type' => 'fieldset',
+      '#required' => 0,
+    );
+    $fields['donation']['amount'] = array(
+      '#title' => 'Amount',
+      '#type' => 'textfield',
+      '#required' => 1,
+      '#extra' => array(
+        'description' => '',
+        'width' => 10,
+        'field_prefix' => '$',
+      ),
+      '#create_callback' => '_fundraiser_amount_field_create', // This tests code in fundraiser.module in conjunction with fundraiser_webform field creation.
+    );
+    $fields['donation']['other_amount'] = array(
+      '#title' => 'Other',
+      '#type' => 'textfield',
+      '#required' => 0,
+      '#extra' => array(
+        'description' => 'Minimum payment $' . variable_get('fundraiser_default_minimum', 10.00) . '.',
+        'width' => 10,
+        'field_prefix' => '$',
+      ),
+      '#create_callback' => '_fundraiser_other_amount_field_create', // This tests code in fundraiser.module in conjunction with fundraiser_webform field creation.
+      '#validate_callback' => '_fundraiser_other_amount_field_validate',
+    );
+    $child_weight = 0;
+    foreach ($fields as $field_key => $field) {
+      _fundraiser_webform_update_component($fundraiser, $field_key, $field, 0, $child_weight);
+      $child_weight++;
+    }
+
+    // Now to check if that went through according to fundraiser's given settings.
+    // There should be an amount field.
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'amount');
+    $expected = 'Please select your tax-deductible gift amount below';
+    $this->assertEqual(empty($retrieved->name), FALSE, '_fundraiser_webform_update_component() created the amount field correctly.', 'testFundraiserWebformAmountFieldFunctions');
+    // It should be type select.
+    $this->assertEqual($retrieved->type, 'select', '_fundraiser_webform_update_component() created the amount type correctly.', 'testFundraiserWebformAmountFieldFunctions');
+    // It should have a flattened array of donation amounts.
+    $expected = serialize(array(
+      'description' => 'Minimum payment $' . $fundraiser->minimum_donation_amount . '.',
+      'items' => '10|$10' . "\n" . '20|$20' . "\n" . '30|$30' . "\n" . 'other|Other',
+      'multiple' => 0,
+      'private' => 0,
+    ));
+    $this->assertEqual($retrieved->extra, $expected, '_fundraiser_webform_update_component() created the extra settings correctly.', 'testFundraiserWebformAmountFieldFunctions');
+    // There should be an other_amount field.
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'other_amount');
+    $this->assertEqual(empty($retrieved->name), FALSE, '_fundraiser_webform_update_component() created the other amount field correctly.', 'testFundraiserWebformAmountFieldFunctions');
+    // It should have the correct description./Users/cg176010/Desktop/house
+    $expected = serialize(array(
+      'description' => 'Minimum payment $' . $fundraiser->minimum_donation_amount . '.',
+      'width' => 10,
+      'field_prefix' => '$',
+      'private' => 0,
+    ));
+    $this->assertEqual($retrieved->extra, $expected, '_fundraiser_webform_update_component() created the other amount description correctly.', 'testFundraiserWebformAmountFieldFunctions');
+
+    // Change settings. Minimum donation amount is now 20.
+    $fundraiser->donation_amounts = array(
+      array('10', '$10'),
+      array('20', '$20'),
+      array('30', '$30'),
+    );
+    $fundraiser->minimum_donation_amount = 20;
+    $fundraiser->show_other_amount = 1;
+    $child_weight = 0;
+    foreach ($fields as $field_key => $field) {
+      _fundraiser_webform_update_component($fundraiser, $field_key, $field, 0, $child_weight);
+      $child_weight++;
+    }
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'amount');
+    // It should have the correct description.
+    $expected = serialize(array(
+      'description' => 'Minimum payment $' . $fundraiser->minimum_donation_amount . '.',
+      'items' => '10|$10' . "\n" . '20|$20' . "\n" . '30|$30' . "\n" . 'other|Other',
+      'multiple' => 0,
+      'private' => 0,
+    ));
+    $this->assertEqual($retrieved->extra, $expected, '_fundraiser_webform_update_component() created the amount description correctly.', 'testFundraiserWebformAmountFieldFunctions');
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'other_amount');
+    // It should have the correct description.
+    $expected = serialize(array(
+      'description' => 'Minimum payment $' . $fundraiser->minimum_donation_amount . '.',
+      'width' => 10,
+      'field_prefix' => '$',
+      'private' => 0,
+    ));
+    $this->assertEqual($retrieved->extra, $expected, '_fundraiser_webform_update_component() created the other amount description correctly.', 'testFundraiserWebformAmountFieldFunctions');
+
+    // Change settings. No donation amount select box.
+    $fundraiser->donation_amounts = '';
+    $fundraiser->minimum_donation_amount = 10;
+    $fundraiser->show_other_amount = 1;
+    $child_weight = 0;
+    foreach ($fields as $field_key => $field) {
+      _fundraiser_webform_update_component($fundraiser, $field_key, $field, 0, $child_weight);
+      $child_weight++;
+    }
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'amount');
+    // It should be type textfield.
+    $this->assertEqual($retrieved->type, 'textfield', '_fundraiser_webform_update_component() created the amount type correctly.', 'testFundraiserWebformAmountFieldFunctions');
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'other_amount');
+    // There should NOT be an other_amount field.
+    $this->assertEqual(empty($retrieved), TRUE, '_fundraiser_webform_update_component() deleted the other amount field correctly.', 'testFundraiserWebformAmountFieldFunctions');
+
+    // Change settings. No other field allowed.
+    $fundraiser->donation_amounts = array(
+      array('10', '$10'),
+      array('20', '$20'),
+      array('30', '$30'),
+    );
+    $fundraiser->minimum_donation_amount = 10;
+    $fundraiser->show_other_amount = 0;
+    $child_weight = 0;
+    foreach ($fields as $field_key => $field) {
+      _fundraiser_webform_update_component($fundraiser, $field_key, $field, 0, $child_weight);
+      $child_weight++;
+    }
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'amount');
+    // It should be type textfield.
+    $this->assertEqual($retrieved->type, 'select', '_fundraiser_webform_update_component() created the amount type correctly.', 'testFundraiserWebformAmountFieldFunctions');
+    // There should not be an other item available.
+    $expected = serialize(array(
+      'description' => '',
+      'items' => '10|$10' . "\n" . '20|$20' . "\n" . '30|$30',
+      'multiple' => 0,
+      'private' => 0,
+    ));
+    $this->assertEqual($retrieved->extra, $expected, '_fundraiser_webform_update_component() created the extra settings correctly.', 'testFundraiserWebformAmountFieldFunctions');
+    $retrieved = _fundraiser_webform_get_component_by_nid_key($fundraiser->nid, 'other_amount');
+    // There should NOT be an other_amount field.
+    $this->assertEqual(empty($retrieved), TRUE, '_fundraiser_webform_update_component() created the other amount field correctly.', 'testFundraiserWebformAmountFieldFunctions');
+  }
+
+  /**
+   * Unit test form manipulation for webform form components during form creation.
+   */
+  public function testFundraiserWebformFAPIFunctions() {
+    // Make sure we're clean in the database.
+    db_delete('webform_component')->execute();
+
+    // Generate a node type and form to work with.
+    $settings = array(
+      'type' => 'donation_form',
+      'title_label' => 'Donation',
+    );
+    // Set as fundraiser type since drupalCreateContentType does not process the form for variables.
+    variable_set('fundraiser_donation_form', TRUE);
+    // Create the type.
+    $content_type = $this->drupalCreateContentType($settings);
+    // Check the content type creation.
+    $this->assertEqual(variable_get('fundraiser_' . $content_type->type, FALSE), TRUE, 'Created node type is listed in fundraiser type variable.', 'testFundraiserWebformFAPIFunctions');
+    $this->assertEqual(fundraiser_is_donation_type($content_type->type), TRUE, 'Created node type is listed in fundraiser types.', 'testFundraiserWebformFAPIFunctions');
+    $webform_types = webform_variable_get('webform_node_types');
+    $this->assertEqual(in_array($content_type->type, $webform_types), TRUE, 'Created node type is listed in webform_node_types.', 'testFundraiserWebformFAPIFunctions');
+    $webform_types = webform_variable_get('webform_node_types_primary');
+    $this->assertEqual(in_array($content_type->type, $webform_types), TRUE, 'Created node type is listed in webform_node_types_primary.', 'testFundraiserWebformFAPIFunctions');
+
+    // Create a node.
+    $settings = array(
+      'type' => $content_type->type,
+      'amount_wrapper' => array(
+        'donation_amounts' => array(
+          array('10', '$10'),
+          array('20', '$20'),
+          array('30', '$30'),
+        ),
+        'show_other_amount' => 1,
+        'minimum_donation_amount' => 10,
+      ),
+      'gateway' => '<test_gateway>',
+    );
+    $node = $this->drupalCreateNode($settings);
+    $node = node_load($node->nid);
+    // Now we have a node. We need to get a form for the node.
+    // We can't use node_view to do that, that will give us a rendered form.
+    // Better, to get the form structure from webforms form creation code.
+    // See: webform.module, webform_node_view(), ln 1488.
+    // Render the form and generate the output. This tests much of the webform creation for an entire node type from top to bottom.
+    $this->assertEqual(!empty($node->webform['components']), TRUE, 'node_load() returned webform components.', 'testFundraiserWebformFAPIFunctions');
+    $form = drupal_get_form('webform_client_form_' . $node->nid, $node, array(), FALSE);
+    // Returns a renderable form array for a given form ID.
+    $this->assertEqual(!empty($form), TRUE, 'drupal_get_form() returned results.', 'testFundraiserWebformFAPIFunctions');
+    // Test finding all components. Make sure to ask for a reset so we get clean data.
+    $component_hierarchy = _fundraiser_webform_parse_components($node->nid, $node->webform['components'], TRUE);
+    // Also tests _fundraiser_webform_walk_component_hierarchy().
+    $this->assertEqual(!empty($component_hierarchy), TRUE, '_fundraiser_webform_parse_components() returned results.', 'testFundraiserWebformFAPIFunctions');
+    $field = &_fundraiser_webform_find_field($form, $component_hierarchy['first_name']);
+    $this->assertEqual($field['#title'], 'First Name', '_fundraiser_webform_find_field() returned right field.', 'testFundraiserWebformFAPIFunctions');
+    $field = &_fundraiser_webform_find_field($form, $component_hierarchy['last_name']);
+    $this->assertEqual($field['#title'], 'Last Name', '_fundraiser_webform_find_field() returned right field.', 'testFundraiserWebformFAPIFunctions');
+    // Test finding a single component. Make sure to ask for a reset so we get clean data.
+    $component_hierarchy = _fundraiser_webform_parse_component($node->nid, 'first_name', TRUE);
+    // Also tests _fundraiser_webform_get_components_by_keys(), _fundraiser_webform_walk_component_hierarchy().
+    $this->assertEqual(!empty($component_hierarchy), TRUE, '_fundraiser_webform_parse_component() returned results.', 'testFundraiserWebformFAPIFunctions');
+    $field = &_fundraiser_webform_find_field($form, $component_hierarchy);
+    $this->assertEqual($field['#title'], 'First Name', '_fundraiser_webform_find_field() returned right field.', 'testFundraiserWebformFAPIFunctions');
+
+    // Test submission key flattening, given an example submission tree from live.
+    $submit_tree = array(
+      'cid' => '1',
+      'donation' => array(
+        'amount' => 10,
+      ),
+      'donor_information' => array(
+        'first_name' => 'First name',
+        'last_name' => 'Last name',
+        'mail' => 'example@example.com',
+      ),
+      'billing_information' => array(
+        'address' => 'First address line',
+        'address_line_2' => 'Second address line',
+        'city' => 'Cityname',
+        'country' => 840, // US
+        'state' => 2, // Alaska
+        'zip' => 12345,
+      ),
+      'credit_card_information' => array(
+        'card_number' => 4111111111111111,
+        'card_cvv' => 123,
+        'recurs_monthly' => array(),
+        'card_expiration_month' => 8,
+        'card_expiration_year' => 2012,
+      ),
+    );
+    $results = _fundraiser_webform_submission_flatten($node->nid, $submit_tree);
+    // Also tests _fundraiser_webform_get_components_by_nid().
+    $this->assertEqual($results['first_name'], 'First name', '_fundraiser_webform_submission_flatten() correctly flatted submissions.', 'testFundraiserWebformFAPIFunctions');
+    $this->assertEqual($results['card_number'], '4111111111111111', '_fundraiser_webform_submission_flatten() correctly flatted submissions.', 'testFundraiserWebformFAPIFunctions');
+    $this->assertEqual(empty($results['cid']), TRUE, '_fundraiser_webform_submission_flatten() correctly flatted submissions.', 'testFundraiserWebformFAPIFunctions');
+  }
+}

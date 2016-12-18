@@ -1,0 +1,67 @@
+<?php
+/**
+ * @file
+ * Install, uninstall, and update hooks for the springboard_health module.
+ */
+
+
+/**
+ * Implements hook_install().
+ *
+ */
+function springboard_health_install() {
+  $default = array(
+    'salesforce_log_batch' => 'salesforce_log_batch',
+    'salesforce_log_item' => 'salesforce_log_item',
+    'webform_submissions' => 'webform_submissions',
+    'secure_prepopulate_expired' => 'secure_prepopulate_expired',
+    'fundraiser_sustainers_log' => 'fundraiser_sustainers_log',
+  );
+  variable_set('springboard_health_tables', $default);
+}
+
+/**
+ * Implements hook_schema().
+ */
+function springboard_health_schema() {
+  $schema['springboard_health'] = array(
+    'description' => '',
+    'fields' => array(
+      'tablename' => array(
+        'description' => 'The table to monitor.',
+        'type' => 'varchar',
+        'length' => '100',
+        'not null' => FALSE,
+      ),
+      'mail' => array(
+        'description' => 'Flag to toggle email notification.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'row_limit' => array(
+        'description' => 'the row count to set the email to send',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('tablename'),
+  );
+ return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ */
+function springboard_health_uninstall() {
+  variable_del('springboard_health_tables');
+  $rules = rules_config_load_multiple(FALSE);
+  foreach ($rules as $rule) {
+    if (strpos($rule->name, 'springboard_health') === 0) {
+      rules_config_delete(array($rule->id));
+    }
+  }
+}

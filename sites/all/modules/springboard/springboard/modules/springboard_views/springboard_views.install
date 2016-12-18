@@ -1,0 +1,123 @@
+<?php
+/**
+ * @file
+ * Install and updates for Springboard Views.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function springboard_views_install() {
+  springboard_views_create_aggregator_feed();
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * Removes the Springboard Feed.
+ */
+function springboard_views_uninstall() {
+  // Find the feed ID.
+  $fid = db_query("SELECT fid FROM {aggregator_feed} WHERE title = 'Springboard Feed';")
+    ->fetchField();
+
+  // Passing in only the feed ID will delete it and related items
+  // and categories.
+  if (is_numeric($fid)) {
+    aggregator_save_feed(array('fid' => $fid));
+  }
+}
+
+/**
+ * Implements hook_requirements().
+ *
+ * Checks Views for anonymous access.
+ */
+function springboard_views_requirements($phase) {
+  $requirements = array();
+
+  if ($phase == 'runtime') {
+    ctools_include('export');
+    $views = array(
+      'sbv_notes',
+      'sbv_administrator_users',
+      'sbv_forms',
+      'sbv_donations',
+      'sbv_page_wrappers',
+      'sbv_email_templates',
+      'sbv_dblog',
+      'sbv_soap_errors',
+      'sbv_contacts',
+      'sbv_assets',
+      'sbv_sf_batch_items',
+      'sbv_sf_batches',
+      'sbv_sf_queue',
+    );
+    $anon = user_load(0);
+    $insecure_views = array();
+    $severity = REQUIREMENT_OK;
+    foreach ($views as $view_name) {
+      $view = ctools_export_crud_load('views_view', $view_name);
+      $displays = array_keys($view->display);
+
+      if ($view->access($displays, $anon)) {
+        $insecure_views[] = $view_name;
+        $severity = REQUIREMENT_ERROR;
+      }
+    }
+
+    if (!empty($insecure_views)) {
+      $placeholders = array(
+        '%views' => implode(', ', $insecure_views),
+      );
+      $value = t('The anonymous user can access the following Views: %views Please add access control or revert them in the Views UI.', $placeholders);
+    }
+    else {
+      $value = t('Springboard Views are properly restricted from anonymous access.');
+    }
+
+    $requirements = array(
+      'springboard_views_access_control' => array(
+        'title' => t('Springboard Views access control'),
+        'value' => $value,
+        'severity' => $severity,
+      ),
+    );
+
+  }
+
+  return $requirements;
+}
+
+/**
+ * Enables aggregator and views_data_export, and creates the Springboard Feed.
+ */
+function springboard_views_update_7000() {
+  module_enable(array('aggregator', 'views_data_export'));
+  springboard_views_create_aggregator_feed();
+}
+
+/**
+ * Creates Aggregator feed for the Springboard Notes view.
+ */
+function springboard_views_create_aggregator_feed() {
+  // Create the Aggregator feed needed for the sbv_springboard_notes view.
+  $feed = array(
+    'title' => 'Springboard Feed',
+    'url' => 'http://www.jacksonriver.com/sb-admin-feed.xml',
+    'refresh' => 3600,
+    'block' => 5,
+  );
+
+  // See if this feed already exists.
+  $fid = db_query("SELECT fid FROM {aggregator_feed} WHERE title = 'Springboard Feed';")
+    ->fetchField();
+
+  // When providing a feed ID, aggregator will edit the existing feed.
+  // So this will repair the feed instead of creating a new one.
+  if (is_numeric($fid)) {
+    $feed['fid'] = $fid;
+  }
+
+  aggregator_save_feed($feed);
+}

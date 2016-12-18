@@ -1,0 +1,592 @@
+<?php
+/**
+ * @file
+ * Fundraiser module setup, designed to provide a standard environment for children tests.
+ */
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+abstract class FundraiserSetup extends DrupalWebTestCase {
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp($additional_modules = array()) {
+    // This module sets up the basic fundraiser environment for testing.
+    // Assumptions: fundraiser_commerce, and fundraiser_webform.
+    // Additional modules to be turned on.
+    $enable_modules = array(
+      'fundraiser',
+      'fundraiser_webform', // Default testing environment.
+      'fundraiser_commerce', // Default testing environment.
+      'webform_user',
+      'commerce_product', // To remove when dependancies in commerce_authnet, commerce_payment resolved.
+      'commerce_product_reference', // To remove when dependancies in commerce_authnet, commerce_payment resolved.
+      'commerce_payment_example', // Gateway.
+      'commerce_cardonfile',
+      'encrypt',
+    );
+    $enable_modules = array_merge($enable_modules, $additional_modules);
+
+    // Call the parent to set all of the base modules up.
+    parent::setUp($enable_modules);
+
+    // Create a key file
+    variable_set('encrypt_secure_key_path', DRUPAL_ROOT . '/' . variable_get('file_public_path', conf_path() . '/files'));
+    variable_set('encrypt_default_method', 'mcrypt_rij_256');
+    $key_file = variable_get('encrypt_secure_key_path', '') . '/' . ENCRYPT_SECURE_KEY_FILE;
+    $open_file = fopen($key_file, 'wb');
+    $new_key = md5(uniqid(mt_rand(0, mt_rand()), TRUE)) . md5(uniqid(mt_rand(0, mt_rand()), TRUE));
+    // Create file with new key in it.
+    fwrite($open_file, $new_key);
+    fclose($open_file);
+
+    // Setup the environment to a default standard.
+    $this->setupUserProfile();
+    $this->setupWebformToUserMap();
+    $this->createDonationContentType();
+    // Do not create an additional node, but leave code in place for it.
+  }
+
+  /**
+   * Additional configuration public functions to create a working environment.
+   */
+
+  /**
+   * Configure a default set of User profile fields.
+   */
+  protected function setupUserProfile() {
+    // See http://drupal.org/node/874026 for discussion re: Profile in D7.
+    // By preference we use field API.
+    $profile_fields = array();
+    $profile_fields[] = array(
+      'label' => t('First name'),
+      'field_name' => 'sbp_first_name',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Last name'),
+      'field_name' => 'sbp_last_name',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Address'),
+      'field_name' => 'sbp_address',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Address Line 2'),
+      'field_name' => 'sbp_address_line_2',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('City'),
+      'field_name' => 'sbp_city',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    // Commerce does not store countries in a database, it relies instead on locale.inc
+    $countries_set = fundraiser_commerce_get_countries();
+    $zones = '';
+    foreach ($countries_set->zones as $zone) {
+      $zones[$zone->zone_id] = $zone->zone_name;
+    }
+    // For Commerce or others for now.
+    $profile_fields[] = array(
+      'label' => t('State/Province'),
+      'field_name' => 'sbp_state',
+      'type' => 'list_text',
+      'widget' => array(
+        'type' => 'options_select',
+      ),
+      'settings' => array('allowed_values' => $zones),
+    );
+    $profile_fields[] = array(
+      'label' => t('Postal Code'),
+      'field_name' => 'sbp_zip',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    // Commerce does not store countries in a database, it relies instead on locale.inc
+    $countries = '';
+    foreach ($countries_set->countries as $country) {
+      $countries[$country->country_id] = $country->country_name;
+    }
+    // For Commerce or others for now.
+    $profile_fields[] = array(
+      'label' => t('Country'),
+      'field_name' => 'sbp_country',
+      'type' => 'list_text',
+      'widget' => array(
+        'type' => 'options_select',
+      ),
+      'settings' => array('allowed_values' => $countries),
+    );
+    $profile_fields[] = array(
+      'label' => t('Campaign ID'),
+      'field_name' => 'sbp_cid',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Market Source'),
+      'field_name' => 'sbp_ms',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Referrer'),
+      'field_name' => 'sbp_referrer',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Initial Referrer'),
+      'field_name' => 'sbp_initial_referrer',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Search Engine'),
+      'field_name' => 'sbp_search_engine',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Search String'),
+      'field_name' => 'sbp_search_string',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('User Agent'),
+      'field_name' => 'sbp_user_agent',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Salesforce Account Id'),
+      'field_name' => 'sbp_salesforce_account_id',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Salesforce Contact Id'),
+      'field_name' => 'sbp_salesforce_contact_id',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    // Create the field on the user for each profile.
+    foreach ($profile_fields as $profile_field) {
+      $field = array(
+        'field_name' => $profile_field['field_name'],
+        'cardinality' => 1,
+        'type' => $profile_field['type'],
+        'settings' => isset($profile_field['settings']) ? $profile_field['settings'] : array(),
+      );
+      field_create_field($field);
+      $instance = array(
+        'entity_type' => 'user',
+        'bundle' => 'user',
+      );
+      $instance = array_merge($profile_field, $instance);
+      field_create_instance($instance);
+    }
+  }
+
+  /**
+   * Configure a default set of User profile to Webform maps.
+   */
+  protected function setupWebformToUserMap() {
+    // Set the default fundraiser to webform user profile handling settings.
+    variable_set('fundraiser_webform_to_user_map', array(
+      'mail' => 'mail',
+      'sbp_first_name' => 'first_name',
+      'sbp_last_name' => 'last_name',
+      'sbp_address' => 'address',
+      'sbp_address_line_2' => 'address_line_2',
+      'sbp_city' => 'city',
+      'sbp_state' => 'state',
+      'sbp_zip' => 'zip',
+      'sbp_country' => 'country',
+    )
+    );
+  }
+
+  /**
+   * Configure a default set of Market Source to Webform maps.
+   *
+  protected function setupMarketSourceToUserMap() {
+    // And the same for market source
+    variable_set('market_source_to_user_map', array(
+      'sbp_cid' => 'cid',
+      'sbp_ms' => 'ms',
+      'sbp_referrer' => 'referrer',
+      'sbp_initial_referrer' => 'initial_referrer',
+      'sbp_search_engine' => 'search_engine',
+      'sbp_search_string' => 'search_string',
+      'sbp_user_agent' => 'user_agent',
+      )
+    );
+  }
+  */
+
+  /**
+   * Create the donation_form type.
+   */
+  protected function createDonationContentType() {
+    $type = node_type_set_defaults();
+    $type->name = t('Donation Form');
+    $type->type = 'donation_form';
+    $type->description = t('Test provided donation form type.');
+    $type->title_label = t('Title');
+    $type->has_title = ($type->title_label != '');
+    $type->base = 'node_content';
+    $type->custom = TRUE;
+    $type->modified = TRUE;
+    $type->module = 'fundraiser';
+    // Save or reset persistent variable values.
+    $variables = array(
+      'node_submitted' => 0,
+      'comment' => COMMENT_NODE_HIDDEN,
+      'fundraiser' => 1,
+      'webform_user' => 1,
+      'webform_user_default_fields' => array(
+        'webform_user_all_profile_fields' => 'webform_user_all_profile_fields',
+      ),
+    );
+    foreach ($variables as $key => $value) {
+      $variable_new = $key . '_' . $type->type;
+      if (is_array($value)) {
+        $value = array_keys(array_filter($value));
+      }
+      variable_set($variable_new, $value);
+    }
+    $status = node_type_save($type);
+    node_types_rebuild();
+    node_add_body_field($type);
+    // Add as a webform.
+    $webform_node_types = variable_get('webform_node_types', array('webform'));
+    $webform_node_types_primary = variable_get('webform_node_types_primary', array('webform'));
+    $webform_node_types = array_merge($webform_node_types, array('donation_form'));
+    $webform_node_types_primary = array_merge($webform_node_types_primary, array('donation_form'));
+    variable_set('webform_node_types', array_unique($webform_node_types));
+    variable_set('webform_node_types_primary', array_unique($webform_node_types_primary));
+  }
+
+  /**
+   * Create an example Fundraiser node.
+   */
+  protected function createDonationForm($node_configs = '') {
+    $fields = _fundraiser_field_info(TRUE);
+    // Create the node.
+    $node = new stdClass();
+    $node->is_new = 1;
+    $node->type = 'donation_form';
+    $node->language = LANGUAGE_NONE;
+    $node->uid = 1;
+    $node->title = 'Test Donation Form';
+    $node->field_fundraiser_internal_name = array($node->language => array(0 => array('value' => 'Test Donation Form')));
+    $node->status = 1;
+    $node->promote = 1;
+    $node->body[LANGUAGE_NONE][0]['value'] = 'Donec placerat. Nullam nibh dolor, blandit sed, fermentum id, ' .
+      'imperdiet sit amet, neque. Nam mollis ultrices justo. Sed tempor. Sed vitae tellus. Etiam sem arcu, eleifend ' .
+      'sit amet, gravida eget, porta at, wisi. Nam non lacus vitae ipsum viverra pretium. Phasellus massa. Fusce ' .
+      'magna sem, gravida in, feugiat ac, molestie eget, wisi. Fusce consectetuer luctus ipsum. Vestibulum nunc. ' .
+      'Suspendisse dignissim adipiscing libero. Integer leo. Sed pharetra ligula a dui. Quisque ipsum nibh, ullamcorper ' .
+      'eget, pulvinar sed, posuere vitae, nulla. Sed varius nibh ut lacus. Curabitur fringilla. Nunc est ipsum, ' .
+      'pretium quis, dapibus sed, varius non, lectus. Proin a quam. Praesent lacinia, eros quis aliquam porttitor, ' .
+      'urna lacus volutpat urna, ut fermentum neque mi egestas dolor.';
+    $node->body[LANGUAGE_NONE][0]['summary'] = 'Donec placerat. Nullam nibh dolor, blandit sed, fermentum id, imperdiet ' .
+      'sit amet, neque. Nam mollis ultrices justo. Sed tempor. Sed vitae tellus. Etiam sem arcu, eleifend sit amet, ' .
+      'gravida eget, porta at, wisi. Nam non lacus vitae ipsum viverra pretium. Phasellus massa. Fusce magna sem, gravida ' .
+      'in, feugiat ac, molestie eget, wisi.';
+    $node->body[LANGUAGE_NONE][0]['format'] = 'filtered_html';
+    $node->webform = array(
+      'confirmation' => 'Thank you [donation:first_name] [donation:last_name] for your donation of [donation:currency:symbol][donation:amount].' . "\n" .
+        "\n" .
+        'The email address we have for you is: [donation:mail]' . "\n" .
+        "\n" .
+        'The address we have on record for you is:' . "\n" .
+        '[donation:address] [donation:address_line_2]' . "\n" .
+        '[donation:city], [donation:state] [donation:zip]' . "\n" .
+        '[donation:country]' . "\n" .
+        "\n" .
+        'Your card ending in [donation:card_number], expires [donation:card_expiration_month] / [donation:card_expiration_year]',
+      'confirmation_format' => 'filtered_html',
+      'redirect_url' => '<confirmation>',
+      'teaser' => 0,
+      'block' => 0,
+      'allow_draft' => 0,
+      'auto_save' => 0,
+      'submit_notice' => 1,
+      'submit_text' => t('Donate'),
+      'submit_limit' => -1,
+      'submit_interval' => -1,
+      'total_submit_limit' => -1,
+      'total_submit_interval' => -1,
+      'status' => 1,
+      'record_exists' => '',
+      'roles' => array(
+        '0' => 1,
+        '1' => 2,
+      ),
+      'emails' => array(),
+      'components' => array(),
+    );
+    $node->gateways = array(
+      'credit' => array(
+        'status' => 1,
+        'method' => 'credit',
+        'id' => 'commerce_payment_example|commerce_payment_commerce_payment_example',
+      ),
+    );
+    $node->amount_wrapper = array(
+      'donation_amounts' => array(
+        '0' => array(
+          'weight' => 0,
+          'amount' => 10,
+          'label' => '$10',
+          'remove' => 0,
+        ),
+        '1' => array(
+          'weight' => 1,
+          'amount' => 20,
+          'label' => '$20',
+          'remove' => 0,
+        ),
+        '2' => array(
+          'weight' => 2,
+          'amount' => 50,
+          'label' => '$50',
+          'remove' => 0,
+        ),
+        '3' => array(
+          'weight' => 3,
+          'amount' => 100,
+          'label' => '$100',
+          'remove' => 0,
+        ),
+      ),
+      'show_other_amount' => 1,
+      'ask_for_quantity' => 1,
+      'minimum_donation_amount' => 10,
+    );
+    $node->recurring_setting = 'user_choice';
+    $node->is_webform_user = 1;
+    $node->send_new_user_email = 0;
+
+    // Merge in configurations, if given.
+    if (!empty($node_configs)) {
+      // Cast both to arrays so we can merge them.
+      $node_configs = (array) $node_configs;
+      $node = (array) $node;
+      // Merge.
+      $node = array_merge($node, $node_configs);
+      // Cast back to an object for saving.
+      $node = (object) $node;
+    }
+    node_save($node);
+    if (module_exists('webform_confirmations')) {
+      // Save confirmation details.
+      $confirmation['nid'] = $node->nid;
+      $confirmation['confirmation_page_title'] = 'Thank you for your donation!';
+      _webform_confirmations_update($confirmation);
+    }
+    // Return the created node object.
+    return $node;
+  }
+
+  /**
+   * Create an example Fundraiser user.
+   */
+  protected function createFundraiserUser($user_configs = '') {
+    $user = array(
+      'access content',
+    );
+    // Merge in configurations, if given.
+    if (!empty($user_configs)) {
+      // Cast both to arrays so we can merge them.
+      $user_configs = (array) $user_configs;
+      $user = array_merge($user, $user_configs);
+    }
+    $user = $this->drupalCreateUser($user);
+    return $user;
+  }
+
+  /**
+   * Submit a recurring donation to a donation form.
+   *
+   * @param int $nid
+   *   The node ID of the donation form.
+   * @param \DateTime $expiration
+   *   The expiration date of the credit card.
+   */
+  protected function submitRecurringDonation($nid, DateTime $expiration) {
+    $post_config = array(
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]' => $expiration->format('n'),
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]' => $expiration->format('Y'),
+      'submitted[payment_information][recurs_monthly][recurs]' => 'recurs',
+    );
+
+    $this->submitDonation($nid, $post_config);
+  }
+
+  /**
+   * Create a standard post.
+   */
+  protected function submitDonation($nid, $post_config = '') {
+    // Standard post values.
+    $month = date('n');
+    $year = date('Y');
+    $post = array(
+      'submitted[donation][amount]' => 10,
+      'submitted[donation][other_amount]' => '',
+      'submitted[donor_information][first_name]' => $this->randomName(5),
+      'submitted[donor_information][last_name]' => $this->randomName(5),
+      'submitted[donor_information][mail]' => 'example@example.com',
+      'submitted[billing_information][address]' => $this->randomName(5),
+      'submitted[billing_information][address_line_2]' => $this->randomName(5),
+      'submitted[billing_information][city]' => $this->randomName(5),
+      'submitted[billing_information][country]' => 'US',
+      'submitted[billing_information][state]' => 'NC',
+      'submitted[billing_information][zip]' => '11111',
+      'submitted[payment_information][payment_fields][credit][card_number]' => '4111111111111111',
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]' => $month,
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]' => $year,
+      'submitted[payment_information][payment_fields][credit][card_cvv]' => '111',
+    );
+    // Merge in configurations, if given.
+    if (!empty($post_config)) {
+      // Cast both to arrays so we can merge them.
+      $post_config = (array) $post_config;
+      $post = array_merge($post, $post_config);
+    }
+    $this->drupalPost('node/' . $nid, $post, t('Donate'));
+  }
+
+  protected function getCreditCards() {
+    $one_year_from_now = date_add(new DateTime(), date_interval_create_from_date_string('1 year'));
+    $expiration_year = date_format($one_year_from_now, 'Y');
+    $expiration_month = 12;
+
+    $cards = array(
+      'visa' => array(
+        'card_number' => '4111111111111111',
+        'card_expiration_month' => $expiration_month,
+        'card_expiration_year' => $expiration_year,
+        'card_cvv' => 111,
+      ),
+      'mastercard' => array(
+        'card_number' => '5555555555554444',
+        'card_expiration_month' => $expiration_month,
+        'card_expiration_year' => $expiration_year,
+        'card_cvv' => 111,
+      ),
+      'amex' => array(
+        'card_number' => '370000000000002',
+        'card_expiration_month' => $expiration_month,
+        'card_expiration_year' => $expiration_year,
+        'card_cvv' => 1111,
+      ),
+      'discover' => array(
+        'card_number' => '6011000000000012',
+        'card_expiration_month' => $expiration_month,
+        'card_expiration_year' => $expiration_year,
+        'card_cvv' => 111,
+      ),
+    );
+
+    return $cards;
+  }
+
+}

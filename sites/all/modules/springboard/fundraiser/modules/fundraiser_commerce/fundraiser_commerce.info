@@ -1,0 +1,17 @@
+name = Fundraiser Commerce
+description = Implements donation handling for Fundraiser with Commerce.
+core = 7.x
+package = Jackson River Springboard
+dependencies[] = addressfield (>=7.x-1.0)
+dependencies[] = fundraiser
+dependencies[] = commerce_order
+dependencies[] = commerce_payment
+dependencies[] = commerce_customer
+dependencies[] = encrypt
+dependencies[] = entity
+version = 7.x-4.x-dev
+
+files[] = tests/fundraiser_commerce.encrypt.test
+files[] = tests/fundraiser_commerce.gateway.authnet.test
+files[] = tests/fundraiser_commerce.gateway.test
+files[] = tests/fundraiser_commerce.unit.test

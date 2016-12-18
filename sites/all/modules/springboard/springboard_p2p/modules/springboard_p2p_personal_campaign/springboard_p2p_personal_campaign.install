@@ -1,0 +1,68 @@
+<?php
+
+/**
+ * Implements hook_update_N().
+ *
+ * Remove deprecated field for suggested donation amount.
+ */
+function springboard_p2p_personal_campaign_update_7002() {
+  // Delete the fields we don't want from the DB, we've created new ones andreplaced them in the slideshow view as well.
+  $fields_to_delete = array(
+    'field_p2p_personal_donation',
+  );
+
+  foreach ($fields_to_delete as $field_name) {
+    field_delete_field($field_name);
+    watchdog('springboard_p2p_personal_campaign', 'Deleted the :field_name field from all content type instances.', array(':field_name' => $field_name));
+  }
+
+  /**
+   * The fields aren't really deleted until the purge function runs, ordinarily
+   * during cron.  Count the number of fields we need to purge, and add five in
+   * case a few other miscellaneous fields are in there somehow.
+   */
+  field_purge_batch(count($fields_to_delete) + 5);
+
+  // In case of field type change, revert the feature
+  features_revert(array('springboard_p2p_personal_campaign' => array('field')));
+}
+
+/**
+ * Change field_ms_referrer and field_ms_initial_referrer to textareas.
+ */
+function springboard_p2p_personal_campaign_update_7003() {
+
+  $fields = array(
+    'field_ms_referrer',
+    'field_ms_initial_referrer',
+  );
+
+  foreach ($fields as $field_name) {
+    // Manual database changes.
+    db_update('field_config')
+      ->fields(array('type' => 'text_long'))
+      ->condition('field_name', $field_name)
+      ->execute();
+
+    $data_table = 'field_data_' . $field_name;
+    $revision_table = 'field_revision_' . $field_name;
+    $value_field = $field_name . '_value';
+
+    // From text.install for long text fields
+    $textarea_spec = array(
+      'type' => 'text',
+      'size' => 'big',
+      'not null' => FALSE,
+    );
+
+    db_change_field($data_table, $value_field, $value_field, $textarea_spec);
+
+    db_change_field($revision_table, $value_field, $value_field, $textarea_spec);
+  }
+
+  // Clear caches.
+  field_cache_clear(TRUE);
+
+  // Apply the new field instance configuration.
+  features_revert(array('springboard_p2p_personal_campaign' => array('field')));
+}

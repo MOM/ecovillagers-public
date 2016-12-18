@@ -1,0 +1,120 @@
+<?php
+/**
+ * @file
+ * Unit tests for commerce_litle fundraiser expire callback.
+ */
+
+class CommerceLitleExpirationUnitTest extends DrupalUnitTestCase {
+  public static function getInfo() {
+    return array(
+      'name' => 'Commerce Litle Unit Tests',
+      'description' => 'Test the Litle payment gateway.',
+      'group' => 'Commerce Litle',
+    );
+  }
+
+  /**
+   * Include the needed files.
+   */
+  public function setUp() {
+    parent::setUp();
+
+    module_load_include('inc', 'fundraiser_commerce', 'gateways/commerce_litle');
+  }
+
+  /**
+   * Tests eCheck when a sustainer count setting is provided.
+   */
+  function testExpireCheckWithCount() {
+    $submission_fields = $this->setupSubmissionFields('bank account');
+
+    $info = array(
+      'gateway_details' => array(
+        'settings' => array(
+          'commerce_litle_settings_sustainer_series_start_count' => 5,
+        ),
+      ),
+    );
+
+    $exp_date = $this->callExpireCallback($submission_fields, $info);
+
+    $date = new DateTime();
+    $date->add(new DateInterval('P5M'));
+
+    $this->assertEqual($date->format('m'), $exp_date['month'], 'Months match.');
+    $this->assertEqual($date->format('Y'), $exp_date['year'], 'Years match.');
+
+  }
+
+  /**
+   * Tests eCheck expire with the default 24 months.
+   */
+  function testExpireCheckWithoutCount() {
+    $submission_fields = $this->setupSubmissionFields('bank account');
+    $info = array();
+
+    $exp_date = $this->callExpireCallback($submission_fields, $info);
+
+    $date = new DateTime();
+    $date->add(new DateInterval('P24M'));
+
+    $this->assertEqual($date->format('m'), $exp_date['month'], 'Months match.');
+    $this->assertEqual($date->format('Y'), $exp_date['year'], 'Years match.');
+  }
+
+  /**
+   * Tests credit card expiration.
+   */
+  function testExpireCreditCard() {
+    $month = 12;
+    $year = 2014;
+    $submission_fields = $this->setupSubmissionFields('credit card', $month, $year);
+    $info = $this->setupInfo();
+
+    $exp_date = $this->callExpireCallback($submission_fields, $info);
+
+    $this->assertEqual($month, $exp_date['month'], 'Months match.');
+    $this->assertEqual($year, $exp_date['year'], 'Years match.');
+  }
+
+  protected function setupSubmissionFields($type = 'credit card', $month = NULL, $year = NULL) {
+    $fields = array(
+      'payment_method' => $type,
+    );
+    if ($type == 'bank account') {
+
+      return $fields;
+    }
+
+    $fields['payment_fields'] = array(
+      'credit' => array(
+        'card_expiration_month' => $month,
+        'card_expiration_year' => $year,
+      ),
+    );
+
+    return $fields;
+  }
+
+  protected function setupInfo($extend = FALSE) {
+    return array(
+      'gateway_details' => array(
+        'settings' => array(
+          'accountupdater_extend_sustainers' => $extend,
+        ),
+      ),
+    );
+  }
+
+  protected function callExpireCallback($submission_fields, $info) {
+
+    $gateway = commerce_litle_fundraiser_commerce_fundraiser_gateway_info();
+    $func = $gateway['expire callback'];
+    if (!function_exists($func)) {
+      $this->fail('The function ' . $func . ' can not be found.');
+    }
+
+    return $func($submission_fields, $info);
+  }
+
+}

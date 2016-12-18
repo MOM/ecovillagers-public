@@ -1,0 +1,81 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for the validation_log module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function validation_log_schema() {
+  $schema['validation_log'] = array(
+    'description' => 'The table to store validation logs.',
+    'fields' => array(
+      'lid' => array(
+        'description' => 'The primary identifier for a logl.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      // Webform component form_key (machine name).
+      'form_key' => array(
+        'description' => 'The associated form key identifier.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      // Associated node id.
+      'nid' => array(
+        'description' => 'The associated nid identifier.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'time' => array(
+        'description' => 'The timestamp of the error.',
+        'type' => 'int', // Using int instead of datetime, due to lack in SQLlite support
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'message' => array(
+        'description' => 'The logged message.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      // Webform component id, if call is from a webform component.
+      'cid' => array(
+        'description' => 'The associated cid identifier.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+      ),
+      // Added this cause it's handy in a log, allows cross reference to watchdog.
+      'ip' => array(
+        'description' => 'The ip of the user.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'indexes' => array(
+      'form_key_nid' => array('form_key', 'nid'),
+    ),
+    'primary key' => array('lid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function validation_log_install() { }
+
+/**
+ * Implements hook_uninstall().
+ */
+function validation_log_uninstall() { }

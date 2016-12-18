@@ -1,0 +1,172 @@
+<?php
+
+/**
+ * @file
+ * Install hooks for the Salesforce Queue module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function salesforce_queue_schema() {
+  $schema['salesforce_queue'] = array(
+    'description' => 'Salesforce queue',
+    'fields' => array(
+      'item_id' => array(
+        'description' => 'Unique id of the queue item.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'drupal_id' => array(
+        'description' => 'The id of the Drupal object.',
+        'type' => 'varchar',
+        'length' => '50',
+        'not null' => TRUE,
+      ),
+      'module' => array(
+        'description' => 'Name of the module that implements the Drupal type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'delta' => array(
+        'description' => 'Name or id of the Drupal sub-type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'object_type' => array(
+        'description' => 'The Salesforce object type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'operation' => array(
+        'description' => 'The action to take in Salesforce.',
+        'type' => 'varchar',
+        'length' => '10',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'dedupe_field' => array(
+        'description' => 'The Salesforce field to dedupe on during UPSERT operations.',
+        'type' => 'varchar',
+        'length' => '40',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'sobject' => array(
+        'description' => 'The Salesforce sObject in json format.',
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => TRUE,
+      ),
+      'sync_rules' => array(
+        'description' => 'A serialized array that stores the sync rules for each field in the sObject.',
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+      ),
+      'queue' => array(
+        'description' => 'The name of the processing queue this item is within.',
+        'type' => 'varchar',
+        'length' => '40',
+        'not null' => TRUE,
+        'default' => 'new',
+      ),
+      'retries' => array(
+        'description' => 'Number of times this item as failed attempts to be processed.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'Timestamp of when the item was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('item_id'),
+    'unique keys' => array(
+      'delta_drupal_module_object' => array(
+        'delta',
+        'drupal_id',
+        'module',
+        'object_type',
+      ),
+    ),
+    'indexes' => array(
+      'created' => array('created'),
+      'delta' => array('delta'),
+      'drupal_id' => array('drupal_id'),
+      'module' => array('module'),
+      'object_type' => array('object_type'),
+      'operation' => array('operation'),
+      'queue' => array('queue'),
+      'created_queue' => array(
+        'created',
+        'queue',
+      ),
+      'delta_module_object' => array(
+        'delta',
+        'module',
+        'object_type',
+      ),
+      'delta_module' => array(
+        'delta',
+        'module',
+      ),
+      'delta_drupal_module' => array(
+        'delta',
+        'drupal_id',
+        'module',
+      ),
+      'object_op' => array(
+        'object_type',
+        'operation',
+      ),
+      'object_queue' => array(
+        'object_type',
+        'queue',
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Add indexes to tables.
+ */
+function salesforce_queue_update_7001() {
+  $ret = array();
+
+  db_drop_index('salesforce_queue', 'drupal_index');
+  db_add_unique_key('salesforce_queue', 'delta_drupal_module_object',
+    array('delta', 'drupal_id', 'module', 'object_type'));
+  $ret[] = t('Replace "drupal_index" to a "delta_drupal_module_object" unique key on the {salesforce_queue} table.');
+
+  db_add_index('salesforce_queue', 'created', array('created'));
+  db_add_index('salesforce_queue', 'delta', array('delta'));
+  db_add_index('salesforce_queue', 'drupal_id', array('drupal_id'));
+  db_add_index('salesforce_queue', 'module', array('module'));
+  db_add_index('salesforce_queue', 'object_type', array('object_type'));
+  db_add_index('salesforce_queue', 'operation', array('operation'));
+  db_add_index('salesforce_queue', 'queue', array('queue'));
+  db_add_index('salesforce_queue', 'created_queue', array('created', 'queue'));
+  db_add_index('salesforce_queue', 'delta_module_object',
+    array('delta', 'module', 'object_type'));
+  db_add_index('salesforce_queue', 'delta_module', array('delta', 'module'));
+  db_add_index('salesforce_queue', 'delta_drupal_module',
+    array('delta', 'drupal_id', 'module'));
+  db_add_index('salesforce_queue', 'object_op',
+    array('object_type', 'operation'));
+  db_add_index('salesforce_queue', 'object_queue',
+    array('object_type', 'queue'));
+  $ret[] = t('Added indexes to {salesforce_queue} table.');
+
+  return implode("\n", $ret);
+}

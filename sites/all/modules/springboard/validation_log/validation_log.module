@@ -1,0 +1,66 @@
+<?php
+
+/**
+ * @file
+ * Logs validation errors.
+ */
+
+/**
+ * Created for Jackson River by Sarah E. Hood
+ * Last updated: 12/2/11
+ * Email: shoodnc@gmail.com
+ * Drupal ID: http://drupal.org/user/275249
+ * Website: http://unpretentiousmonkey.com
+ */
+
+// Jackson River related logging has been moved to an inc. file.
+// If validation log is ever released this allows JRiver to keep
+// customized logging separate as a sub module.
+include_once 'validation_log.jriver.inc';
+
+/**
+ * Validation log function, to be used here and in other modules as needed.
+ */
+function validation_log($message, $form_key, $nid, $cid = NULL) {
+  $log->message = $message;
+  $log->form_key = $form_key;
+  $log->nid = $nid;
+  $log->cid = $cid; // May be NULL if not called from a webform component.
+  $log->time = REQUEST_TIME;
+  $log->ip = ip_address();
+  _validation_log_create_log($log);
+}
+
+/**
+ * Implements hook_views_api(). From Views module.
+ */
+function validation_log_views_api() {
+  return array(
+    'api' => 2,
+  );
+}
+
+/**
+ * Database related functions.
+ */
+function _validation_log_create_log($log) {
+  $log = (object) $log;
+  if (isset($log->lid) && _validation_log_get_log_by_lid($log->lid)) {
+    // Actually, lets update it.
+    _validation_log_update_log($log);
+  }
+  else {
+    drupal_write_record('validation_log', $log);
+  }
+}
+
+function _validation_log_update_log($log) {
+  $log = (object) $log;
+  if (isset($log->lid) && _validation_log_get_log_by_lid($log->lid)) {
+    drupal_write_record('validation_log', $log, 'lid');
+  }
+  else {
+    // Actually, lets create it instead.
+    _validation_log_create_log($log);
+  }
+}

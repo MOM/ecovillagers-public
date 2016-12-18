@@ -1,0 +1,45 @@
+In addition to enabling the Webform Goals module you need to do
+a few more things to get the module working locally and
+on remote sites.
+
+--- Serving goal data ---
+To minimize load on your server, webform_goals.jsonp.php parses goal widget files
+and serves the contents via jsonp without bootstrapping Drupal.
+
+To do this it needs to know how to find the webform_goals subdirectory in your files folder.
+
+You will need to edit this file and change the following line:
+
+// chdir('ABSOLUTE/PATH/TO/files/webform_goals');
+
+Uncomment this line and change the file path to the absolute path to the webform_goals
+subfolder.
+
+Example:
+  chdir('/var/www/sites/default/files/webform_goals');
+
+--- Loading goal data locally ---
+To display locally you will need to edit the following file:
+
+scripts/webform_goals.drupal_loader.js
+
+Modify the following line:
+
+url = 'http://DOMAIN/PATH/TO/webform_goals/webform_goals.jsonp.php'
+
+Replace DOMAIN with your site domain and PATH/TO with the path to the webform_goals module folder.
+
+Example:
+  url = 'http://example.com/sites/all/modules/webform_goals/webform_goals.jsonp.php'
+
+--- Loading goal data on an external website ---
+To display goal data from your site on other websites you will need to first edit
+scripts/webform_goals.loader.js
+
+Modify the following line:
+
+url = 'http://DOMAIN/PATH/TO/webform_goals/webform_goals.jsonp.php'
+
+Replace DOMAIN with your site domain and PATH/TO with the path to the webform_goals module folder.
+Example: http://example.com/sites/all/modules/webform_goals/webform_goals.jsonp.php
+

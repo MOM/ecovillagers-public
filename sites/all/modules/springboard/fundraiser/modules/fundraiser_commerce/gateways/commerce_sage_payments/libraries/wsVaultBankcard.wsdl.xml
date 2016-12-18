@@ -1,0 +1,1297 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sage Payments WSDL Interface
+  URL: https://gateway.sagepayments.net/web_services/wsVault/wsVaultBankcard.asmx?WSDL
+  Generated on 2013-12-01 13:45:00 +0000.
+-->
+<wsdl:definitions xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:tm="http://microsoft.com/wsdl/mime/textMatching/" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/" xmlns:tns="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard" xmlns:s="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" xmlns:http="http://schemas.xmlsoap.org/wsdl/http/" targetNamespace="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+  <wsdl:types>
+    <s:schema elementFormDefault="qualified" targetNamespace="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard">
+      <s:element name="VAULT_BANKCARD_SALE">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_EMAIL" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_CUSTOMER_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AMT" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_SHIPPING" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_TAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_ORDERNUM" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_TELEPHONE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_FAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_COUNTRY" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_SALEResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="VAULT_BANKCARD_SALEResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_AUTHONLY">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_EMAIL" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_CUSTOMER_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AMT" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_SHIPPING" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_TAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_ORDERNUM" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_TELEPHONE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_FAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_COUNTRY" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_AUTHONLYResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="VAULT_BANKCARD_AUTHONLYResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_FORCE">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_EMAIL" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_CUSTOMER_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AMT" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_SHIPPING" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_TAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AUTH" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_ORDERNUM" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_TELEPHONE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_FAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_COUNTRY" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_FORCEResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="VAULT_BANKCARD_FORCEResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_CREDIT">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_EMAIL" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_CUSTOMER_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AMT" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_SHIPPING" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_TAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_ORDERNUM" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_TELEPHONE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_FAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_COUNTRY" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_CREDITResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="VAULT_BANKCARD_CREDITResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_SALE_CVV">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_EMAIL" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_CUSTOMER_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AMT" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_SHIPPING" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_TAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_ORDERNUM" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_TELEPHONE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_FAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CVV" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_SALE_CVVResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="VAULT_BANKCARD_SALE_CVVResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_AUTHONLY_CVV">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_EMAIL" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_CUSTOMER_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AMT" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_SHIPPING" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_TAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_ORDERNUM" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_TELEPHONE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_FAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CVV" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_AUTHONLY_CVVResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="VAULT_BANKCARD_AUTHONLY_CVVResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_SALE_RECURRING">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_EMAIL" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_CUSTOMER_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AMT" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_SHIPPING" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_TAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_ORDERNUM" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_TELEPHONE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_FAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CVV" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_RECURRING_PAYMENT" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_SALE_RECURRINGResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="VAULT_BANKCARD_SALE_RECURRINGResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_AUTHONLY_RECURRING">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_EMAIL" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_CUSTOMER_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_AMT" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_SHIPPING" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_TAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_ORDERNUM" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_TELEPHONE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_FAX" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_NAME" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ADDRESS" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_CITY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_STATE" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_ZIP" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_SHIP_COUNTRY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_CVV" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="T_RECURRING_PAYMENT" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VAULT_BANKCARD_AUTHONLY_RECURRINGResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="VAULT_BANKCARD_AUTHONLY_RECURRINGResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="DataSet" nillable="true">
+        <s:complexType>
+          <s:sequence>
+            <s:element ref="s:schema" />
+            <s:any />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+    </s:schema>
+  </wsdl:types>
+  <wsdl:message name="VAULT_BANKCARD_SALESoapIn">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_SALE" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALESoapOut">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_SALEResponse" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLYSoapIn">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_AUTHONLY" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLYSoapOut">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_AUTHONLYResponse" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_FORCESoapIn">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_FORCE" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_FORCESoapOut">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_FORCEResponse" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_CREDITSoapIn">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_CREDIT" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_CREDITSoapOut">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_CREDITResponse" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_CVVSoapIn">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_SALE_CVV" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_CVVSoapOut">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_SALE_CVVResponse" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_CVVSoapIn">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_AUTHONLY_CVV" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_CVVSoapOut">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_AUTHONLY_CVVResponse" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_RECURRINGSoapIn">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_SALE_RECURRING" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_RECURRINGSoapOut">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_SALE_RECURRINGResponse" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_RECURRINGSoapIn">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_AUTHONLY_RECURRING" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_RECURRINGSoapOut">
+    <wsdl:part name="parameters" element="tns:VAULT_BANKCARD_AUTHONLY_RECURRINGResponse" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALEHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALEHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLYHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLYHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_FORCEHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_AUTH" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_FORCEHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_CREDITHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_CREDITHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_CVVHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+    <wsdl:part name="C_CVV" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_CVVHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_CVVHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+    <wsdl:part name="C_CVV" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_CVVHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_RECURRINGHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+    <wsdl:part name="C_CVV" type="s:string" />
+    <wsdl:part name="T_RECURRING_PAYMENT" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_RECURRINGHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_RECURRINGHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+    <wsdl:part name="C_CVV" type="s:string" />
+    <wsdl:part name="T_RECURRING_PAYMENT" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_RECURRINGHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALEHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALEHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLYHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLYHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_FORCEHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_AUTH" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_FORCEHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_CREDITHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_CREDITHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_CVVHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+    <wsdl:part name="C_CVV" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_CVVHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_CVVHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+    <wsdl:part name="C_CVV" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_CVVHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_RECURRINGHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+    <wsdl:part name="C_CVV" type="s:string" />
+    <wsdl:part name="T_RECURRING_PAYMENT" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_SALE_RECURRINGHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_RECURRINGHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="C_NAME" type="s:string" />
+    <wsdl:part name="C_ADDRESS" type="s:string" />
+    <wsdl:part name="C_CITY" type="s:string" />
+    <wsdl:part name="C_STATE" type="s:string" />
+    <wsdl:part name="C_ZIP" type="s:string" />
+    <wsdl:part name="C_COUNTRY" type="s:string" />
+    <wsdl:part name="C_EMAIL" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="T_CUSTOMER_NUMBER" type="s:string" />
+    <wsdl:part name="T_AMT" type="s:string" />
+    <wsdl:part name="T_SHIPPING" type="s:string" />
+    <wsdl:part name="T_TAX" type="s:string" />
+    <wsdl:part name="T_ORDERNUM" type="s:string" />
+    <wsdl:part name="C_TELEPHONE" type="s:string" />
+    <wsdl:part name="C_FAX" type="s:string" />
+    <wsdl:part name="C_SHIP_NAME" type="s:string" />
+    <wsdl:part name="C_SHIP_ADDRESS" type="s:string" />
+    <wsdl:part name="C_SHIP_CITY" type="s:string" />
+    <wsdl:part name="C_SHIP_STATE" type="s:string" />
+    <wsdl:part name="C_SHIP_ZIP" type="s:string" />
+    <wsdl:part name="C_SHIP_COUNTRY" type="s:string" />
+    <wsdl:part name="C_CVV" type="s:string" />
+    <wsdl:part name="T_RECURRING_PAYMENT" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VAULT_BANKCARD_AUTHONLY_RECURRINGHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:portType name="wsVaultBankcardSoap">
+    <wsdl:operation name="VAULT_BANKCARD_SALE">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALESoapIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALESoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLYSoapIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLYSoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_FORCE">
+      <wsdl:input message="tns:VAULT_BANKCARD_FORCESoapIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_FORCESoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_CREDIT">
+      <wsdl:input message="tns:VAULT_BANKCARD_CREDITSoapIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_CREDITSoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_CVV">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALE_CVVSoapIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALE_CVVSoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_CVV">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLY_CVVSoapIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLY_CVVSoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_RECURRING">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALE_RECURRINGSoapIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALE_RECURRINGSoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_RECURRING">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLY_RECURRINGSoapIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLY_RECURRINGSoapOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:portType name="wsVaultBankcardHttpGet">
+    <wsdl:operation name="VAULT_BANKCARD_SALE">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALEHttpGetIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALEHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLYHttpGetIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLYHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_FORCE">
+      <wsdl:input message="tns:VAULT_BANKCARD_FORCEHttpGetIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_FORCEHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_CREDIT">
+      <wsdl:input message="tns:VAULT_BANKCARD_CREDITHttpGetIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_CREDITHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_CVV">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALE_CVVHttpGetIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALE_CVVHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_CVV">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLY_CVVHttpGetIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLY_CVVHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_RECURRING">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALE_RECURRINGHttpGetIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALE_RECURRINGHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_RECURRING">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLY_RECURRINGHttpGetIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLY_RECURRINGHttpGetOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:portType name="wsVaultBankcardHttpPost">
+    <wsdl:operation name="VAULT_BANKCARD_SALE">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALEHttpPostIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALEHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLYHttpPostIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLYHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_FORCE">
+      <wsdl:input message="tns:VAULT_BANKCARD_FORCEHttpPostIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_FORCEHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_CREDIT">
+      <wsdl:input message="tns:VAULT_BANKCARD_CREDITHttpPostIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_CREDITHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_CVV">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALE_CVVHttpPostIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALE_CVVHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_CVV">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLY_CVVHttpPostIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLY_CVVHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_RECURRING">
+      <wsdl:input message="tns:VAULT_BANKCARD_SALE_RECURRINGHttpPostIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_SALE_RECURRINGHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_RECURRING">
+      <wsdl:input message="tns:VAULT_BANKCARD_AUTHONLY_RECURRINGHttpPostIn" />
+      <wsdl:output message="tns:VAULT_BANKCARD_AUTHONLY_RECURRINGHttpPostOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="wsVaultBankcardSoap" type="tns:wsVaultBankcardSoap">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="VAULT_BANKCARD_SALE">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_SALE" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_AUTHONLY" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_FORCE">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_FORCE" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_CREDIT">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_CREDIT" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_CVV">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_SALE_CVV" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_CVV">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_AUTHONLY_CVV" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_RECURRING">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_SALE_RECURRING" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_RECURRING">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_AUTHONLY_RECURRING" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="wsVaultBankcardSoap12" type="tns:wsVaultBankcardSoap">
+    <soap12:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="VAULT_BANKCARD_SALE">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_SALE" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_AUTHONLY" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_FORCE">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_FORCE" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_CREDIT">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_CREDIT" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_CVV">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_SALE_CVV" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_CVV">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_AUTHONLY_CVV" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_RECURRING">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_SALE_RECURRING" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_RECURRING">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVaultBankcard/VAULT_BANKCARD_AUTHONLY_RECURRING" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="wsVaultBankcardHttpGet" type="tns:wsVaultBankcardHttpGet">
+    <http:binding verb="GET" />
+    <wsdl:operation name="VAULT_BANKCARD_SALE">
+      <http:operation location="/VAULT_BANKCARD_SALE" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY">
+      <http:operation location="/VAULT_BANKCARD_AUTHONLY" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_FORCE">
+      <http:operation location="/VAULT_BANKCARD_FORCE" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_CREDIT">
+      <http:operation location="/VAULT_BANKCARD_CREDIT" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_CVV">
+      <http:operation location="/VAULT_BANKCARD_SALE_CVV" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_CVV">
+      <http:operation location="/VAULT_BANKCARD_AUTHONLY_CVV" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_RECURRING">
+      <http:operation location="/VAULT_BANKCARD_SALE_RECURRING" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_RECURRING">
+      <http:operation location="/VAULT_BANKCARD_AUTHONLY_RECURRING" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="wsVaultBankcardHttpPost" type="tns:wsVaultBankcardHttpPost">
+    <http:binding verb="POST" />
+    <wsdl:operation name="VAULT_BANKCARD_SALE">
+      <http:operation location="/VAULT_BANKCARD_SALE" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY">
+      <http:operation location="/VAULT_BANKCARD_AUTHONLY" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_FORCE">
+      <http:operation location="/VAULT_BANKCARD_FORCE" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_CREDIT">
+      <http:operation location="/VAULT_BANKCARD_CREDIT" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_CVV">
+      <http:operation location="/VAULT_BANKCARD_SALE_CVV" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_CVV">
+      <http:operation location="/VAULT_BANKCARD_AUTHONLY_CVV" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_SALE_RECURRING">
+      <http:operation location="/VAULT_BANKCARD_SALE_RECURRING" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VAULT_BANKCARD_AUTHONLY_RECURRING">
+      <http:operation location="/VAULT_BANKCARD_AUTHONLY_RECURRING" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="wsVaultBankcard">
+    <wsdl:port name="wsVaultBankcardSoap" binding="tns:wsVaultBankcardSoap">
+      <soap:address location="https://gateway.sagepayments.net/web_services/wsVault/wsVaultBankcard.asmx" />
+    </wsdl:port>
+    <wsdl:port name="wsVaultBankcardSoap12" binding="tns:wsVaultBankcardSoap12">
+      <soap12:address location="https://gateway.sagepayments.net/web_services/wsVault/wsVaultBankcard.asmx" />
+    </wsdl:port>
+    <wsdl:port name="wsVaultBankcardHttpGet" binding="tns:wsVaultBankcardHttpGet">
+      <http:address location="https://gateway.sagepayments.net/web_services/wsVault/wsVaultBankcard.asmx" />
+    </wsdl:port>
+    <wsdl:port name="wsVaultBankcardHttpPost" binding="tns:wsVaultBankcardHttpPost">
+      <http:address location="https://gateway.sagepayments.net/web_services/wsVault/wsVaultBankcard.asmx" />
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

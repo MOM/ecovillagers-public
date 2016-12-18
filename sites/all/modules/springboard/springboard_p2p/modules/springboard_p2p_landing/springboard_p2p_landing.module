@@ -1,0 +1,161 @@
+<?php
+/**
+ * @file
+ * Code for the springboard P2P Landing feature.
+ */
+
+include_once 'springboard_p2p_landing.features.inc';
+
+/**
+ * Implements hook_page_alter().
+ */
+function springboard_p2p_landing_page_alter(&$cache, $vars) {
+
+  // Not admin page.
+  if (!path_is_admin(current_path())) {
+
+    // Global node.
+    $node = menu_get_object();
+
+    // Define targeted node types, add more as needed.
+    $node_types = array(
+      'p2p_campaign',
+      'p2p_campaign_landing',
+    );
+
+    // p2p_campaign_landing and p2p campaign.
+    if (!empty($node) && in_array($node->type, $node_types)) {
+
+      // Define the module path.
+      $mod_path = drupal_get_path('module', 'springboard_p2p_landing');
+
+      // Flexslider js.
+      $flexslider_js = array(
+        '#attached' => array(
+          'js' => array(
+            $mod_path . '/js/jquery.flexslider.js' => array(
+              'group' => JS_LIBRARY,
+            ),
+          ),
+        ),
+      );
+      drupal_render($flexslider_js);
+
+      // Flexslider css.
+      $flexslider_css = array(
+        '#attached' => array(
+          'css' => array(
+            $mod_path . '/css/flexslider.css' => array(
+              'group' => CSS_THEME,
+              'weight' => 9999,
+            ),
+          ),
+        ),
+      );
+      drupal_render($flexslider_css);
+
+      // Custom scripts, let's load this last.
+      $p2p_landing_scripts = array(
+        '#attached' => array(
+          'js' => array(
+            $mod_path . '/js/p2p-landing-scripts.js' => array(
+              'group' => JS_THEME,
+              'weight' => 9999,
+            ),
+          ),
+        ),
+      );
+      drupal_render($p2p_landing_scripts);
+
+      // Custom css.
+      $p2p_landing_css = array(
+        '#attached' => array(
+          'css' => array(
+            $mod_path . '/css/p2p-landing.css' => array(
+              'group' => CSS_THEME,
+              'weight' => 9999,
+            ),
+          ),
+        ),
+      );
+      drupal_render($p2p_landing_css);
+
+      // Check to see if springboard_frontend is the active theme. if not, add font awesome in.
+      global $custom_theme;
+      $custom_theme = variable_get('theme_default', 'springboard_frontend');
+      $theme = $custom_theme;
+      $theme_key = $theme;
+
+      // If not springboard_frontend, add font awesome cdn.
+      if ($theme_key == 'springboard_frontend') {
+      }
+      else {
+        drupal_add_css('//maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.css', array(
+            'type' => 'external',
+          ));
+      }
+
+    }
+  }
+
+}
+
+/**
+ * Implements hook_features_export_alter().
+ *
+ * Alter the final export array just prior to the rendering of
+ * defaults.
+ * FORBID the hook_views_api, we are going to add that ourself.
+ *
+ * @param array &$export
+ *   By reference. An array of all components to be exported with a given
+ *   feature.
+ * @param array $module_name
+ *   The name of the feature module to be generated.
+ */
+function springboard_p2p_landing_features_export_alter(&$export, $module_name) {
+  // Override the default path for views.
+  if ($module_name == 'springboard_p2p_landing' && !empty($export['features']['ctools']['views:views_default:3.0'])) {
+    unset($export['features']['ctools']['views:views_default:3.0']);
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ * We are specifying this here as we want to include a views
+ * template directory.
+ */
+function springboard_p2p_landing_views_api() {
+  // Create our own views template path.
+  return array(
+    "version" => "3.0",
+    'template path' => drupal_get_path('module', 'springboard_p2p_landing') . '/templates',
+  );
+}
+
+/**
+ * Implements template_preprocess_page
+ *
+ * Add convenience variables and template suggestions.
+ */
+function springboard_p2p_landing_preprocess_page(&$vars) {
+
+  // Not admin page.
+  if (!path_is_admin(current_path())) {
+
+    // Global node.
+    $node = menu_get_object();
+
+    // Define targeted node types, add more as needed.
+    $p2p_campaign = array(
+      'p2p_campaign',
+    );
+
+    // p2p campaign.
+    if (!empty($node) && in_array($node->type, $p2p_campaign)) {
+      $vars['title'] = '';
+    }
+
+  }
+
+}

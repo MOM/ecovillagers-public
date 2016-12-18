@@ -1,0 +1,32 @@
+#webform-component-sba-quicksign {
+    margin-bottom: 20px;
+    border: 1px solid #ccc;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    padding:16px 2%;
+    -moz-border-radius: 4px;
+    -webkit-border-radius: 4px;
+    border-radius: 4px;
+    width: 95%;
+}
+
+#user-information-wrapper {
+    min-width: auto;
+}
+
+#your-information-wrapper #webform-component-sba-quicksign,
+#user-information-wrapper #webform-component-sba-quicksign{
+    width: 99.25%;
+}
+.quicksign-label {
+    font-size: 16px;
+}
+.node-form-quicksign-description {
+    font-weight: lighter;
+}
+
+#edit-quicksign-description-format.collapsed {
+    height: 30px;
+    padding:0;
+}

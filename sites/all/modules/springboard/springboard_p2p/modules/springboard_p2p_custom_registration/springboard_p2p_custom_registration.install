@@ -1,0 +1,11 @@
+<?php
+
+/**
+ * @file
+ * Install hooks.
+ */
+
+function springboard_p2p_custom_registration_install() {
+  // reweight so we go after Webform User.
+  db_query('UPDATE {system} SET weight = 100 WHERE name = :name AND type = :type', array(':name' => 'springboard_p2p_custom_registration', ':type' => 'module'));
+}

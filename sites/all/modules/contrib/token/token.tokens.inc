@@ -270,6 +270,13 @@ function token_token_info() {
     'description' => t('The value of a specific query string field of the current page.'),
     'dynamic' => TRUE,
   );
+  foreach (entity_get_info() as $entity_type => $entity_info) {
+    $info['tokens']['current-page'][$entity_type] = array(
+      'name' => t('The current %type', array('%type' => $entity_type)),
+      'description' => t("The current page object if that's a %type", array('%type' => $entity_type)),
+      'type' => str_replace('taxonomy_', '', $entity_type),
+    );
+  }
 
   // URL tokens.
   $info['types']['url'] = array(
@@ -679,6 +686,40 @@ function token_tokens($type, $tokens, array $data = array(), array $options = ar
             $page = $pager_page_array[0];
           }
           $replacements[$original] = (int) $page + 1;
+          break;
+        default:
+          $entity_info = entity_get_info();
+          $parts = explode(':', $name);
+          $entity_type = $parts[0];
+
+          // This left-over is an entity type.
+          if (isset($entity_info[$entity_type])) {
+            $item = menu_get_item();
+
+            // Find the correct index from the load function.
+            $index = array_search($entity_type . '_load', $item['load_functions']);
+            if ($index !== FALSE && $item['access']) {
+              // That's where the object resides. Not always in arg(1).
+              $object = $item['map'][$index];
+
+              // No child properties, so load the entity label.
+              if ($name == $entity_type) {
+                $label = entity_label($entity_type, $object);
+                $replacements[$original] = $label;
+              }
+              // Load child properties via recursive tokens.
+              else {
+                $_tokens = array($name => $original);
+                $_tokens = token_find_with_prefix($_tokens, $entity_type);
+
+                // Stupid taxonomy token types...
+                $token_type = str_replace('taxonomy_', '', $entity_type);
+                $_replacements = token_generate($token_type, $_tokens, array($token_type => $object), $options);
+                $replacements += $_replacements;
+              }
+            }
+          }
+
           break;
       }
     }

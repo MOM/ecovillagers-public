@@ -1,0 +1,292 @@
+<?php
+
+
+/**
+ * Implements hook_schema().
+ *
+ * Create the social action twitter session cache table.
+ * Create the tweet data table.
+ */
+function sba_social_action_schema() {
+
+  $schema['cache_sba_social_action'] = drupal_get_schema_unprocessed('system', 'cache');
+  $schema['cache_sba_social_action']['description'] = 'Table for Social Action "cache"';
+
+  $schema['sba_social_action_tweets'] = array(
+    'description' => "Stores tweet data.",
+    'fields' => array(
+      'status_id' => array(
+        'description' => 'Primary Key: Identifier for a tweet.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'twitter_status_id' => array(
+        'description' => "Unique identifier for each {twitter} post.",
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'screen_name' => array(
+        'description' => "Screen Name of the {twitter_account} user.",
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'created' => array(
+        'description' => "A duplicate of {twitter}.created_at in UNIX timestamp format.",
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'retweet_count' => array(
+        'description' => "How many times the post was retweeted",
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'size' => 'big',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'favorite_count' => array(
+        'description' => "",
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'size' => 'big',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'uid' => array(
+        'description' => "Drupal user id",
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'nid' => array(
+        'description' => "Drupal node id",
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'sid' => array(
+        'description' => "Drupal submission id",
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'message_entity_id' => array(
+        'description' => "Drupal message entity id",
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'target_id' => array(
+        'description' => "Advocacy API server target id.",
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+//      'entities' => array(
+//        'type' => 'blob',
+//        'not null' => FALSE,
+//        'size' => 'big',
+//        'serialize' => TRUE,
+//        'description' => 'A serialized array of additional data.',
+//      ),
+    ),
+    'primary key' => array('status_id'),
+    'indexes' => array(
+      'twitter_status_id' => array('twitter_status_id'),
+      'screen_name' => array('screen_name'),
+      'uid' => array('uid'),
+      'nid' => array('nid'),
+      'sid' => array('sid'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+
+function sba_social_action_install() {
+
+  module_load_include('inc', 'sba_social_action', 'includes/install/sba_social_action.install');
+  module_load_include('inc', 'sba_social_action', 'includes/install/sba_social_action.install_examples');
+  module_load_include('inc', 'sba_social_action', 'includes/install/sba_social_action.twitter_message_install');
+  module_load_include('inc', 'springboard_advocacy', 'includes/install/springboard_advocacy.install_taxonomy');
+
+
+  sba_social_action_create_twitter_message_entity();
+  _sba_social_action_create_content_type();
+  _springboard_advocacy_install_vocab_sba_legislative_issues('sba_social_action');
+  _sba_social_action_create_example_social_action();
+
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function sba_social_action_uninstall() {
+  module_load_include('inc', 'sba_social_action', 'includes/install/sba_social_action.install');
+  _sba_social_action_delete_nodes();
+  // Remove fields implemented by this module.
+  node_type_delete('sba_social_action');
+
+  module_load_include('inc', 'sba_social_action', 'includes/install/sba_social_action.twitter_message_install');
+  _sba_social_action_delete_twitter_message_entity();
+  field_purge_batch(1000);
+}
+
+/**
+ * Update social action node fields.
+ */
+function sba_social_action_update_7001() {
+  module_load_include('inc', 'sba_social_action', 'includes/install/sba_social_action.install_fields');
+  _sba_social_action_create_node_fields(TRUE);
+}
+
+/**
+ * Update Social action message entity fields.
+ */
+function sba_social_action_update_7002() {
+  module_load_include('inc', 'sba_social_action', 'includes/install/sba_social_action.twitter_message_install');
+  sba_social_action_create_twitter_message_entity(TRUE);
+}
+
+/**
+ * Add field_sba_prepend_target_name to group_sba_sample_tweet
+ */
+function sba_social_action_update_7003() {
+
+  $groups = field_group_read_groups(array(
+    'entity_type' => 'sba_message',
+    'bundle'      => 'sba_social_action_twitter_message',
+    'view_mode'   => 'full'
+  ));
+
+  $group = $groups['sba_message']['sba_social_action_twitter_message']['form']['group_sba_sample_tweet'];
+  $group->children[] = 'field_sba_prepend_target_name';
+  field_group_group_save($group);
+
+}
+/**
+ * Set default session cache values.
+ */
+function sba_social_action_update_7004() {
+}
+
+
+/**
+ * Add the multistep tracking fields to social actions.
+ */
+function sba_social_action_update_7005() {
+
+  $nodes = db_query('select n.nid from {node} n
+    WHERE n.type = :type',
+    array(':type' => 'sba_social_action')
+  );
+
+  foreach ($nodes as $node) {
+    $cid = db_query('select wc.cid from {webform_component} wc
+      WHERE wc.nid = :nid AND wc.form_key = :key',
+      array(':nid' => $node->nid, ':key' => 'sba_action_is_multistep')
+    )->fetchAssoc();
+
+    if (!$cid) {
+      $field = array(
+        'nid' => $node->nid,
+        'form_key' => 'sba_action_is_multistep',
+        'pid' => 0,
+        'name' => t('Multi-step or one step?'),
+        'type' => 'hidden',
+        'value' => 1,
+        'weight' => 30,
+        'email' => 1,
+      );
+      webform_component_insert($field);
+
+      $field = array(
+        'nid' => $node->nid,
+        'form_key' => 'sba_multistep_complete',
+        'pid' => 0,
+        'name' => t('Multi-step Complete?'),
+        'type' => 'hidden',
+        'value' => '',
+        'weight' => 31,
+        'email' => 1,
+      );
+
+      webform_component_insert($field);
+    }
+  }
+}
+
+/**
+ * Create the social action cache table
+ */
+function sba_social_action_update_7006() {
+  $schema = module_invoke('sba_social_action', 'schema');
+  if(db_table_exists('cache_sba_social_action') == FALSE) {
+    db_create_table('cache_sba_social_action', $schema['cache_sba_social_action']);
+  }
+  variable_set('sba_social_action_cache_expire_period', 1);
+}
+
+/**
+ * Create twitter tweet table
+ */
+function sba_social_action_update_7007() {
+  $schema = module_invoke('sba_social_action', 'schema');
+  if(db_table_exists('sba_social_action_tweets') == FALSE) {
+    db_create_table('sba_social_action_tweets', $schema['sba_social_action_tweets']);
+  }
+}
+
+/**
+ * Create twitter profile fields.
+ */
+function sba_social_action_update_7008() {
+  module_load_include('inc', 'sba_social_action', 'includes/install/sba_social_action.install_profile');
+  _sba_social_action_create_twitter_screen_name();
+  _sba_social_action_create_twitter_id_str();
+  _sba_social_action_create_twitter_status_count();
+  _sba_social_action_create_twitter_following_count();
+  _sba_social_action_create_twitter_followers_count();
+  _sba_social_action_create_twitter_created_at();
+}
+
+/**
+ * Update action id field.
+ */
+function sba_social_action_update_7009() {
+  $field = field_info_field('field_sba_action_id');
+  $field['settings']['handler_settings']['target_bundles'] = array(
+    'sba_social_action' => 'sba_social_action',
+    'sba_message_action' => 'sba_message_action',
+  );
+  field_update_field($field);
+}
+
+/**
+ * Update action id field fix for staging sites.
+ */
+function sba_social_action_update_7010() {
+  sba_social_action_update_7009();
+}
+
+/**
+ * Update field_sba_social_require_auth field description.
+ */
+function sba_social_action_update_7011() {
+  $field_instance = field_info_instance('node','field_sba_social_require_auth','sba_social_action');
+  $field_instance['description'] = 'If you require authentication, users will have to log into the Springboard Twitter app before tweeting, and you will then gain access to some of their Twitter profile information. By Requiring Twitter Authentication you certify that you have read and agree to adhere to the Twitter terms of services, located <a href="https://twitter.com/tos">here</a>.';
+  field_update_instance($field_instance);
+}

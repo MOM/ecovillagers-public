@@ -1,0 +1,130 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for webform_confirmations
+ */
+
+/**
+ * Sets up basic tools for testing Webform Confirmations.
+ */
+class WebformConfirmationsTestCase extends DrupalWebTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Webform Confirmations',
+      'description' => 'Sets up basic tools for testing Webform Confirmations',
+      'group' => 'Webform Confirmations',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'webform',
+      'webform_confirmations',
+    ));
+    parent::setUp($modules);
+
+    $permissions = array_merge($permissions, array(
+      'access content',
+      'administer site configuration',
+      'administer content types',
+      'administer nodes',
+      'administer users',
+      'create webform content',
+      'edit own webform content',
+      'access all webform results',
+    ));
+    $this->privileged_user = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->privileged_user);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    user_cancel(array(), $this->privileged_user->uid, 'user_cancel_delete');
+    parent::tearDown();
+  }
+
+  public function testWebformSettings() {
+    //create test webform
+    $this->WebformCreate();
+    // Confirm settings UI available.
+    $this->drupalGet('node/1/webform/configure');
+    $this->assertFieldByName('confirmation[confirmation_page_title]', '', t('Confirmation page title field present'));
+
+
+    // Configure webform confirmation: page
+    $this->WebformConfigureConfirmatioPage();
+
+    // Submit webform
+    $this->WebformPost();
+    $this->assertText('Test confirmation page title', t('Confirmation page title set correctly'));
+    $this->assertText('Keyser Soze', t('Webform token replacement functions as expected'));
+    // Confirm confirmation page displays as expected
+  }
+
+  // submit webform
+  // confirm confirmation page behaves as expected
+
+  // configure webform confirmation: redirect
+
+  // submit webform
+  // confirm confirmation redirect
+
+
+  protected function WebformCreate() {
+    $edit = array();
+    $edit['title'] = 'Webform Confirmation test webform';
+    $edit["body[und][0][value]"] = $this->randomName(16);
+    $this->drupalPost('node/add/webform', $edit, t('Save'));
+    // test webform is now node 1
+    // add webform component
+    $component = array(
+      'nid' => 1,
+      'cid' => 1,
+      'pid' => 0,
+      'form_key' => 'name',
+      'type' => 'textfield',
+      'value' => '',
+      'extra' => serialize(array(
+        'description' => '',
+        'private' => '',
+      )),
+      'mandatory' => '',
+    );
+    drupal_write_record('webform_component', $component);
+  }
+
+  protected function WebformPost() {
+    $edit = array();
+    $edit["submitted[name]"] = 'Keyser Soze';
+    $this->drupalPost('node/1', $edit, t('Submit'), array(), array(), 'webform-client-form-1');
+  }
+
+  protected function WebformConfigureConfirmatioPage() {
+    $edit = array();
+    $edit["confirmation[confirmation_page_title]"] = 'Test confirmation page title';
+    $edit["confirmation[value]"] = 'This is a confirmation message. %value[name]';
+    $edit["confirmation[format]"] = 'filtered_html';
+    $edit["redirect"] = 'confirmation';
+    $edit["redirect_url"] = '';
+    $edit["enforce_total_limit"] = 'no';
+    $edit["total_submit_limit"] = '';
+    $edit["total_submit_interval"] = -1;
+    $edit["enforce_limit"] = 'no';
+    $edit["submit_limit"] = '';
+    $edit["submit_interval"] = -1;
+    $edit["status"] = 1;
+    $edit["submit_notice"] = 1;
+    $edit["submit_text"] = '';
+    $this->drupalPost('node/1/webform/configure', $edit, t('Save configuration'));
+  }
+}

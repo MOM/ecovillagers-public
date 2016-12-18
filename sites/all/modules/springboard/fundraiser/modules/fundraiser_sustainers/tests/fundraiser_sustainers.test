@@ -1,0 +1,485 @@
+<?php
+/**
+ * @file
+ * Fundraiser sustainer module web tests, test sustainers.
+ */
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+class FundraiserSustainerTest extends FundraiserSustainerSetup {
+
+  /**
+   * Implements getInfo(). Declares this test class to fundraiser testing.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser sustainers',
+      'description' => 'Tests fundraiser sustainers behavior.',
+      'group' => 'Fundraiser Sustainers',
+    );
+  }
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp($additional_modules = array()) {
+    // Call the parent to set all of the base modules up.
+    $additional_modules = array(
+      'fundraiser_sustainers', // For token testing.
+    );
+    parent::setUp($additional_modules);
+    // Setup the sustainer key file.
+  }
+
+  /**
+   * Test the creation of a recurring donation.
+   */
+  public function testFundraiserSustainerSubmit() {
+    // Create a sustainer donation.
+    $this->createFundraiserSustainer();
+
+    // Get the created user.
+    $created_user = user_load_by_mail('fundraiser_sustainer@example.com');
+    $this->assertEqual('fundraiser_sustainer@example.com', $created_user->mail, t('The user account #@uid was created with @email.',
+      array('@uid' => $created_user->uid, '@email' => $created_user->mail)), t('Fundraiser Submit'));
+    // A year out? There should be 12 donations in the system.
+    $donations = _fundraiser_get_donations();
+    $count = 0;
+    $did = '';
+    foreach ($donations as $donation) {
+      if ($count == 0) {
+        $master_did = $donation->did;
+      }
+      $count++;
+    }
+    $this->assertEqual(13, $count, t('13 donations were created.'), t('Fundraiser Sustainers'));
+    // Test that they're all in sustainers.
+    $member_donations = _fundraiser_sustainers_get_donations_recurr_by_member($master_did);
+    $dates = array();
+    // Check sustainer donations.
+    foreach ($member_donations as $donation) {
+      $master_did = $donation->master_did;
+      $dates[$donation->did] = $donation->next_charge;
+    }
+    $this->assertEqual(count($dates), $count, t('13 sustainer donations were created with a master did #@did.',
+      array('@did' => $master_did)), t('Fundraiser Sustainers'));
+    // Check dates.
+    $count = 0;
+    foreach ($dates as $did => $date) {
+      $expected_month = date('n', strtotime('+' . $count . ' month'));
+      $expected_year = date('Y', strtotime('+' . $count . ' month'));
+      $this_month = date('n', $date);
+      $this_year = date('Y', $date);
+      $this->assertEqual($expected_month . '/' . $expected_year, $this_month . '/' . $this_year,
+        t('The correct expected month (@month/@year) was found for #@did.',
+        array('@did' => $did, '@month' => $expected_month, '@year' => $expected_year)),
+        t('Fundraiser Sustainers'));
+      $count++;
+    }
+  }
+
+  /**
+   * Tests the sustainer charge retry and failure system.
+   */
+  public function testSustainerRetries() {
+    // Set up a valid sustainer key.
+    $this->setSustainerKey(trim($_SERVER['HTTP_HOST']) . rtrim(base_path(), '/'));
+
+    // Use 55555 which will cause the example gateway to fail future charges.
+    $post = array(
+      'submitted[billing_information][zip]' => 55555,
+    );
+
+    // Create a recurring donation.
+    $master_did = $this->fundraiserSustainerCreateRecurringDonation($post);
+
+    // Gut check. If all is well the first donation id should be 1.
+    $this->assertEqual(1, $master_did, 'Sustainer series created successfully.');
+
+    // Get the next order id.
+    $next_did = $master_did + 1;
+
+    // Get the maximum number of sustainer processing attempts.
+    $max_attempts = variable_get('fundraiser_sustainers_max_processing_attempts', 3);
+
+    // Attempt to process the donation the number of times specified in the
+    // fundraiser_sustainers_max_processing_attempts setting. The updating
+    // of the next_charge   was taken right out of fundraiser_sustainers_charge_now().
+    for ($attempts = 1; $attempts <= $max_attempts; $attempts++) {
+      $donation = new stdClass();
+      $donation->did = $next_did;
+      $donation->next_charge = strtotime('now');
+      _fundraiser_sustainers_update_recurring($donation);
+
+      // Add a slight pause here so that the charge date will be in the past.
+      sleep(1);
+
+      // Run cron.
+      $this->cronRun();
+
+      // Load up the fundraiser_sustainer record to check data integrity.
+      $sustainer = _fundraiser_sustainers_get_recurring_by_did($next_did);
+      // Load up the fundraiesr donation record to check status. Not using
+      // donation_get_donation because it's too intensive.
+      $donation = _fundraiser_get_donation_by_did($next_did);
+
+      // Loading the order in quick succession doesn't work here. So let's query
+      // for the status only to ensure it's correct.
+      // $order = commerce_order_load($next_did);
+      $order_status = db_query('SELECT status from {commerce_order} WHERE order_id = :order_id', array(':order_id' => $next_did))->fetchField();
+
+      // Load transactions
+      $transactions = commerce_payment_transaction_load_multiple(array(), array('order_id' =>  $next_did));
+
+      // Ensure the attempt count is correct.
+      $this->assertEqual($attempts, $sustainer->attempts, t('Attempts is incremented to !attempts.', array('!attempts' => $attempts)));
+
+      // Ensure the number of recorded transactions is correct.
+      $this->assertEqual($attempts, count($transactions), t('Number of transactions recorded is !attempts.', array('!attempts' => $attempts)));
+
+      // Assert the latest transaction is a failure
+      $transaction = array_pop($transactions);
+      $this->assertEqual('failure', $transaction->status, t('Transaction record status is set to failure.'));
+
+      // When the max processing attempts is reached the record should be marked as failed.
+      if ($attempts == $max_attempts) {
+        $this->assertEqual(FUNDRAISER_SUSTAINERS_FAILED_STATUS, $sustainer->gateway_resp, t('Sustainer record status is set to failed.'));
+        $this->assertEqual(FUNDRAISER_SUSTAINERS_FAILED_STATUS, $donation->status, t('Donation record status is set to failed.'));
+        $this->assertEqual(FUNDRAISER_SUSTAINERS_FAILED_STATUS, $order_status, t('Commerce order record status is set to failed.'));
+      }
+      else {
+        $this->assertEqual(FUNDRAISER_SUSTAINERS_RETRY_STATUS, $sustainer->gateway_resp, t('Sustainer record status is set to retry.'));
+        $this->assertEqual('pending_future_payment', $donation->status, t('Donation record status is set to pending_future_payment.'));
+        $this->assertEqual('pending_future_payment', $order_status, t('Commerce order record status is set to pending_future_payment.'));
+        $this->assertEqual(0, $sustainer->lock_id, t('Lock id is reset.'));
+      }
+
+    }
+  }
+
+  /**
+   * Test the creation of a recurring donation susteiner interface.
+   */
+  public function testFundraiserSustainerUI() {
+    // Create a node.
+    $created_user = $this->createFundraiserUser();
+    $this->drupalLogin($created_user);
+    $node = $this->createDonationForm();
+    // Post to the node.
+    $month = date('n', strtotime('+1 year'));
+    $year = date('Y', strtotime('+1 year'));
+    $post['submitted[payment_information][recurs_monthly][recurs]'] = 'recurs';
+    $post['submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]'] = $month;
+    $post['submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]'] = $year;
+    $post['submitted[donor_information][mail]'] = $created_user->mail;
+    $this->submitDonation($node->nid, $post);
+    $this->drupalLogout();
+    // Anon can't go to the sustainer's page.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview');
+    $this->assertText('You are not authorized to access this page. ', t('Accessing the sustaining user as anonymous shows the correct message text.'),
+      t('Fundraiser Sustainers UI'));
+    // Create a new user.
+    $user = $this->createFundraiserUser();
+    $this->drupalLogin($user);
+    // Diff user can't go to the sustainer's page.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview');
+    $this->assertText('You are not authorized to access this page.', t('Accessing the sustaining user as a different shows the correct message text.'),
+      t('Fundraiser Sustainers UI'));
+    // A user without charges is told no charges.
+    $this->drupalGet('user/' . $user->uid . '/recurring_overview');
+    $this->assertText('You have no recurring donations.', t('A user without sustainer donations shows the correct message text.'),
+      t('Fundraiser Sustainers UI'));
+    $this->drupalLogout();
+    // Login as user and go to the sustainer's page.
+    $this->drupalLogin($created_user);
+    // Diff user can't go to the sustainer's page.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview');
+    $this->assertText('Next Charge Date', t('Accessing the sustaining user as the owning user shows the correct table.'),
+      t('Fundraiser Sustainers UI'));
+    // Check values at that location.
+    $this->assertText('$10.00', t('The donation sequence is made for the correct default amount ($10.00).'), t('Fundraiser Sustainers UI'));
+    $date = date('m/d/y', strtotime('now'));
+    $this->assertText($date, t('The donation sequence is made for the correct start date (@date).', array('@date' => $date)),
+      t('Fundraiser Sustainers UI'));
+    $date = date('m/d/y', strtotime('+1 month'));
+    $this->assertText($date, t('The donation sequence is made for the correct next charge date (@date).', array('@date' => $date)),
+      t('Fundraiser Sustainers UI'));
+    $date = date('m/d/y', strtotime('+1 year'));
+    $this->assertText($date, t('The donation sequence is made for the correct expire date (@date).', array('@date' => $date)),
+      t('Fundraiser Sustainers UI'));
+    $this->assertText('Active', t('The donation sequence is active.'), t('Fundraiser Sustainers UI'));
+  }
+
+  /**
+   * Test the creation of a recurring donation susteiner interface.
+   */
+  public function testFundraiserSustainerUpdate() {
+    // Create a node.
+    $created_user = $this->createFundraiserUser(array('cancel future donations'));
+    $this->drupalLogin($created_user);
+    $node = $this->createDonationForm();
+    // Post to the node.
+    $month = date('n', strtotime('+1 year'));
+    $year = date('Y', strtotime('+1 year'));
+    $post['submitted[payment_information][recurs_monthly][recurs]'] = 'recurs';
+    $post['submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]'] = $month;
+    $post['submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]'] = $year;
+    $post['submitted[donor_information][mail]'] = $created_user->mail;
+    $this->submitDonation($node->nid, $post);
+    // Get the master did.
+    $donations = _fundraiser_get_donations();
+    $master_did = '';
+    foreach ($donations as $donation) {
+      $master_did = $donation->did;
+      break;
+    }
+
+    // Get the update page, check that all forms are in place.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview/' . $master_did);
+    // Forms are available.
+    $this->assertNoText('There are no further charges for this recurring donation.', t('The donation update amount form is available.'),
+      t('Fundraiser Sustainers UI'));
+
+    // Post to update amounts.
+    $post = array(
+      'fee_amount' => '23.23',
+    );
+    $this->drupalPost('user/' . $created_user->uid . '/recurring_overview/' . $master_did, $post, t('Update donation amount'));
+    // Reload listing page and confirm it's there.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview');
+    $this->assertText('$23.23', t('The donation sequence is made for the correct default amount ($23.23).'), t('Fundraiser Sustainers UI'));
+    // Reload summary page and confirm it's there.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview/' . $master_did);
+    $this->assertText('$23.23', t('The donation sequence is made for the correct default amount ($23.23).'), t('Fundraiser Update Amount'));
+    $this->assertText('$23.23', t('The donation sequence is made for the correct default amount ($23.23).'), t('Fundraiser Update Amount'));
+
+    // Post to update user details.
+    $post = array(
+      'first_name' => 'CHANGED FIRST NAME',
+      'last_name' => 'CHANGED LAST NAME',
+      'address' => 'CHANGED ADDRESS',
+      'address_line_2' => 'CHANGED ADDRESS TWO',
+      'city' => 'CHANGED CITY',
+      'zip' => '12345',
+      'payment_fields[credit][card_number]' => '4111111111111111',
+      'payment_fields[credit][expiration_date][card_expiration_month]' => $month,
+      'payment_fields[credit][expiration_date][card_expiration_year]' => $year,
+      'payment_fields[credit][card_cvv]' => '111',
+    );
+    $this->drupalPost('user/' . $created_user->uid . '/recurring_overview/' . $master_did, $post, t('Save changes'));
+    // Reload page.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview/' . $master_did);
+    $this->assertFieldByName('first_name', 'CHANGED FIRST NAME', t('The donation account user first name is updated.'),
+      t('Fundraiser Update Billing Info'));
+    $this->assertFieldByName('last_name', 'CHANGED LAST NAME', t('The donation account user last name is updated.'),
+      t('Fundraiser Update Billing Info'));
+    $this->assertFieldByName('address', 'CHANGED ADDRESS', t('The donation account user address is updated.'),
+      t('Fundraiser Update Billing Info'));
+    $this->assertFieldByName('address_line_2', 'CHANGED ADDRESS TWO', t('The donation account user address two is updated.'),
+      t('Fundraiser Update Billing Info'));
+    $this->assertFieldByName('city', 'CHANGED CITY', t('The donation account user city is updated.'),
+      t('Fundraiser Update Billing Info'));
+    $this->assertFieldByName('zip', '12345', t('The donation account user zip is updated.'),
+      t('Fundraiser Update Billing Info'));
+
+    // Post to update expirations.
+    $new_month = date('n', strtotime('+1 month'));
+    $new_year = date('Y', strtotime('+1 month'));
+    $post = array(
+      'payment_fields[credit][card_number]' => '4111111111111111',
+      'payment_fields[credit][expiration_date][card_expiration_month]' => $new_month,
+      'payment_fields[credit][expiration_date][card_expiration_year]' => $new_year,
+      'payment_fields[credit][card_cvv]' => '111',
+    );
+    $this->drupalPost('user/' . $created_user->uid . '/recurring_overview/' . $master_did, $post, t('Save changes'));
+    // Reload page.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview/' . $master_did);
+    $date = date('m/d/y', strtotime('+1 month'));
+    $this->assertText($date, t('The donation sequence is made for the correct next charge date (@date).', array('@date' => $date)),
+      t('Fundraiser Update Expiration'));
+    $date = date('m/d/y', strtotime('+2 month'));
+    $this->assertNoText($date, t('The donation sequence is NOT made for the next charge date after expiration (@date).', array('@date' => $date)),
+      t('Fundraiser Update Expiration'));
+
+    // Post to update expirations a second time.
+    $new_month = date('n', strtotime('+3 month'));
+    $new_year = date('Y', strtotime('+3 month'));
+    $post = array(
+      'payment_fields[credit][card_number]' => '4111111111111111',
+      'payment_fields[credit][expiration_date][card_expiration_month]' => $new_month,
+      'payment_fields[credit][expiration_date][card_expiration_year]' => $new_year,
+      'payment_fields[credit][card_cvv]' => '111',
+    );
+    $this->drupalPost('user/' . $created_user->uid . '/recurring_overview/' . $master_did, $post, t('Save changes'));
+    // Reload page.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview/' . $master_did);
+    $date = date('m/d/y', strtotime('+3 month'));
+    $this->assertText($date, t('The donation sequence is made for the correct next charge date (@date).', array('@date' => $date)),
+      t('Fundraiser Update Expiration'));
+    $date = date('m/d/y', strtotime('+4 month'));
+    $this->assertNoText($date, t('The donation sequence is NOT made for the next charge date after expiration (@date).', array('@date' => $date)),
+      t('Fundraiser Update Expiration'));
+
+    // Post to cancel, with given reason.
+    $post = array(
+      'reason' => 'EXAMPLE CANCEL REASON',
+    );
+    $this->drupalPost('user/' . $created_user->uid . '/recurring_overview/' . $master_did, $post, t('Cancel all future payments'));
+    $this->assertText('All future payments cancelled.', t('The donation sequence is cancelled.'), t('Fundraiser Cancel'));
+    // Check display in table.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview');
+    $this->assertText('Canceled', t('The donation sequence is listed as cancelled in overview.'), t('Fundraiser Cancel'));
+    // Check display in page.
+    $this->drupalGet('user/' . $created_user->uid . '/recurring_overview/' . $master_did);
+    $this->assertText('Canceled', t('The donation sequence is listed as cancelled in overview.'), t('Fundraiser Cancel'));
+    $this->assertText('There are no further charges for this recurring donation.', t('The donation update amount forms are not available.'),
+      t('Fundraiser Cancel'));
+  }
+
+  /**
+   * Test to make sure sustainers are not processed when the sustainer key file is missing
+   * during normal Drupal cron run.
+   */
+  public function testFundraiserSustainerNoProcessOnMissingKeyStandardCronRun() {
+    // Create a recurring donation to test with.
+    $master_did = $this->fundraiserSustainerCreateRecurringDonation();
+    // On initial start, there is no key.
+    variable_set('encrypt_secure_key_path', '');
+    // Run cron.
+    $this->cronRun();
+    // Reload the page to render drupal messages.
+    $this->drupalGet('');
+    // Invalid sustainer key message is displayed.
+    $this->assertText('The fundraiser sustainer key has not been configured correctly. Recurring donations will not be processed.',
+      t('Cron failed to execute with no key set.'), t('Fundraiser Sustainer Key'));
+    // Get the total number of sustainers processed.
+    $sustainers_processed = $this->fundraiserSustainerChargeCount($master_did);
+    // Ensure no sustainers were actually processed.
+    $this->assertEqual(0, $sustainers_processed, 'Number of sustainers processed is 0.');
+  }
+
+  /**
+   * Test to make sure sustainers are not processed when the sustainer key file is missing
+   * during normal standalone cron run.
+   */
+  public function testFundraiserSustainerNoProcessOnMissingKeyStandaloneCronRun() {
+    // Turn on standalone cron.
+    variable_set('fundraiser_standalone_cron_enabled', 1);
+    // Create a recurring donation to test with.
+    $master_did = $this->fundraiserSustainerCreateRecurringDonation();
+    // On initial start, there is no key.
+    variable_set('encrypt_secure_key_path', '');
+    // Run standalone cron endpoint.
+    $this->drupalGet('fundraiser_cron');
+    // Reload the page to render drupal messages.
+    $this->drupalGet('');
+    // Invalid sustainer key message is displayed.
+    $this->assertText('The fundraiser sustainer key has not been configured correctly. Recurring donations will not be processed.',
+      t('Cron failed to execute with no key set.'), t('Fundraiser Sustainer Key'));
+    // Get the total number of sustainers processed.
+    $sustainers_processed = $this->fundraiserSustainerChargeCount($master_did);
+    // Ensure no sustainers were actually processed.
+    $this->assertEqual(0, $sustainers_processed, 'Number of sustainers processed is 0.');
+  }
+
+  /**
+   * Test to make sure sustainers are not processed when the sustainer key file is configured
+   * with a bad key.
+   */
+  public function testFundraiserSustainerNoProcessOnKeyMismatch() {
+    // Create a recurring donation to test with.
+    $master_did = $this->fundraiserSustainerCreateRecurringDonation();
+    // Set up sustainer key file with a bad key.
+    $this->setSustainerKey('BADKEY');
+    // Run cron.
+    $this->cronRun();
+    // Reload the page to render drupal messages.
+    $this->drupalGet('');
+    // Invalid sustainer key message is displayed.
+    $this->assertText('The fundraiser sustainer key has not been configured correctly. Recurring donations will not be processed.',
+      t('Cron failed to execute with no key set.'), t('Fundraiser Sustainer Key'));
+    // Get the total number of sustainers processed.
+    $sustainers_processed = $this->fundraiserSustainerChargeCount($master_did);
+    // Ensure no sustainers were actually processed.
+    $this->assertEqual(0, $sustainers_processed, 'Number of sustainers processed is 0.');
+  }
+
+  /**
+   * Test to make sure sustainers are not processed when the sustainer key file is configured
+   * correctly, but the recurring record has a different value.
+   */
+  public function testFundraiserSustainerNoProcessOnEnvironmentMismatch() {
+    // Set up a bogus key value.
+    $this->setSustainerKey('example.prod');
+    // Create a recurring donation to test with. These donations should have example.production
+    // as their sustainer key.
+    $master_did = $this->fundraiserSustainerCreateRecurringDonation();
+    // Make sure key is example.prod
+    $donations = _fundraiser_sustainers_get_donations_recurr_by_member($master_did);
+
+    foreach ($donations as $donation) {
+      // Skip the first order.
+      if ($donation->did != $donation->master_did) {
+        $this->assertEqual('example.prod', $donation->sustainer_key, 'Sustainer record contains the correct sustainer key.');
+      }
+    }
+
+    $this->setSustainerKey(trim($_SERVER['HTTP_HOST']) . rtrim(base_path(), '/'));
+    // With key setup, advance one charge and check the state afterwards.
+    $yesterday = strtotime('-1 day'); // Use yesterday because the cron run happens right after setting this
+    db_update('fundraiser_sustainers')
+      ->fields(array(
+        'next_charge' => $yesterday,
+      ))
+      ->condition('did', 2, '=')
+      ->execute();
+    // Run cron.
+    $this->cronRun();
+    // Reload the page to render drupal messages.
+    $this->drupalGet('');
+    // Get the total number of sustainers processed.
+    $sustainers_processed = $this->fundraiserSustainerChargeCount($master_did);
+    // Ensure no sustainers were actually processed.
+    $this->assertEqual(0, $sustainers_processed, 'Number of sustainers processed is 0.');
+  }
+
+  /**
+   * Test to make sure sustainers are processed when the sustainer key file is configured
+   * correctly, with a matching key value in the key file and in the sustainer record.
+   */
+  public function testFundraiserSustainerProcessOnEnvironmentMatch() {
+    // Set up a legitimate sustainer key value.
+    $this->setSustainerKey(trim($_SERVER['HTTP_HOST']) . rtrim(base_path(), '/'));
+    // Create a recurring donation to test with. These donations should have example.production
+    // as their sustainer key.
+    $master_did = $this->fundraiserSustainerCreateRecurringDonation();
+    // Make sure key is example.prod
+    $donations = _fundraiser_sustainers_get_donations_recurr_by_member($master_did);
+    foreach ($donations as $donation) {
+      // Skip the first order.
+      if ($donation->did != $donation->master_did) {
+        $this->assertEqual(trim($_SERVER['HTTP_HOST']) . rtrim(base_path(), '/'), $donation->sustainer_key, 'Sustainer record contains the correct sustainer key.');
+      }
+    }
+    // With key setup, advance one charge and check the state afterwards.
+    $yesterday = strtotime('-1 day'); // Use yesterday because the cron run happens right after setting this
+    db_update('fundraiser_sustainers')
+      ->fields(array(
+        'next_charge' => $yesterday,
+      ))
+      ->condition('did', 2, '=')
+      ->execute();
+    // Run cron.
+    $this->cronRun();
+    // Reload the page to render drupal messages.
+    $this->drupalGet('');
+    // Donation success message is displayed.
+    $this->assertText(t('Donation was successfully processed.'), t('Donation success message is displayed.'));
+    // Get the total number of sustainers processed.
+    $sustainers_processed = $this->fundraiserSustainerChargeCount($master_did);
+    // Ensure no sustainers were actually processed.
+    $this->assertEqual(1, $sustainers_processed, 'Number of sustainers processed is 1.');
+  }
+
+}

@@ -1,0 +1,24 @@
+.timeline-footer {
+    display:none;
+}
+
+.twitter-widget-header {
+    max-width: 500px;
+}
+
+.twitter-widget-title {
+    font-size: 1.2em;
+    font-weight: bold;
+    float: left;
+}
+
+.twitter-widget-top {
+    text-align: right;
+}
+.twitter-widget-share-text {
+    vertical-align: middle;
+}
+.twitter-widget-share-button {
+    margin-left: 10px;
+    float: right;
+}

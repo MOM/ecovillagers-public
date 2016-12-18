@@ -1,0 +1,14 @@
+name = Springboard Peer to Peer Fields
+description = Defines the field types needed for Springboard peer to peer.
+core = 7.x
+package = Springboard P2P
+version = 7.x-4.0-dev
+project = springboard_p2p
+
+dependencies[] = node
+dependencies[] = fundraiser
+dependencies[] = webform_user
+
+files[] = includes/springboard_p2p_fields_campaign_goals_field.inc
+files[] = includes/springboard_p2p_fields_personal_campaign_progress_field.inc
+files[] = includes/springboard_p2p_fields_factory.inc

@@ -1,0 +1,136 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_sync salesforce_queue hooks
+ */
+
+module_load_include('test', 'salesforce_queue', 'tests/salesforce_queue');
+
+/**
+ * Ensure salesforce_sync integrates with salesforce_queue properly.
+ */
+class SalesforceSyncQueueTokenTestCase extends SalesforceQueueTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Queue Token Integration',
+      'description' => 'Ensure that tokens are replaced when the queue is processed.',
+      'group' => 'Salesforce Sync',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    parent::setUp($modules, $permissions);
+
+    // Initiate a queue and processor.
+    $this->queue = salesforce_queue_load();
+    $this->processor = salesforce_queue_load_processor($this->queue);
+
+    // Set up the processor's Salesforce connection.
+    // This is special for simpletest due to the access token being stored in
+    // the session.
+    $this->processor->setSalesforceApi($this->salesforceConnect());
+    $this->processor->setSalesforceSoap();
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    // Remove the items we created in our Salesforce instance.
+    $this->processor->deleteNewSfRecords();
+
+    parent::tearDown();
+  }
+
+  /**
+   * Test the salesforce_queue hooks.
+   */
+  public function testQueueTokenReplacement() {
+    // Create an account so that we can relate a contact to it and confirm that
+    // token replacements are working.
+    // Queue the user -> account.
+    $this->queue->createItem($this->createAccountQueueItem());
+
+    // Queue the user -> contact.
+    $this->queue->createItem($this->createContactQueueItem());
+
+    // Items added to Salesforce will have their records mapped to their
+    // Salesforce Ids.  Retreive records and verify record maps were created.
+    $this->processor->process();
+
+    $records = entity_load('salesforce_sync_map');
+    $this->assertEqual(2, count($records), 'Mapped ' . count($records) . ' records out of 2 queued.');
+
+    // Get the Salesforce ids of the processed items.
+    $processed_items = $this->processor->getProcessedItemIds();
+
+    // Get the id of the contact so we can check it's account id.
+    $contact_id = array_shift($processed_items['Contact']);
+    $account_id = array_shift($processed_items['Account']);
+
+    // Retreive the contact object so we can verify it's AccountId field.
+    $result = $this->processor->salesforceSync->soap->retrieve('AccountId', 'Contact', array($contact_id));
+
+    // Grab the account id stored on the contact for comparison.
+    $contact_account_id = $result[0]->fields->AccountId;
+
+    // Make sure account id has the correct value.
+    $this->assertEqual($account_id, $contact_account_id, 'Contact object related to correct account object.');
+
+  }
+
+  /**
+   * Creates a account queue item.
+   */
+  protected function createAccountQueueItem() {
+    $fields = array(
+      'Name' => 'Test Account',
+      'AccountNumber' => '123',
+    );
+    $sobject = new SalesforceObject('Account', $fields);
+
+    $queue_item = array(
+      'drupal_id' => 100,
+      'module' => 'User',
+      'delta' => 'User',
+      'operation' => 'CREATE',
+      'object_type' => 'Account',
+      'sobject' => $sobject,
+    );
+
+    return $queue_item;
+  }
+
+  /**
+   * Creates a contact queue item.
+   */
+  protected function createContactQueueItem() {
+    $fields = array(
+      'FirstName' => 'John',
+      'LastName' => 'Doe',
+      'Email' => 'example@example.com',
+      'AccountId' => '[Account:user:100]',
+    );
+    $sobject = new SalesforceObject('Contact', $fields);
+
+    $queue_item = array(
+      'drupal_id' => 200,
+      'module' => 'User',
+      'delta' => 'User',
+      'operation' => 'UPSERT',
+      'object_type' => 'Contact',
+      'dedupe_field' => 'Email',
+      'sobject' => $sobject,
+    );
+
+    return $queue_item;
+  }
+}

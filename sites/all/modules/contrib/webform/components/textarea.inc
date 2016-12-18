@@ -15,7 +15,7 @@ function _webform_defaults_textarea() {
     'pid' => 0,
     'weight' => 0,
     'value' => '',
-    'required' => 0,
+    'mandatory' => 0,
     'extra' => array(
       'cols' => '',
       'rows' => '',
@@ -23,10 +23,8 @@ function _webform_defaults_textarea() {
       'resizable' => 1,
       'disabled' => 0,
       'description' => '',
-      'placeholder' => '',
       'attributes' => array(),
       'private' => FALSE,
-      'analysis' => FALSE,
     ),
   );
 }
@@ -53,7 +51,7 @@ function _webform_edit_textarea($component) {
     '#type' => 'textarea',
     '#title' => t('Default value'),
     '#default_value' => $component['value'],
-    '#description' => t('The default value of the field.') . ' ' . theme('webform_token_help'),
+    '#description' => t('The default value of the field.') . theme('webform_token_help'),
     '#cols' => 60,
     '#rows' => 5,
     '#weight' => 0,
@@ -84,13 +82,6 @@ function _webform_edit_textarea($component) {
     '#default_value' => $component['extra']['resizable'],
     '#parents' => array('extra', 'resizable'),
   );
-  $form['display']['placeholder'] = array(
-    '#type' => 'textfield',
-    '#title' => t('Placeholder'),
-    '#default_value' => $component['extra']['placeholder'],
-    '#description' => t('The placeholder will be shown in the field until the user starts entering a value.'),
-    '#parents' => array('extra', 'placeholder'),
-  );
   $form['display']['disabled'] = array(
     '#type' => 'checkbox',
     '#title' => t('Disabled'),
@@ -111,12 +102,12 @@ function _webform_render_textarea($component, $value = NULL, $filter = TRUE) {
 
   $element = array(
     '#type' => 'textarea',
-    '#title' => $filter ? webform_filter_xss($component['name']) : $component['name'],
+    '#title' => $filter ? _webform_filter_xss($component['name']) : $component['name'],
     '#title_display' => $component['extra']['title_display'] ? $component['extra']['title_display'] : 'before',
-    '#default_value' => $filter ? webform_replace_tokens($component['value'], $node) : $component['value'],
-    '#required' => $component['required'],
+    '#default_value' => $filter ? _webform_filter_values($component['value'], $node) : $component['value'],
+    '#required' => $component['mandatory'],
     '#weight' => $component['weight'],
-    '#description' => $filter ? webform_filter_descriptions($component['extra']['description'], $node) : $component['extra']['description'],
+    '#description' => $filter ? _webform_filter_descriptions($component['extra']['description'], $node) : $component['extra']['description'],
     '#rows' => !empty($component['extra']['rows']) ? $component['extra']['rows'] : 5,
     '#cols' => !empty($component['extra']['cols']) ? $component['extra']['cols'] : 60,
     '#attributes' => $component['extra']['attributes'],
@@ -124,10 +115,6 @@ function _webform_render_textarea($component, $value = NULL, $filter = TRUE) {
     '#theme_wrappers' => array('webform_element'),
     '#translatable' => array('title', 'description'),
   );
-
-  if ($component['extra']['placeholder']) {
-    $element['#attributes']['placeholder'] = $component['extra']['placeholder'];
-  }
 
   if ($component['extra']['disabled']) {
     if ($filter) {
@@ -138,7 +125,7 @@ function _webform_render_textarea($component, $value = NULL, $filter = TRUE) {
     }
   }
 
-  if (isset($value[0])) {
+  if (isset($value)) {
     $element['#default_value'] = $value[0];
   }
 
@@ -151,7 +138,6 @@ function _webform_render_textarea($component, $value = NULL, $filter = TRUE) {
 function _webform_display_textarea($component, $value, $format = 'html') {
   return array(
     '#title' => $component['name'],
-    '#title_display' => $component['extra']['title_display'] ? $component['extra']['title_display'] : 'before',
     '#weight' => $component['weight'],
     '#theme' => 'webform_display_textarea',
     '#theme_wrappers' => $format == 'html' ? array('webform_element') : array('webform_element_text'),
@@ -201,13 +187,8 @@ function _webform_analysis_textarea($component, $sids = array()) {
 
   $rows[0] = array(t('Left Blank'), ($submissions - $nonblanks));
   $rows[1] = array(t('User entered value'), $nonblanks);
-
-  $other[] = array(t('Average submission length in words (ex blanks)'), ($nonblanks != 0 ? number_format($wordcount/$nonblanks, 2) : '0'));
-
-  return array(
-    'table_rows' => $rows,
-    'other_data' => $other,
-  );
+  $rows[2] = array(t('Average submission length in words (ex blanks)'), ($nonblanks != 0 ? number_format($wordcount/$nonblanks, 2) : '0'));
+  return $rows;
 }
 
 /**
@@ -224,7 +205,7 @@ function _webform_csv_headers_textarea($component, $export_options) {
   $header = array();
   $header[0] = '';
   $header[1] = '';
-  $header[2] = $export_options['header_keys'] ? $component['form_key'] : $component['name'];
+  $header[2] = $component['name'];
   return $header;
 }
 

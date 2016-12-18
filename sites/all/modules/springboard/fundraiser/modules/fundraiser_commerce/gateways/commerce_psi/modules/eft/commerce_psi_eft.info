@@ -1,0 +1,6 @@
+name = Payment Solutions, Inc. EFT API
+description = Implements Payment Solutions, Inc. Electronic Funds Transfer (EFT) payment API for use with Drupal Commerce.
+package = Commerce (contrib)
+dependencies[] = commerce_psi
+core = 7.x
+version = 7.x-4.x-dev

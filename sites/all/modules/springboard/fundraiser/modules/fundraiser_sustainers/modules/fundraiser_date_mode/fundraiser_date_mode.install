@@ -1,0 +1,48 @@
+<?php
+
+/**
+ * @file
+ * Install, uninstall, and db schema.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function fundraiser_date_mode_schema() {
+  $schema['fundraiser_date_mode_dates'] = array(
+    'description' => 'Store original charge dates for sustainer order records that have had their charge date modified.',
+    'fields' => array(
+      'did' => array(
+        'description' => 'Donation id of series order.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'master_did' => array(
+        'description' => 'Donation id of series master donation.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'original_next_charge' => array(
+        'description' => 'Original next_charge date of the order.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('did'),
+    'indexes' => array('master_did' => array('master_did')),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function fundraiser_date_mode_uninstall() {
+  // Remove variables created by this module.
+  variable_del('fundraiser_date_mode_set_date_mode');
+  variable_del('fundraiser_date_mode_set_dates');
+  variable_del('fundraiser_date_mode_set_seconds');
+}

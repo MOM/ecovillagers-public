@@ -1,0 +1,138 @@
+.row-fluid,
+.row-fluid[class*="span"] {
+    min-height: 1px;
+}
+
+#call-to-action-call {
+    font-weight: bold;
+    margin-bottom: 1em;
+}
+
+#take-action-wrapper {
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    width: 100%;
+    border: 1px solid #d5d5d5;
+    padding: 0 20px 20px ;
+    margin-bottom: 40px;
+    border-radius: 4px;
+}
+
+#take-action-wrapper > legend{
+    border:none;
+    padding: 0 10px;
+    margin-bottom: 0;
+    width: auto;
+}
+
+#take-action-wrapper fieldset legend {
+    font-size: 18px;
+}
+
+#sba-messages-form label,
+#sba-messages-form .description {
+    font-weight: bold;
+}
+
+ #edit-actions {
+    clear:both;
+    background-color: #fff;
+    border-top: none;
+    padding: 0;
+    margin: 0;
+}
+
+ #edit-actions input {
+    width: 100%;
+    background: #247AAD;
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    margin-left: 0;
+    font-size: 1.5em;
+    padding: 10px 0;
+    text-shadow: none;
+}
+
+ #edit-actions input:hover {
+    background: #1E72A3;
+}
+
+ #sba-messages-form {
+    clear: both;
+}
+
+ #webform-component-sbp-first-name.control-group,
+ #webform-component-sbp-last-name.control-group,
+ #webform-component-sbp-address.control-group,
+ #webform-component-sbp-address-line-2.control-group,
+ #webform-component-sbp-state.control-group,
+ #webform-component-sbp-zip.control-group {
+    float: left;
+    clear:none;
+    width:49.5%;
+    -webkit-box-sizing: border-box;
+    -moz-box-sizing: border-box;
+    box-sizing: border-box;
+    padding-left: 0;
+}
+
+ #webform-component-sbp-first-name.control-group input,
+ #webform-component-sbp-last-name.control-group input,
+ #webform-component-sbp-address.control-group input,
+ #webform-component-sbp-address-line-2.control-group input,
+#webform-component-sbp-zip.control-group input {
+    width:90%;
+}
+
+#webform-component-sbp-state.control-group select {
+    width:95%;
+}
+
+#webform-component-sbp-last-name.control-group input,
+#webform-component-sbp-address-line-2.control-group input,
+#webform-component-sbp-zip.control-group input{
+    margin-left: 7%;
+}
+#webform-component-mail.control-group,
+ #webform-component-sbp-city.control-group {
+    width: 97.5%;
+}
+#webform-component-mail.control-group input,
+#webform-component-sbp-city.control-group input {
+    width: 100%;
+}
+
+#edit-actions {
+    clear: both;
+}
+
+ #image img{
+    display: block;
+    margin: 0 auto 20px auto;
+}
+
+#participants-container {
+    float: left;
+}
+
+.action-body-right #right {
+    float: right;
+}
+
+.action-body-right #left {
+    margin-left: 0;
+}
+
+.action-body-left #participants-container,
+.action-body-right #participants-container{
+    float:none;
+}
+
+@media (max-width: 767px) {
+    .action-body-right #left,
+    .action--right #left{
+        clear: both;
+    }
+}

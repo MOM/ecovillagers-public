@@ -1,0 +1,147 @@
+<?php
+
+/**
+ * @file
+ * Tests for mapping webform.
+ */
+
+module_load_include('test', 'salesforce_genmap', 'tests/webform/webform');
+
+/**
+ * Tests mapping Salesforce objects onto webforms.
+ */
+class SalesforceWebformMapTestCase extends SalesforceWebformTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Webform Mapping',
+      'description' => 'Ensure that the webform mapping componant functions properly.',
+      'group' => 'Salesforce Generic Mapping',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'fundraiser'
+    ));
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Tests for the mapping form.
+   */
+  public function testMappingForm() {
+    // Form throws message if it cannot connect to Salesforce.
+    $webform = $this->createWebform();
+    $this->drupalGet($this->webformPath('salesforce_map', $webform->nid));
+    $this->assertNoText('You are not authorized to access this page.', 'You have access to the mapping page.');
+    $this->assertText('Cannot connect to Salesforce', 'Message appears when Salesforce is not connected.');
+
+    // Form displays only the object type select after connecting to Salesforce.
+    $this->salesforceConnect();
+    $this->drupalGet($this->webformPath('salesforce_map', $webform->nid));
+    $this->assertFieldByName('salesforce_object_info[salesforce_object_type]', '', 'Salesforce object type field exists.');
+    $this->assertNoFieldByName('salesforce_object_info[salesforce_record_type]', '', 'Salesforce record type is hidden as expected.');
+    $this->assertNoFieldByName('field_map[salesforce_node_map][nid][sf_field]', '', 'Node id mapping is hidden as expected.');
+    $this->assertNoFieldByName('map_config[sync_options][insert]', '', 'Sync Config is hidden as expected.');
+
+    // Select a Salesforce object with a record type.
+    $this->formMapField('salesforce_object_type', 'Opportunity', 'salesforce_object_info');
+    $this->assertFieldByName('salesforce_object_info[salesforce_record_type]', NULL, 'Salesforce record type is displayed because Opportunity object has a record type.');
+    $this->assertFieldByName('field_map[salesforce_node_map][nid][sf_field]', NULL, 'Node id mapping has shown up.');
+    $this->assertFieldByName('map_config[sync_options][insert]', NULL, 'Sync Config has shown up.');
+
+    // Verify default settings for Sync config.
+    $this->assertFieldChecked('edit-map-config-sync-options-insert', 'Sync on insert selected.');
+    $this->assertFieldChecked('edit-map-config-sync-options-update', 'Sync on update selected.');
+    $this->assertNoFieldByName('map_config[sync_options][delete]', '', 'Delete sync config option is hidden as expected.');
+
+    // Fill out a couple mappings with the same webform field.
+    // Validation will reject this.
+    $this->formMapField('first_name', 'Name', 'webform_map', TRUE);
+    $this->formMapField('last_name', 'Name', 'webform_map', TRUE);
+    $edit = $this->_swfEdit;
+    $this->drupalPost(NULL, $edit, 'Save');
+    $this->assertText('Multiple fields cannot be mapped to the same Salesforce fields.', 'Validation rejected correctly.');
+    $this->_swfEdit = array();
+
+    // Select a Salesforce object without a record type.
+    $this->formMapField('salesforce_object_type', 'Contact', 'salesforce_object_info');
+    $this->assertNoFieldByName('salesforce_object_info[salesforce_record_type]', '', 'Salesforce record type is hidden because Contact object does not have a record type.');
+    $this->assertFieldByName('field_map[salesforce_node_map][nid][sf_field]', '', 'Node id mapping has shown up.');
+
+    // Fill out the rest of the fields.
+    $this->formMapField('first_name', 'FirstName', 'webform_map');
+    $this->formMapField('last_name', 'LastName', 'webform_map');
+    $this->formMapField('email', 'Email', 'webform_map', TRUE);
+    $this->formMapField('nid', 'ReportsToId', 'salesforce_node_map');
+    $this->formMapField('title', 'Department', 'salesforce_node_map');
+    $this->formMapField('sid', 'OwnerId', 'salesforce_submission_map');
+    $this->formMapField('date', 'Jigsaw', 'salesforce_submission_map');
+    $edit = $this->_swfEdit;
+    $edit['salesforce_dedupe_field'] = 'Email';
+    $edit['map_config[sync_options][update]'] = FALSE;
+
+    // Save the form and verify the form reloaded correctly.
+    $this->drupalPost(NULL, $edit, 'Save');
+    $this->assertText('The map was saved successfully.', 'Saving posted correctly.');
+    $this->assertFieldByName('salesforce_object_info[salesforce_object_type]', 'Contact', 'Object Type saved and refreshed on form.');
+    $this->assertFieldChecked('salesforce-dedupe-email', 'Email dedupe field saved and selected.');
+    $this->assertFieldByName('field_map[webform_map][first_name][sf_field]', 'FirstName', 'first_name saved and refreshed on form.');
+    $this->assertFieldByName('field_map[webform_map][last_name][sf_field]', 'LastName', 'last_name saved and refreshed on form.');
+    $this->assertFieldByName('field_map[webform_map][email][sf_field]', 'Email', 'email saved and refreshed on form.');
+    $this->assertFieldByName('field_map[salesforce_node_map][nid][sf_field]', 'ReportsToId', 'nid saved and refreshed on form.');
+    $this->assertFieldByName('field_map[salesforce_node_map][title][sf_field]', 'Department', 'node title saved and refreshed on form.');
+    $this->assertFieldByName('field_map[salesforce_submission_map][sid][sf_field]', 'OwnerId', 'submission id saved and refreshed on form.');
+    $this->assertFieldByName('field_map[salesforce_submission_map][date][sf_field]', 'Jigsaw', 'submission title saved and refreshed on form.');
+    $this->assertFieldChecked('edit-map-config-sync-options-insert', 'Sync on insert saved and selected.');
+    $this->assertNoFieldChecked('edit-map-config-sync-options-update', 'Sync on update saved and not selected.');
+
+    // Change the object type to change the entire form.
+    $edit = array(
+      'salesforce_object_info[salesforce_object_type]' => 'Opportunity',
+    );
+    $this->drupalPostAjax(NULL, $edit, 'salesforce_object_info[salesforce_object_type]');
+    $this->assertFieldByName('salesforce_object_info[salesforce_object_type]', 'Opportunity', 'Object Type has changed.');
+    $this->assertFieldByName('salesforce_object_info[salesforce_record_type]', NULL, 'Salesforce record type showed up.');
+    $this->assertNoFieldByName('field_map[webform_map][first_name][sf_field]', 'FirstName', 'Salesforce webform map field reset.');
+    $this->assertNoFieldByName('field_map[salesforce_node_map][nid][sf_field]', 'ReportsToId', 'Node property map field reset.');
+
+    // Cancel the changes and verify.
+    $this->drupalPost(NULL, $edit, 'Cancel');
+    $this->assertText('The Salesforce map has been reset to the original values.', 'Cancelling form posted correctly.');
+    $this->assertFieldByName('salesforce_object_info[salesforce_object_type]', 'Contact', 'Object Type refreshed on form.');
+    $this->assertFieldChecked('salesforce-dedupe-email', 'Email dedupe field selected.');
+    $this->assertFieldByName('field_map[webform_map][first_name][sf_field]', 'FirstName', 'first_name refreshed on form.');
+    $this->assertFieldByName('field_map[webform_map][last_name][sf_field]', 'LastName', 'last_name refreshed on form.');
+    $this->assertFieldByName('field_map[webform_map][email][sf_field]', 'Email', 'email refreshed on form.');
+    $this->assertFieldByName('field_map[salesforce_node_map][nid][sf_field]', 'ReportsToId', 'nid refreshed on form.');
+    $this->assertFieldByName('field_map[salesforce_node_map][title][sf_field]', 'Department', 'node title refreshed on form.');
+    $this->assertFieldByName('field_map[salesforce_submission_map][sid][sf_field]', 'OwnerId', 'submission id refreshed on form.');
+    $this->assertFieldByName('field_map[salesforce_submission_map][date][sf_field]', 'Jigsaw', 'submission title refreshed on form.');
+
+    // Unmap the webform from Salesforce.
+    $this->drupalPost(NULL, array(), 'Unmap');
+    $this->assertText('The Salesforce to Drupal object map has been removed.', 'Unmapping form posted correctly');
+    $this->assertFieldByName('salesforce_object_info[salesforce_object_type]', NULL, 'Object Type field appears on form.');
+    $this->assertNoFieldByName('salesforce_object_info[salesforce_object_type]', 'Contact', 'Object Type field does not have previously saved value.');
+    $this->assertNoFieldByName('salesforce_object_info[salesforce_record_type]', NULL, 'Salesforce record type is hidden as expected.');
+    $this->assertNoFieldByName('field_map[salesforce_node_map][nid][sf_field]', NULL, 'Node id mapping is hidden as expected.');
+
+    // Delete the webforms.
+    node_delete($webform->nid);
+  }
+}

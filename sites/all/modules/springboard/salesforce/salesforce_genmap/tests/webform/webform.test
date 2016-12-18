@@ -1,0 +1,250 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for webform salesforce mapping
+ */
+
+module_load_include('test', 'salesforce_genmap', 'tests/salesforce_genmap');
+
+/**
+ * Tests basic set up for mapping salesforce objects to webforms.
+ */
+class SalesforceWebformTestCase extends SalesforceGenmapTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Webform Mapping API',
+      'description' => 'Ensure that the webform module functions properly.',
+      'group' => 'Salesforce Generic Mapping',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'libraries',
+      'webform',
+    ));
+    $permissions = $permissions + array(
+      'access all webform results',
+      'access own webform results',
+      'edit all webform submissions',
+      'delete all webform submissions',
+      'access own webform submissions',
+      'edit own webform submissions',
+      'delete own webform submissions',
+      'map salesforce to webform',
+    );
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Creates a simple webform of first name, last name and email address.
+   *
+   * @return Object
+   *   Node object of the webform
+   */
+  public function createWebform($with_components = TRUE) {
+    // Create a webform and add a few components.
+    $settings = array(
+      'type' => 'webform',
+      'title' => 'Webform Example',
+    );
+    $webform = $this->drupalCreateNode($settings);
+    if (!$with_components) {
+      return $webform;
+    }
+    $component_name_first = array(
+      'type' => 'textfield',
+      'nid' => $webform->nid,
+      'cid' => NULL,
+      'clone' => FALSE,
+      'name' => 'First Name',
+      'form_key' => 'first_name',
+      'extra' => array(
+        'title_display' => 'before',
+        'private' => 0,
+        'disabled' => 0,
+        'unique' => 0,
+        'conditional_operator' => '',
+      ),
+      'mandatory' => 0,
+      'pid' => 0,
+      'weight' => 0,
+      'value' => '',
+    );
+    $component_name_last = $component_name_first;
+    $component_name_last['name'] = 'Last Name';
+    $component_name_last['form_key'] = 'last_name';
+    $component_name_last['weight'] = 1;
+    $component_email = $component_name_first;
+    $component_email['type'] = 'email';
+    $component_email['name'] = 'Email';
+    $component_email['form_key'] = 'email';
+    $component_email['weight'] = 2;
+    webform_component_insert($component_name_first);
+    webform_component_insert($component_name_last);
+    webform_component_insert($component_email);
+    return node_load($webform->nid, NULL, TRUE);
+  }
+
+  /**
+   * Map a webform all at once.
+   *
+   * Using formMapField() broke in setUp() when map stop being loaded on the
+   * node. But thats OK in the setUp() context because we don't need to test the
+   * mapping of the form.
+   */
+  public function mapWebform($nid, $dedupe = FALSE) {
+    $this->salesforceConnect();
+    $this->drupalGet($this->webformPath('salesforce_map', $nid));
+
+    // AJAX select the object type so the mapping fields show up.
+    $edit = array(
+      'salesforce_object_info[salesforce_object_type]' => 'Contact',
+    );
+    $this->drupalPostAjax(NULL, $edit, 'salesforce_object_info[salesforce_object_type]');
+
+    // Map the fields and save.
+    $edit += array(
+      'field_map[webform_map][first_name][sf_field]' => 'FirstName',
+      'field_map[webform_map][last_name][sf_field]' => 'LastName',
+      'field_map[webform_map][email][sf_field]' => 'Email',
+    );
+    $this->drupalPost(NULL, $edit, 'Save');
+
+    if ($dedupe) {
+      // Dedupe field only shows up after fields have been mapped and posted.
+      $edit += array(
+        'salesforce_dedupe_field' => 'Email',
+      );
+      $this->drupalPost(NULL, $edit, 'Save');
+    }
+  }
+
+  /**
+   * Map a webform component to a Salesforce field.
+   *
+   * You must first $this->drupalGet() the mapping form
+   */
+  public function formMapField($drupal_field, $sf_field, $group, $dedupe = FALSE) {
+    if (!isset($this->_swfEdit)) {
+      $this->_swfEdit = array();
+    }
+
+    if ($group == 'salesforce_object_info') {
+      $name = $group . '[' . $drupal_field . ']';
+    }
+    else {
+      $name = 'field_map[' . $group . '][' . $drupal_field . '][sf_field]';
+      $name_dedupe = 'field_map[' . $group . '][' . $drupal_field . '][dedupe]';
+    }
+
+    // Check the field is there, and set the value.
+    $this->assertFieldByName($name, NULL, 'Mapping field ' . $name . ' exists.');
+    $this->_swfEdit[$name] = $sf_field;
+
+    // Check that dedupe is hidden for unmapped fields.
+    if ($group == 'webform_map' || $group == 'salesforce_object_info') {
+      if ($group == 'webform_map') {
+        $empty_dedupe_field = '<input type="hidden" name="' . $name_dedupe . '">';
+        $this->assertRaw($empty_dedupe_field, 'Dedupe field appropriately does not show up for an unmapped field.');
+      }
+
+      $this->drupalPostAjax(NULL, $this->_swfEdit, $name);
+
+      // Check that the dedupe field was properly changed.
+      if ($dedupe) {
+        $dedupe_field = '<input name="salesforce_dedupe_field" type="radio" id="salesforce-dedupe-' . $drupal_field . '" value="' . $sf_field . '" class="form-radio">';
+        $this->assertNoRaw($empty_dedupe_field, 'Empty dedupe field did not show up for ' . $sf_field);
+        $this->assertRaw($dedupe_field, 'Dedupe radio showed up for ' . $sf_field);
+      }
+      elseif ($group == 'webform_map') {
+        $this->assertRaw($empty_dedupe_field, 'Dedupe radio appropriately hidden for ' . $sf_field);
+      }
+    }
+    else {
+      // No need to do an drupalPostAjax.
+    }
+  }
+
+  /**
+   * Helper to enable the ability to delete during a sync trigger.
+   *
+   * @param string $module
+   *   Name of the module to enable syncing for.
+   *
+   * @return int
+   *   Id of the role that has the permission to configure delete syncing.
+   */
+  public function enableDeleteSync($module) {
+    variable_set('salesforce_genmap_allow_delete_sync', TRUE);
+    drupal_static_reset();
+    cache_clear_all();
+    $rid = $this->drupalCreateRole(array('configure ' . $module . ' delete sync'));
+    $roles = $this->admin_user->roles;
+    $roles[$rid] = $rid;
+    user_save($this->admin_user, array('roles' => $roles));
+    return $rid;
+  }
+
+  /**
+   * Helper to disable the ability to delete during a sync trigger.
+   */
+  public function disableDeleteSync() {
+    variable_set('salesforce_genmap_allow_delete_sync', FALSE);
+    drupal_static_reset();
+    cache_clear_all();
+  }
+
+  /**
+   * Helper to generate paths to various webform-related pages.
+   *
+   * The goal is to centralize the declaration of these paths to make it easier
+   * to alter them when nessisary.
+   *
+   * @param string $type
+   *   The page of the path to retreive.
+   *     - salesforce_map: Salesforce webform mapping page
+   *     - submission: Submission form of the webform.  Node view of the node.
+   *     - edit_submission: Edit form of the given submission.
+   *     - delete_submission: Delete page for the given submission.
+   * @param int $arg1
+   *   First argument to supply.  Currently always the node id of the webform.
+   * @param int $arg2
+   *   Second argument to apply.  Currently always the submission id of the
+   *   submission to manipulate.
+   *
+   * @return string
+   *   The requested path.
+   */
+  public function webformPath($type, $arg1 = NULL, $arg2 = NULL) {
+    switch ($type) {
+      case 'salesforce_map':
+        return 'node/' . $arg1 . '/salesforce';
+
+      case 'submission':
+        return 'node/' . $arg1;
+
+      case 'edit_submission':
+        return 'node/' . $arg1 . '/submission/' . $arg2 . '/edit';
+
+      case 'delete_submission':
+        return 'node/' . $arg1 . '/submission/' . $arg2 . '/delete';
+    }
+    return '';
+  }
+}

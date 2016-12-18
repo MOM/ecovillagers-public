@@ -1,0 +1,10 @@
+core = "7.x"
+description = "Example module demonstrating Email Templates mail form API."
+name = "Email Templates Example"
+version = 7.x-4.x-dev
+package = "Jackson River Springboard - extras"
+
+
+dependencies[] = email_wrappers
+
+files[] = email_wrappers_example.module

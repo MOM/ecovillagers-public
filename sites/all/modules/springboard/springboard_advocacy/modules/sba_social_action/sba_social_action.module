@@ -1,0 +1,995 @@
+<?php
+
+/**
+ * @file
+ * Module file for Social Actions module.
+ */
+
+define ('SBA_TWITTER_HOST',         'https://twitter.com');
+define ('SBA_TWITTER_API',          'https://api.twitter.com');
+define ('SBA_TWITTER_OAUTH_CALLBACK_URL', 'social-action/oauth');
+
+/**
+ * Implements hook_node_info().
+ */
+function sba_social_action_node_info() {
+  return array(
+    'sba_social_action' => array(
+      'name' => t('Springboard Social Action'),
+      'base' => 'sba_social_action',
+      'description' => t('Social Action content type'),
+      'title_label' => t('Social Action'),
+      'locked' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu()
+ */
+function sba_social_action_menu() {
+  $items['node/%/social-message-preview'] = array(
+    'title' => '',
+    'page arguments' => array(1),
+    'page callback' => 'sba_social_action_message_preview_page',
+    'access callback' => 'sba_social_action_preview_access',
+    'access arguments' => array(1),
+    'type' => MENU_CALLBACK,
+    'file' => 'sba_social_action.preview.inc',
+    'file path' => drupal_get_path('module', 'sba_social_action') . '/includes',
+  );
+
+  // Social actions use a different Oauth callback path than the one
+  // defined by twitter module, to have more control over submit functions.
+  $items[variable_get('social_actions_twitter_callback_url', 'social-action/oauth')] = array(
+    'title' => 'Twitter OAuth',
+    // Allow all requests to this URL so that OAuth may work correctly.
+    'access callback' => TRUE,
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('sba_social_action_twitter_callback'),
+    'type' => MENU_CALLBACK
+  );
+
+  // Clear oauth session data
+  $items['clear/session'] = array(
+    'page callback' => 'sba_social_action_clear_twitter_session',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  // Internal path for Twitter oauth.
+  $items['sba/twitter/login'] = array(
+    'page callback' => 'sba_social_action_twitter_redirect',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  // Path to load in the twitter popup window in order to
+  // automatically close it using javascript.
+  $items['sba/twitter/close-window'] = array(
+    'page callback' => 'sba_social_action_twitter_close_window',
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Control access to multi-step page two.
+ *
+ * @param $nid
+ * @return bool
+ */
+function sba_social_action_preview_access($nid) {
+  $node = node_load($nid);
+  $access = FALSE;
+  if (isset($node->type) &&  $node->type == 'sba_social_action') {
+    $session_nid = isset($_SESSION['social_action_sid']['nid']) ? $_SESSION['social_action_sid']['nid'] : FALSE;
+    if ($session_nid && $session_nid == $nid) {
+      $access = TRUE;
+    }
+  }
+  return $access;
+}
+
+/**
+ * Implements hook_form().
+ */
+function sba_social_action_form($node, $form_state) {
+  return node_content_form($node, $form_state);
+}
+
+/**
+ * Implements hook_webform_user_profile_fields_alter().
+ *
+ * Set mandatory fields.
+ * Remove zip and state field temporarily so they can be altered elsewhere.
+ * Set up advocacy-specific profile field salutation
+ * Alter field weights.
+ */
+function sba_social_action_webform_user_profile_fields_alter(&$fields, $node) {
+  if ($node->type == 'sba_social_action') {
+
+    foreach ($fields as $index => $profile_field) {
+      // Make all fields except address2 mandatory.
+      if ($profile_field['name'] != 'sbp_address_line_2' && $profile_field['name'] != 'sbp_phone') {
+        $fields[$index]['mandatory'] = 1;
+      }
+      // Setup removal of non-US provinces.
+      if ($profile_field['name'] == 'sbp_state') {
+        unset($fields[$index]);
+      }
+      // Remove zip.
+      if ($profile_field['name'] == 'sbp_zip') {
+        unset($fields[$index]);
+      }
+      if ($profile_field['name'] == 'sbp_salutation') {
+        $fields[$index]['weight'] = -6;
+      }
+      if ($profile_field['name'] == 'sbp_first_name') {
+        $fields[$index]['weight'] = -5;
+      }
+      if ($profile_field['name'] == 'sbp_last_name') {
+        $fields[$index]['weight'] = -4;
+      }
+      if ($profile_field['name'] == 'mail') {
+        $fields[$index]['weight'] = -3;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_form_layouts_info().
+ */
+function sba_social_action_form_layouts_info() {
+  module_load_include('inc', 'sba_social_action', 'includes/sba_social_action.form_layouts');
+  $templates = sba_social_action_form_layouts();
+  return $templates;
+}
+
+/**
+ * Implements hook_node_load().
+ *
+ * Add the custom confirmation fail message to the node object.
+ * Add the "use message precedence" value to the node object.
+ * Remove form layouts from the node object if it's single column.
+ * Add message entities array to the node object.
+ */
+function sba_social_action_node_load($nodes, $types) {
+
+  // If no message_action nodes are loaded no need to continue.
+  if (!in_array('sba_social_action', $types)) {
+    return;
+  }
+
+  // Add full messages to each node so we can use them later.
+  foreach ($nodes as $nid => $node) {
+    if ($node->type == 'sba_social_action') {
+
+      // Add the custom failure confirmation to the node object.
+      $node->custom_fail_message = variable_get('sba_social_action_confirm', '');
+      $confirm_fail = db_query('select custom_confirmation, fail_message FROM sba_message_action_confirm WHERE nid = :nid', array(':nid' => $node->nid))->fetchAll();
+      if (isset($confirm_fail[0]) && is_numeric($confirm_fail[0]->custom_confirmation)) {
+        // add this on/off value to the node object for the form builder.
+        $node->custom_confirmation = $confirm_fail[0]->custom_confirmation;
+        // Add the non-default fail message if it exists and is active.
+        if (!empty($confirm_fail[0]->custom_confirmation) && isset($confirm_fail[0]->fail_message)) {
+          $node->custom_fail_message = $confirm_fail[0]->fail_message;
+        }
+      }
+
+      $precedence = db_query("SELECT precedence FROM {sba_form_id} WHERE nid = :nid", array(':nid' => arg(1)))->fetchField();
+      $node->precedence = !empty($precedence) ? $precedence : 0;
+
+      $visibility = db_query('select visibility from {springboard_action_opt_in_block} WHERE nid=:nid', array(':nid' => $node->nid))->fetchField();
+      $node->show_my_name = $visibility;
+      // Unset form layout if default.
+      if (isset($node->form_layouts) &&  $node->form_layouts == 'one_column' || arg(2) == 'submission') {
+        unset($node->form_layouts);
+      }
+      if (!empty($node->message_ids)) {
+        $messages = sba_message_load_multiple($node->message_ids);
+        $messages_by_id = array();
+        foreach ($messages as $message) {
+          $messages_by_id[$message->data['message_id']] = $message;
+        }
+        $node->messages = $messages_by_id;
+      }
+      else {
+        $node->messages = array();
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function sba_social_action_theme($existing, $type, $theme, $path) {
+  return array(
+    'sba_social_action_preview_message_header' => array(
+      'render element' => 'message',
+      'file' => 'includes/sba_social_action.preview.inc',
+    ),
+    'sba_social_action_person_details' => array(
+      'render element' => 'message',
+      'file' => 'includes/sba_social_action.webform.inc',
+    ),
+    'social_action_submitted_wrapper' => array(
+      'render element'  => 'element',
+      'file' => 'includes/sba_social_action.form_layouts.inc',
+    ),
+    'social_action_messages_wrapper' => array(
+      'render element'  => 'element',
+      'file' => 'includes/sba_social_action.form_layouts.inc',
+    ),
+    'social_action_webform_wrapper' => array(
+      'render element'  => 'element',
+      'file' => 'includes/sba_social_action.form_layouts.inc',
+    ),
+    'social_action_form_layout_form' => array(
+      'render element' => 'element',
+      'file' => 'includes/sba_social_action.form_layouts.inc',
+    ),
+    'sba_social_action_text_format_wrapper' => array(
+      'render element' => 'element',
+    ),
+    'sba_social_action_twitter_timeline' => array(
+      'render element'  => 'timeline',
+    ),
+    'sba_social_action_twitter_signout_link' => array(
+      'render element'  => 'destination',
+    ),
+  );
+}
+
+/**
+ * @param $node
+ */
+function sba_social_action_node_presave($node) {
+  if ($node->type == 'sba_social_action') {
+    if (empty($node->nid)) {
+      $node->webform['confirmation'] = t('Thank you for participating in the messaging campaign.');
+      $node->webform['confirmation']   .= "\n\n" . '[social_action:twitter_signout]';
+    }
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ *
+ * Adds some custom fields to new webforms.
+ */
+function sba_social_action_node_insert($node) {
+  if ($node->type == 'sba_social_action') {
+    module_load_include('inc', 'sba_social_action', 'includes/sba_social_action.components');
+    sba_social_action_insert_components($node);
+    springboard_advocacy_node_form_post_save($node);
+  }
+}
+
+
+/**
+ * Implements hook_node_update().
+ */
+function sba_social_action_node_update($node) {
+  if ($node->type == 'sba_social_action') {
+    springboard_advocacy_node_form_post_save($node);
+  }
+}
+
+/**
+ * Implements hook_preprocess_page().
+ *
+ * Insert a noscript warning on social actions.
+ */
+function sba_social_action_preprocess_page(&$vars) {
+  if (isset($vars['node']) && $vars['node']->type == 'sba_social_action') {
+    $no_script = '<noscript><div class="alert error">Javascript is required. Please enable javascript in your browser.</div></noscript>';
+    if (!isset($vars['messages'])) {
+      $vars['messages'] = $vars['show_messages'] ? $no_script . theme('status_messages') : '';
+    }
+    else {
+      $vars['messages'] .= $no_script;
+    }
+  }
+}
+
+/**
+ * Implements hook_preprocess_node().
+ *
+ * Define theme wrappers for non-form-layouts nodes.
+ * So they can have a "layout".
+ *
+ * Insert webform goals widget.
+ */
+function sba_social_action_preprocess_node(&$vars) {
+
+  if ($vars['node']->type == 'sba_social_action') {
+    // Add theme wrappers for non-form-layout layouts.
+    $vars['use_layouts'] = !empty($vars['form_layouts']) && $vars['form_layouts'] != 'one_column' ? TRUE : FALSE;
+
+    if (empty($vars['use_layouts']) || $vars['form_layouts'] == 'one_column') {
+      $vars['content']['webform']['#theme_wrappers'][] = 'social_action_webform_wrapper';
+      $vars['content']['webform']['#form']['submitted']['#theme_wrappers'][] = 'social_action_submitted_wrapper';
+
+      $vars['participants'] = '';
+      $view = views_get_view('recent_action_participants');
+      $view->set_display('block_1');
+      $view->set_arguments(array(arg(1)));
+      $view->pre_execute();
+      $view->execute();
+      if (isset($view->result) && count($view->result)) {
+        $table = $view->preview('block_1');
+        $vars['participants'] = $table;
+      }
+
+      $vars['show_participants_block'] = isset($vars['node']->show_my_name) ? $vars['node']->show_my_name : FALSE;
+
+      // Insert webform goals.
+      if (module_exists('webform_goals')) {
+        $goals = webform_goal_load_multiple($vars['node']->nid);
+        // Get the most recently enabled goal.
+        $goal = array_pop($goals);
+        if (!empty($goal)) {
+          $vars['goal'] = '<div class="wg-goal" style="display: none;" data-gid="' . $goal['gid'] . '"></div>';
+        }
+      }
+    }
+  }
+}
+
+/**
+ * @param $form
+ * @param $form_state
+ * @param $form_id
+ */
+function sba_social_action_form_alter(&$form, &$form_state, $form_id) {
+
+  if ($form_id == 'sba_message_edit_form' && isset($form['field_sba_twitter_editable'])) {
+    $form['#attached']['js'][] = drupal_get_path('module', 'sba_social_action') . '/js/jQuery.simplyCountable.js';
+    $form['#attached']['js'][] = drupal_get_path('module', 'sba_social_action') . '/js/social_counter.js';
+    $description =& $form['field_sba_twitter_message'][$form['field_sba_twitter_message']['#language']][0]['value']['#description'];
+    //$description = 'You have used <span class="counter"></span> characters. You currently have a maximum of <span class="counter-max"></span> characters for this message. Adding or removing targets will affect this count. ' . $description;
+
+    $form['field_sba_twitter_editable']['#access'] =  FALSE;
+    $lang = $form['field_sba_twitter_editable']['#language'];
+    $form['field_sba_twitter_editable'][$lang]['#default_value'] = 'Not editable';
+    // Path for ajax callback in Drupal.settings to get target counts in
+    // undistricted social actions.
+    global $base_url;
+    $settings = array('sbaSiteUrl' => $base_url .'/advocacy/ajax/search');
+    $form['#attached']['js'][] = array('data' => $settings, 'type' => 'setting');
+    $form['#attached']['css'] = array(drupal_get_path('module', 'sba_social_action') . '/css/sba-social-message.css');
+    $form['sba_target_options_warning'] = array(
+      '#type' => 'container',
+      '#children' => '<span class="undistricted-update"></span>',
+      '#states' => array(
+        'visible' => array(
+          ':input[name*="field_sba_target_options"]' => array('value' => 0),
+        ),
+      ),
+      '#weight' => 1,
+      '#attributes' => array('class' => array('description'))
+    );
+    $form['#groups']['group_sba_target_options']->children[] = $form['sba_target_options_warning'];
+    $form['#group_children']['sba_target_options_warning'] = 'group_sba_target_options';
+  }
+
+  if (!empty($form['#node']->type) && $form['#node']->type == 'sba_social_action') {
+    // Is this the user-facing form?
+    $client_form = strpos($form_id, 'client_form');
+    // Yes it is the user-facing form. Add all our custom non-webform-component
+    // form items which insert or display message-entity data in the
+    // message-action webform.
+    if ($client_form !== FALSE && arg(2) != 'submission') {
+      if (empty($form['#node']->show_my_name)) {
+        $form['submitted']['sbp_sba_action_optin']['#access'] = FALSE;
+      }
+      form_load_include($form_state, 'inc', 'sba_social_action', 'includes/sba_social_action.form');
+      sba_social_action_additional_elements($form, $form_state);
+      $form['#submit'][] = 'sba_social_action_multiflow_submit';
+    }
+  }
+}
+
+
+/**
+ * Implements hook_form_FORMID_alter().
+ */
+function sba_social_action_form_sba_social_action_node_form_alter(&$form, &$form_state) {
+
+  $lang = $form['field_sba_test_mode']['#language'];
+  $form['field_sba_test_mode'][$lang]['#default_value'][0] = 0;
+  $form['field_sba_test_mode']['#access'] = FALSE;
+
+  $submit_text = '';
+  if (isset($form['#node']->nid)) {
+    $submit_text = db_query("SELECT submit_text FROM {webform} WHERE nid = :nid", array(':nid' => $form['#node']->nid))->fetchField();
+  }
+  if($submit_text == '') {
+    $submit_text = t('Find your Legislator');
+  }
+
+  $form['social_submit_button_text'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Submit Button Text'),
+    '#default_value' => $submit_text,
+    '#weight' => 6,
+    '#required' => TRUE,
+  );
+
+  $form['#group_children']['social_submit_button_text'] = 'group_sba_social_page_elements';
+  // Loads the springboard_taxonomy_options fieldset and form js/css if it
+  // is not already present.
+  if (!isset($form['field_sba_organization_issues'])
+    && !isset($form['springboard_taxonomy_options']['organization_issues']['field_sba_organization_issues'])) {
+    springboard_taxonomy_taxonomy_form($form, $form_state, 'sba_social_action_node_form');
+  }
+
+  // Adds the legislative issues taxonomy fields to the above.
+  if (isset($form['field_sba_legislative_issues'])) {
+    form_load_include($form_state, 'inc', 'springboard_advocacy',
+      'includes/springboard_advocacy.taxonomy');
+    $description = t('Select the issues related to this action. These are legislative issues, which can be used for reporting and segmenting users across all action types.');
+    springboard_advocacy_taxonomy_form($form, $form_state, $description);
+  }
+
+  $form['springboard_taxonomy_options']['#weight'] = -10;
+  $form['springboard_taxonomy_options']['#title'] = t('Issue categories');
+
+  if (empty($form['springboard_display'])) {
+    $form['springboard_display'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Display settings'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#group' => 'additional_settings',
+    );
+  }
+  $form['springboard_display']['#weight'] = -10;
+
+  $form['springboard_display']['recent_participants'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Recent Participants List'),
+    '#description' => t('Choose whether advocates can opt-in to having their name display on the social action page.'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+
+  $visibility = isset($form['#node']->show_my_name) ? $form['#node']->show_my_name : 0;
+  $form['springboard_display']['recent_participants']['show_participants'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Allow users to opt-in and show recent participants list'),
+    '#default_value' => $visibility,
+    '#weight' => -4,
+  );
+  $form['#attached']['css'][] = drupal_get_path('module', 'sba_social_action') . '/css/sba-social-node-form.css';
+
+  // Hide field_sba_social_require_auth field if twitter configuration is not
+  // complete at admin/config/services/advocacy.
+  if (empty(variable_get('social_actions_twitter_callback_url')) ||
+      empty(variable_get('social_action_twitter_consumer_key')) ||
+      empty(variable_get('social_action_twitter_consumer_secret'))) {
+    $form['field_sba_social_require_auth'][LANGUAGE_NONE]['#type'] = 'value';
+    $form['field_sba_social_require_auth'][LANGUAGE_NONE]['#default_value'][0] = 0;
+  }
+}
+
+/**
+ * Build redirect for multi-step form.
+ *
+ * @param $form
+ * @param $form_state
+ */
+function sba_social_action_multiflow_submit($form, &$form_state) {
+  $node = $form['#node'];
+  $sid = $form_state['values']['details']['sid'];
+  $_SESSION['social_action_sid'] = array('sid' => $sid, 'nid' => $node->nid);
+  if(!empty($_SESSION['deliverable_social_messages'])) {
+    $_SESSION['social_action_sid']['completed'] =  FALSE;
+    $form_state['redirect'] = array(
+      'node/' . $_SESSION['social_action_sid']['nid'] . '/social-message-preview',
+      array('query' => array('sid' => $_SESSION['social_action_sid']['sid']))
+    );
+  }
+  else {
+    $_SESSION['social_action_sid']['completed'] =  TRUE;
+    if (!empty($form['#node']->custom_fail_message) && $node->webform['redirect_url'] != '<confirmation>' && !empty($form_state['values']['messages'])) {
+      drupal_get_messages('status');
+      drupal_set_message(check_markup($form['#node']->custom_fail_message, 'full_html', '', TRUE));
+    }
+  }
+}
+
+/**
+ * Implements hook_element_info_alter().
+ */
+function sba_social_action_element_info_alter(&$type) {
+  $type['text_format']['#process'][] = 'sba_social_action_element_process_text_format';
+}
+
+/**
+ * Process function for text_format element.
+ *
+ * @see sba_social_action_element_info_alter().
+ * @see https://drupal.org/node/2104275
+ */
+function sba_social_action_element_process_text_format($element) {
+  if (isset($element['#bundle']) && $element['#bundle'] == 'sba_social_action') {
+    $prefix = isset($element['format']['#prefix']) ? $element['format']['#prefix'] : '';
+    $element['format']['#prefix'] = $element['#description'] . $prefix;
+    unset($element['#description']);
+    $element['format']['#collapsible'] = TRUE;
+    $element['format']['#collapsed'] = TRUE;
+    //$element['format']['#suffix'] = '<div class="text-format-spacer">&nbsp;</div>';
+    $element['format']['#title'] = t('Text format');
+  }
+  return $element;
+}
+
+/**
+ * Redirect to twitter authentication after a webform submission.
+ */
+function sba_social_action_twitter_redirect() {
+  // Don't do anything else if the credentials haven't been set up yet.
+  $key = variable_get('social_action_twitter_consumer_key', '');
+  $secret = variable_get('social_action_twitter_consumer_secret', '');
+  if (empty($key) || empty($secret)) {
+    return;
+  }
+
+  module_load_include('php', 'oauth_common', 'lib/OAuth');
+  module_load_include('php', 'sba_social_action', 'includes/socialTwitter.lib');
+  module_load_include('inc', 'sba_social_action', 'includes/sba_social_action.oauth_cache');
+
+  try {
+    $twitter = new socialTwitter($key, $secret);
+  } catch (socialTwitterException $e) {
+    drupal_set_message(t('An error occurred when redirecting to Twitter. Check the system log for details.'), 'error', TRUE);
+  }
+
+  if(!empty($twitter)) {
+    $oauth_callback = variable_get('social_actions_twitter_callback_url', 'social-action/oauth');
+    $callback_url = url($oauth_callback, array('absolute' => TRUE));
+    $params = array('oauth_callback' => $callback_url);
+
+    $token = $twitter->get_request_token($params);
+    if (!empty($token['oauth_token'])) {
+      $encrypted_token = $token;
+      $encrypted_token['oauth_token'] = encrypt($encrypted_token['oauth_token']);
+      $encrypted_token['oauth_token_secret'] = encrypt($encrypted_token['oauth_token_secret']);
+      sba_social_action_cache_set('twitter_oauth_token', $encrypted_token);
+      drupal_goto($twitter->get_authenticate_url($token));
+    }
+    else {
+      drupal_goto('sba/twitter/close-window/false');
+    }
+  }
+  else {
+    drupal_goto('sba/twitter/close-window/false');
+  }
+}
+
+/**
+ * Loads a page which closes the twitter oauth popup window.
+ * @return string
+ */
+function sba_social_action_twitter_close_window() {
+  if(arg(3) == 'false') {
+    drupal_add_js('window.truepath = false; window.close()', 'inline');
+  }
+  else {
+    drupal_add_js('window.truepath = true; window.close()', 'inline');
+  }
+  return '&nbsp;';
+}
+
+/**
+ * Menu callback to initiate oauth process. Overrides twitter_oauth_callback().
+ */
+function sba_social_action_twitter_callback() {
+  if (isset($_GET['denied']) || empty($_GET['oauth_token'])) {
+    drupal_set_message(t('The connection to Twitter failed. Please try again.'), 'error');
+    drupal_goto('<front>');
+  }
+  $form_state['values']['oauth_token'] = $_GET['oauth_token'];
+  drupal_form_submit('sba_social_action_oauth_callback_form', $form_state);
+}
+
+/**
+ * Overrides twitter_oauth_callback_form().
+ *
+ * @param $form
+ * @param $form_state
+ * @return mixed
+ */
+function sba_social_action_oauth_callback_form($form, &$form_state) {
+  $form['#post']['oauth_token'] = $_GET['oauth_token'];
+  $form['oauth_token'] = array(
+    '#type' => 'hidden',
+    '#default_value' => $_GET['oauth_token'],
+  );
+  $form['#submit'][] = 'sba_social_action_twitter_oauth_callback_submit';
+  $form['#validate'][] = 'sba_social_action_twitter_oauth_callback_form_validate';
+  return $form;
+}
+
+/**
+ * Validate results from Twitter OAuth return request.
+ *
+ *  Overrides twitter_oauth_callback_form_validate().
+ */
+function sba_social_action_twitter_oauth_callback_form_validate($form, &$form_state) {
+
+  $key = variable_get('social_action_twitter_consumer_key', '');
+  $secret = variable_get('social_action_twitter_consumer_secret', '');
+  module_load_include('inc', 'sba_social_action', 'includes/sba_social_action.oauth_cache');
+
+  $twitter_oauth_token_cache = sba_social_action_cache_get('twitter_oauth_token');
+
+  if (!empty($twitter_oauth_token_cache)) {
+    $twitter_oauth_token_cache['oauth_token'] = decrypt($twitter_oauth_token_cache['oauth_token']);
+    $twitter_oauth_token_cache['oauth_token_secret'] = decrypt($twitter_oauth_token_cache['oauth_token_secret']);
+    $form_state['twitter_oauth'] = $twitter_oauth_token_cache;
+    sba_social_action_cache_set('twitter_oauth_token', NULL);
+  }
+  else {
+    form_set_error('oauth_token', 'A problem occurred with your request. A valid authorization token was not found.');
+  }
+
+  // We have the site authorization token, now get the user token.
+  if (isset($form_state['twitter_oauth'])) {
+
+    $token = $form_state['twitter_oauth'];
+    if (!is_array($token)) {
+      form_set_error('oauth_token', t('Twitter authorization failed. Token is not an array.'));
+    }
+    if (!$key || !$secret) {
+      form_set_error('oauth_token', t('Twitter authorization failed. Key or Secret is missing.'));
+    }
+    if ($token['oauth_token'] != $form_state['values']['oauth_token']) {
+      form_set_error('oauth_token', t('Twitter authorization failed. Session oauth token does not match the token stored in form_state.'));
+    }
+  }
+
+  module_load_include('php', 'oauth_common', 'lib/OAuth');
+  module_load_include('php', 'sba_social_action', 'includes/socialTwitter.lib');
+
+  if (!empty($token)) {
+    try {
+      $twitter = new socialTwitter($key, $secret, $token['oauth_token'], $token['oauth_token_secret']);
+    } catch (socialTwitterException $e) {
+      drupal_set_message(t('An error occurred when connecting to Twitter. Check the system log for details.'), 'error', TRUE);
+    }
+
+    if(!empty($twitter)) {
+      //Collect oauth_verifier from url
+      if ($response = $twitter->get_access_token($_GET['oauth_verifier'])) {
+        $form_state['twitter_oauth']['response'] = $response;
+      }
+      else {
+        form_set_error('oauth_token', t('Twitter authorization failed.  We could not obtain a valid access token.'));
+      }
+    }
+  }
+  else {
+    form_set_error('oauth_token', t('Twitter authorization failed. No access token found.'));
+  }
+}
+
+/**
+ * Form submit for the OAuth callback.
+ *
+ * Overrides twitter_oauth_callback_submit() because that function assumes
+ * Drupal user integration exists.
+ *
+ */
+function sba_social_action_twitter_oauth_callback_submit(&$form, &$form_state) {
+
+  // Programmed = FALSE because this form is submitted in code and otherwise
+  // the redirection would not work.
+  $form_state['programmed'] = FALSE;
+  $form_state['redirect'] = array('sba/twitter/close-window');
+
+  $response = $form_state['twitter_oauth']['response'];
+  if (!empty($response['oauth_token'])) {
+    $response['oauth_token'] = encrypt($response['oauth_token']);
+    $response['oauth_token_secret'] = encrypt($response['oauth_token_secret']);
+  }
+  module_load_include('inc', 'sba_social_action', 'includes/sba_social_action.oauth_cache');
+  sba_social_action_cache_set('sba_twitter', array('values' => $response));
+}
+
+/**
+ * Clear twitter session data.
+ *
+ * Menu callback.
+ */
+function sba_social_action_clear_twitter_session() {
+  module_load_include('inc', 'sba_social_action', 'includes/sba_social_action.oauth_cache');
+  $twitter_user_cache = sba_social_action_cache_get('sba_twitter');
+  if (!empty($twitter_user_cache)) {
+    sba_social_action_cache_set('sba_twitter', NULL);
+  }
+  $nid = isset($_GET['nid']) ? $_GET['nid'] : '' ;
+  drupal_goto('node/' . $nid);
+}
+
+/**
+ * Theme a twitter timeline widget.
+ *
+ * @param $vars
+ * @return string
+ */
+function theme_sba_social_action_twitter_timeline(&$vars) {
+  $name = $vars['sba_twitter']['values']['screen_name'];
+  $node = $vars['node'];
+  drupal_add_css(drupal_get_path('module', 'sba_social_action') . '/css/social-message-confirmation.css');
+//  drupal_add_js("!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0],p=/^http:/.test(d.location)?'http':'https';if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src=p+'://platform.twitter.com/widgets.js';fjs.parentNode.insertBefore(js,fjs);}}(document, 'script', 'twitter-wjs')", 'inline');
+//  drupal_add_js('!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0],p=/^http:/.test(d.location)?\'http\':\'https\';if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src=p+"://platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);}}(document,"script","twitter-wjs");', 'inline');
+
+  // header
+  $output = '<div class="twitter-widget-header">';
+  $output .= '<div class="twitter-widget-title">Your tweets</div>';
+  $output .= '<div class="twitter-widget-top"><span class="twitter-widget-share-text">Share the action you just took: </span>';
+  $output .= '<span class="twitter-widget-share-button"> <a href="https://twitter.com/share" class="twitter-share-button"';
+
+  $output .=  ' data-url="' . $GLOBALS['base_url'] . '/node/' . $node->nid . '"';
+  $output .=  ' data-text="' . check_plain($node->title) . '"';
+  $output .= ' data-size="large" data-count="none" data-dnt="true">Tweet</a></span></div>';
+  $output .= "<script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0],p=/^http:/.test(d.location)?'http':'https';if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src=p+'://platform.twitter.com/widgets.js';fjs.parentNode.insertBefore(js,fjs);}}(document, 'script', 'twitter-wjs');</script>";
+  $output .='</div>';
+
+  $output .= '<a class="twitter-timeline"  href="https://twitter.com/';
+  $output .= $name;
+  $output .= '" data-chrome="nofooter noheader" data-widget-id="661981842917171200" data-screen-name="' . $name . '">';
+  $output .= 'Tweets by @' . $name . '</a><br /><br />';
+  $output .= '<script>!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0],p=/^http:/.test(d.location)?\'http\':\'https\';if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src=p+"://platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);}}(document,"script","twitter-wjs");</script>';
+  return $output;
+
+}
+
+/**
+ * Theme the token output for the twitter signout token.
+ */
+function theme_sba_social_action_twitter_signout_link(&$vars) {
+  $destination = $vars['destination'];
+  if (is_array($destination)) {
+    $destination = call_user_func_array('url', $destination);
+  }
+  $link = l('sign out of our Twitter app.', 'clear/session', array(
+      'attributes' => array(
+        'class' => array(
+          'twitter-sign-out'
+        )
+      ),
+      'query' => array('destination' => $destination)
+    )
+  );
+
+  return '<div><p>' . t("If you're done tweeting, please !signout", array('!signout' => $link)) . '</p></div>';
+}
+
+
+/**
+ * Implements hook_token_info().
+ */
+function sba_social_action_token_info() {
+  $types['social_action'] = array(
+    'name' => t("Social Actions"),
+    'description' => t("Tokens for Social Actions."),
+  );
+
+//  $tokens['twitter_timeline'] = array(
+//    'name' => t("Twitter timeline widget"),
+//    'description' => '',
+//  );
+
+  $tokens['twitter_signout'] = array(
+    'name' => t("Twitter signout link"),
+    'description' => '',
+  );
+
+  return array(
+    'types' => $types,
+    'tokens' => array(
+      'social_action' => $tokens,
+    ),
+  );
+}
+
+
+/**
+ * Implements hook_tokens().
+ */
+function sba_social_action_tokens($type, $tokens, $data = array(), $options = array()) {
+  $replacements = array();
+
+  if ($type == 'social_action') {
+
+    if (isset($data['node'])) {
+      $node = $data['node'];
+    }
+    elseif(arg(0) == 'node' && is_numeric(arg(1))) {
+      $node = node_load(arg(1));
+    }
+    $redirect = request_uri();
+    if (!empty($node) && isset($node->webform['redirect_url']) && $node->webform['redirect_url'] != '<confirmation>') {
+      $redirect = $node->webform['redirect_url'];
+    }
+
+    module_load_include('inc', 'sba_social_action', 'includes/sba_social_action.oauth_cache');
+    $twitter_user_cache = sba_social_action_cache_get('sba_twitter');
+    foreach ($tokens as $name => $original) {
+
+      switch ($name) {
+        case 'twitter_timeline':
+          $widget = '';
+          if (!empty($twitter_user_cache) && !empty($node)) {
+            $widget = theme('sba_social_action_twitter_timeline', array(
+              'sba_twitter' => $twitter_user_cache,
+              'node' => $node
+            ));;
+          }
+          $replacements[$original] = $widget;
+          break;
+
+        case 'twitter_signout':
+          $link = '';
+          if (!empty($twitter_user_cache)) {
+            $link = theme('sba_social_action_twitter_signout_link', array('destination' => $redirect));
+          }
+          $replacements[$original] = $link;
+          break;
+      }
+    }
+  }
+
+  return $replacements;
+
+}
+
+/**
+ * Add social action css to status messages.
+ *
+ * @param $vars
+ */
+function sba_social_action_preprocess_status_messages($vars) {
+  drupal_add_css(drupal_get_path('module', 'sba_social_action') . '/css/social-message-confirmation.css');
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Global/per action confirmation toggle.
+ */
+function sba_social_action_form_webform_configure_form_alter(&$form, &$form_state) {
+  if ($form['#node']->type == 'sba_social_action') {
+    form_load_include($form_state, 'inc', 'springboard_advocacy', 'includes/springboard_advocacy.confirmations');
+    springboard_advocacy_confirmation($form, $form_state);
+  }
+}
+
+/**
+ * Implements hook_preprocess_hook().
+ *
+ * Get the fail message to show on webform confirmation page
+ * if there are no valid message recipients.
+ */
+function sba_social_action_preprocess_webform_confirmation(&$vars) {
+  if ($vars['node']->type == 'sba_social_action' && (empty($_SESSION['deliverable_social_messages']))) {
+    if (isset($vars['node']->custom_fail_message) && !empty($vars['node']->messages)) {
+      $vars['confirmation_message'] = check_markup($vars['node']->custom_fail_message, 'full_html');
+    }
+  }
+}
+
+
+/**
+ * Implements hook_page_wrappers_page_node_alter()
+ *
+ * Put the page wrapper around the multi-step form.
+ */
+function sba_social_action_page_wrappers_page_node_alter(&$node) {
+  if (arg(2) == 'social-message-preview' && is_numeric(arg(1))) {
+    $is_wrapped = node_load(arg(1));
+    if (isset($is_wrapped->type) && $is_wrapped->type == 'sba_social_action') {
+      $node = $is_wrapped;
+    }
+  }
+}
+
+/**
+ * Implements hook_cron().
+ *
+ * Expire old twitter sessions.
+ */
+function sba_social_action_cron() {
+  module_load_include('inc', 'sba_social_action', 'includes/sba_social_action.oauth_cache');
+  sba_social_action_cron_expire_sessions();
+}
+
+/**
+ * Saves twitter user profile data from a user request.
+ * @param $data
+ * @param $uid
+ * @throws \Exception
+ */
+function sba_social_action_save_twitter_profile($data, $uid) {
+
+  module_load_include('php', 'oauth_common', 'lib/OAuth');
+  module_load_include('php', 'sba_social_action', 'includes/socialTwitter.lib');
+  $oauth_token = decrypt($data['values']['oauth_token']);
+  $oauth_token_secret = decrypt($data['values']['oauth_token_secret']);
+
+  try {
+    $twitter = new socialTwitter(
+      variable_get('social_action_twitter_consumer_key', ''),
+      variable_get('social_action_twitter_consumer_secret', ''),
+      $oauth_token,
+      $oauth_token_secret
+    );
+  }
+  catch (socialTwitterException $e) {
+  }
+
+  if (!empty($twitter)) {
+    $response = $twitter->users_show($data['values']['screen_name']);
+    if (!empty($response)) {
+      $save_data = array(
+        'sbp_twitter_screen_name' => $response['screen_name'],
+        'sbp_twitter_id_str' => $response['id_str'],
+        'sbp_twitter_following_count' => $response['friends_count'],
+        'sbp_twitter_followers_count' => $response['followers_count'],
+        'sbp_twitter_status_count' => $response['statuses_count'],
+        'sbp_twitter_created_at' => strtotime($response['created_at']),
+      );
+      $account = user_load($uid); // Loading account
+      $edit = array();
+      foreach ($save_data as $field_name => $value) {
+        $edit[$field_name] = array(
+          LANGUAGE_NONE => array(
+            0 => array(
+              'value' => $value,
+            ),
+          ),
+        );
+      }
+      user_save($account, $edit);
+    }
+  }
+}
+
+/*
+ * Implements hook_entity_info().
+ */
+function sba_social_action_entity_info() {
+  return array(
+    'sba_twitter_status' => array(
+      'label' => t('Twitter Post'),
+      'module' => 'sba_social_action',
+      'entity class' => 'SbaTwitterStatus',
+      'controller class' => 'EntityAPIController',
+      'base table' => 'sba_social_action_tweets',
+      'entity keys' => array(
+        'id' => 'status_id',
+      ),
+      'label callback' => 'entity_class_label',
+      'uri callback' => 'entity_class_uri',
+    ),
+  );
+}
+
+class SbaTwitterStatus extends Entity {
+
+  public $id;
+
+  /**
+   * Constructor for TwitterStatus
+   */
+  public function __construct($values = array()) {
+    parent::__construct($values, 'sba_twitter_status');
+  }
+}

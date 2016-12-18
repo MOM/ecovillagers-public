@@ -1,0 +1,324 @@
+<?php
+
+/**
+ * @file
+ * Simpletests for salesforce_sync
+ */
+
+module_load_include('test', 'salesforce', 'tests/salesforce');
+
+/**
+ * Tests basic set up for syncing data between Salesforce and Drupal.
+ */
+class SalesforceSyncTestCase extends SalesforceTestCase {
+
+  /**
+   * List of all operations.
+   *
+   * @var array
+   */
+  public $operations = array(
+    'CREATE',
+    'UPSERT',
+    'UPDATE',
+    'DELETE',
+  );
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Salesforce Sync',
+      'description' => 'Ensure that the salesforce_sync module functions properly.',
+      'group' => 'Salesforce Sync',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'entity',
+      'libraries',
+      'salesforce_soap',
+      'salesforce_sync',
+    ));
+    $permissions = array_merge($permissions, array(
+      'access content',
+      'administer site configuration',
+      'administer content types',
+      'administer nodes',
+      'administer users',
+      'administer salesforce sync',
+    ));
+    parent::setUp($modules, $permissions);
+
+    // Provide a list of sync rules.
+    $this->sync_rules = array(
+      SALESFORCE_SYNC_RULE_ALWAYS,
+      SALESFORCE_SYNC_RULE_BLANK,
+      SALESFORCE_SYNC_RULE_APPEND,
+      SALESFORCE_SYNC_RULE_NEVER,
+    );
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Creates a random bunch of items.
+   *
+   * @param int $num
+   *   Number of items to create
+   * @param array $ops
+   *   Operations to restrict to.  If empty, all operations will be used.
+   * @param array $exempt_objects
+   *   Object types to not include.  If empty, all object types will be used.
+   */
+  public function createItems($num = 5, $ops = array(), $exempt_objects = array()) {
+    // Define objects.
+    $objects = array(
+      'Account' => array(
+        'type' => 'Account',
+        'records' => array(),
+        'fields' => array(
+          'Name' => FALSE,
+          'Type' => FALSE,
+          'Industry' => FALSE,
+        ),
+      ),
+      'Contact' => array(
+        'type' => 'Contact',
+        'records' => array(),
+        'fields' => array(
+          'FirstName' => FALSE,
+          'LastName' => FALSE,
+          'Email' => TRUE,
+        ),
+      ),
+      'Opportunity' => array(
+        'type' => 'Opportunity',
+        'records' => array(
+          'Donation',
+          'Grant',
+          'Membership',
+        ),
+        'fields' => array(
+          'Name' => TRUE,
+          'Amount' => FALSE,
+          'AccountId' => FALSE,
+          'StageName' => FALSE,
+          'CloseDate' => FALSE,
+        ),
+      ),
+    );
+    foreach ($exempt_objects as $exempt_object) {
+      unset($objects[$exempt_object]);
+    }
+
+    // Define types of operations.
+    if (empty($ops)) {
+      $ops = array(
+        'UPSERT',
+        'CREATE',
+        'UPDATE',
+        'DELETE',
+      );
+    }
+
+    // If UPSERT is the only operation, then remove all objects that do not have
+    // a dedupe field.
+    if (count($ops) == 1 && in_array('UPSERT', $ops) && isset($objects['Account'])) {
+      foreach ($objects as $object => $info) {
+        $remove = TRUE;
+        foreach ($info['fields'] as $dedupe_status) {
+          $remove = $dedupe_status ? FALSE : $remove;
+        }
+        if ($remove) {
+          unset($objects[$object]);
+        }
+      }
+    }
+
+    $i = 0;
+    $items = array();
+    while ($i < $num) {
+      $i++;
+
+      // Create base item.
+      $ops_rand = array_rand($ops);
+      $item = new SalesforceSyncItem();
+      $item->drupal_id = rand(1, $num * 100);
+      $item->module = $this->randomName();
+      $item->delta = rand(0, 1) ? $this->randomName() : rand(1, $num * 100);
+      $item->setOperation($ops[$ops_rand]);
+
+      // Create the Salesforce object.
+      $object_rand = array_rand($objects);
+      $item->setObjectType($objects[$object_rand]['type']);
+      $record_rand = empty($objects[$object_rand]['records']) ? NULL : array_rand($objects[$object_rand]['records']);
+      $record_type = is_null($record_rand) ? NULL : $objects[$object_rand]['records'][$record_rand];
+      $item->setRecordType($record_type);
+      foreach ($objects[$object_rand]['fields'] as $field => $can_dedupe) {
+        if ($field == 'Email') {
+          $field_value = strtolower($this->randomName()) . '@' . strtolower($this->randomName()) . '.com';
+        }
+        elseif ($field == 'Amount') {
+          $field_value = rand(1, 10000);
+        }
+        elseif ($field == 'CloseDate') {
+          $field_value = date('c', REQUEST_TIME);
+        }
+        else {
+          $field_value = $this->randomName();
+        }
+        $item->addField($field, $field_value);
+
+        // If this field can be used for dedupe, give it a 50% chance of it
+        // being set.  Unless, of course, the operation is UPSERT, then it needs
+        // to be set.
+        if ($can_dedupe && (rand(0, 1) || $item->operation == 'UPSERT')) {
+          $item->setDedupeField($field);
+        }
+      }
+
+      // If the operation is UPSERT, and there is no dedupe field, change the
+      // operation to CREATE.
+      if ($item->operation == 'UPSERT' && empty($item->dedupe_field)) {
+        $item->setOperation('CREATE');
+      }
+
+      // If the operation is UPDATE or DELETE add in a fake Id field.
+      if ($item->operation == 'UPDATE' || $item->operation == 'DELETE') {
+        $item->setId($this->randomName());
+      }
+
+      // If the operation is UPDATE or UPSERT add in fake sync rules for a
+      // random quantity of the number of fields.
+      if ($item->operation == 'UPDATE' || $item->operation == 'UPSERT') {
+        $item->sync_rules = array();
+        $fields = array_keys($item->sobject->fields);
+        shuffle($fields);
+        $field_count = count($item->sobject->fields);
+        $rand_count = rand(0, $field_count);
+        while ($rand_count > 0) {
+          $field = array_shift($fields);
+          $sync_rule_rand = array_rand($this->sync_rules);
+          $sync_rule = $this->sync_rules[$sync_rule_rand];
+          // Append can cause problems for certain fields, so fall back to
+          // always.
+          $special_fields = array('Email', 'Amount', 'CloseDate');
+          if ($sync_rule == SALESFORCE_SYNC_RULE_APPEND && in_array($field, $special_fields)) {
+            $sync_rule = SALESFORCE_SYNC_RULE_ALWAYS;
+          }
+          $item->sync_rules[$field] = $this->sync_rules[$sync_rule_rand];
+          $rand_count--;
+        }
+      }
+
+      // Finalize.
+      $items[] = $item;
+    }
+    return $items;
+  }
+
+  /**
+   * Helper to create batches from a list of items.
+   */
+  public function createBatches($items, $batch_prepared = FALSE) {
+    $batches = array();
+    foreach ($items as $item) {
+      if ($item->operation == 'UPSERT') {
+        $key = $item->object_type . '-' . $item->operation . '-' . $item->dedupe_field;
+      }
+      else {
+        $key = $item->object_type . '-' . $item->operation;
+      }
+      $batches[$key]['object_type'] = $item->object_type;
+      $batches[$key]['operation'] = $item->operation;
+      $batches[$key]['items'][] = $item;
+      $batches[$key]['sobjects'][] = &$item->sobject;
+      $batches[$key]['batch_prepared'] = $batch_prepared;
+      if (isset($item->sobject->Id)) {
+        $batches[$key]['ids'][] = &$item->sobject->Id;
+      }
+
+      // Add this item's sync rules.
+      if (($item->operation == 'UPSERT' || $item->operation == 'UPDATE') && isset($item->sync_rules) && !empty($item->sync_rules)) {
+        if (!isset($batches[$key]['sync_rules'])) {
+          $batches[$key]['sync_rules']['apply'] = FALSE;
+        }
+        if ($item->operation == 'UPSERT') {
+          $batches[$key]['dedupe_field'] = $item->dedupe_field;
+          $dedupe_value = $item->sobject->fields[$item->dedupe_field];
+          $batches[$key]['sync_rules']['dedupe_values'][$dedupe_value] = $dedupe_value;
+        }
+        elseif ($item->operation == 'UPDATE') {
+          $id = $item->sobject->Id;
+          $batches[$key]['sync_rules']['ids'][$id] = $id;
+        }
+        foreach ($item->sync_rules as $field => $sync_rule) {
+          if ($sync_rule != 'SALESFORCE_SYNC_RULE_ALWAYS') {
+            $batches[$key]['sync_rules']['apply'] = TRUE;
+          }
+          $batches[$key]['sync_rules']['fields'][$field] = $field;
+        }
+      }
+    }
+    return $batches;
+  }
+
+  /**
+   * Helper to remove the sent set of items from Salesforce.
+   *
+   * Useful if you do not have direct access to the SalesforceSync object.
+   *
+   * @param array $queue_items
+   *   Array of items that would be used to be send to the queue.  It is the
+   *   output of createQueueItems().
+   */
+  public function deleteItemsFromSalesforce($queue_items) {
+    $conditions = array();
+    foreach ($queue_items as $queue_item) {
+      $object_type = $queue_item['object_type'];
+      $field = ($object_type == 'Contact') ? 'LastName' : 'Name';
+      $conditions[$object_type]['field'] = $field;
+      $conditions[$object_type]['op'] = 'IN';
+      $field_value = $queue_item['sobject']->fields[$field];
+      $conditions[$object_type]['value'][$field_value] = $field_value;
+    }
+    $batch = array(
+      'operation' => 'DELETE',
+      'items' => array(),
+      'ids' => array(),
+    );
+    $sync = new SalesforceSync();
+    foreach ($conditions as $object_type => $condition) {
+      $records = $sync->fetchRecords($object_type, array('Id'), array($condition));
+      foreach ($records as $record) {
+        $record->fields = array();
+        $item = new stdClass();
+        $item->object_type = $record->type;
+        $item->operation = 'DELETE';
+        $item->sobject = $record;
+        $batch['items'][] = $item;
+        $batch['ids'][] = $record->Id;
+      }
+    }
+    $results = $sync->sendBatch($batch);
+    if (is_array($results)) {
+      foreach ($results as $result) {
+        $this->assertTrue($result->success, 'Deleting test item from Salesforce successful.');
+      }
+    }
+    else {
+      $this->fail('Could not send batch to delete test items from Salesforce.');
+    }
+  }
+}

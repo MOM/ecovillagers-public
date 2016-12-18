@@ -1,0 +1,1055 @@
+<?php
+/**
+ * @file
+ * Email templates module for formatting outbound emails with templates.
+ */
+
+// @see: http://drupal.org/node/921398 #3
+module_load_include('inc', 'webform', 'includes/webform.components');
+require_once 'email_wrappers.mail.inc';
+
+/**
+ * Implements hook_menu().
+ */
+function email_wrappers_menu() {
+  // TODO: replace this menu item with a View.
+  /* $items['admin/content/email-wrappers'] = array(
+    'title' => 'Confirmation Email Templates',
+    'description' => '',
+    'page callback' => 'email_wrappers_template_list',
+    'access arguments' => array('administer content'),
+    'type' => MENU_NORMAL_ITEM,
+  ); */
+  $items['admin/config/system/email-wrappers'] = array(
+    'title' => 'Confirmation settings',
+    'description' => 'Administer email confirmation settings.',
+    'access arguments' => array('administer site configuration'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('email_wrappers_admin'),
+    'file' => 'email_wrappers.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  // TODO: implement preview modal.
+  $items['email_wrappers/preview_modal/%ctools_js/preview'] = array(
+    'title' => 'AJAX modal dialog',
+    'page callback' => 'email_wrappers_preview_modal',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_menu_alter().
+ */
+function email_wrappers_menu_alter(&$items) {
+  if (module_exists('webform')) {
+    // Webform implements these paths as MENU_CALLBACK. This
+    // causes local navigation to disappear on these pages.
+    $items['node/%webform_menu/webform/emails/%webform_menu_email']['type'] = MENU_LOCAL_TASK;
+    $items['node/%webform_menu/webform/emails/%webform_menu_email/delete']['type'] = MENU_LOCAL_TASK;
+  }
+}
+
+
+/**
+ * Modal display window for email preview.
+ *
+ * At some point this should be converted to one or more theme
+ * functions/templates.
+ */
+function email_wrappers_preview_modal() {
+  ctools_include('ajax');
+  ctools_include('modal');
+  module_load_include('inc', 'ctools', 'includes/modal');
+  $title = 'Template Preview';
+
+  $template = $_POST['email_wrappers_email_template'];
+
+  $output = array();
+  $output['subject'] = $_POST['subject_custom'];
+  $output['email'] = array(
+    'from' => '&lt;' . $_POST['from_name_custom'] . '&gt;' . $_POST['from_address_custom'],
+    'bcc' => $_POST['email_wrappers_bcc'],
+  );
+  $output['HTML'] = _email_wrappers_preview('html', $_POST['email_wrappers_html_message'], $template);
+  $output['text'] = _email_wrappers_preview('text', $_POST['email_wrappers_text_message'], $template);
+  $keys = array_keys($output);
+  $preview = '';
+  foreach ($keys as $key) {
+    if (is_array($output[$key])) {
+      $preview .= '<fieldset id="field-' . $key . '"><label for="field-' . $key . '" style="font-weight:bold">' . ucfirst($key) . '</label>';
+      $subkeys = array_keys($output[$key]);
+      foreach ($subkeys as $subkey) {
+        $preview .= '<p>' . ucfirst($subkey) . ':&nbsp; ' . $output[$key][$subkey] . '</p>';
+      }
+      $preview .= '</fieldset>';
+    }
+    else {
+      $preview .= '<fieldset id="field-' . $key . '"><label for="field-' . $key . '" style="font-weight:bold">' . ucfirst($key) . '</label>';
+      $preview .= '<div>' . $output[$key] . '</div>';
+      $preview .= '</fieldset>';
+    }
+  }
+  ctools_modal_render($title, $preview);
+}
+
+/**
+ *  Implements hook_form_FORMID_alter
+ *
+ * $message['send'] = FALSE in email_wrappers_mail_alter causes
+ * improper error message to appear to site admins on resend.
+ * We need to unset webform's resend submit function in order to check
+ * whether an email has a wrapper.
+ * If it does, suppress messages here, and recompose them in the mail_alter function
+ */
+function email_wrappers_form_webform_submission_resend_alter(&$form, &$form_state) {
+    $form['#submission']->resend = TRUE;
+    foreach ($form['#submit'] as $index => $submit) {
+      if($submit == 'webform_submission_resend_submit') {
+        $form['#submit'][$index] = 'email_wrappers_form_webform_submission_resend_submit';
+      }
+  }
+}
+
+/**
+ * Overrides webform_submission_resend_submit()
+ */
+function email_wrappers_form_webform_submission_resend_submit($form, &$form_state) {
+  $node = $form['#node'];
+  $submission = $form['#submission'];
+  $emails = array();
+  foreach ($form_state['values']['resend'] as $eid => $checked) {
+    if ($checked) {
+      $emails[] = $form['#node']->webform['emails'][$eid];
+    }
+  }
+  // we need to send individually in order to test for wrappers.
+  // webform natively submits the entire array all at once.
+  foreach($emails as $index => $mail) {
+    $sent_count = webform_submission_send_mail($node, $submission, array($mail));
+    $wrapped = db_query("SELECT nid FROM {email_wrappers_webform} WHERE nid = :nid AND eid = :eid", array(':nid' => $mail['nid'], ':eid' => $mail['eid']))->fetchfield();
+    if(!$wrapped) {
+      $address = webform_format_email_address($mail['email'], NULL, $node, $submission, TRUE, FALSE, 'short');
+      if ($sent_count) {
+        drupal_set_message(t('Successfully re-sent submission #@sid to @add.', array('@sid' => $submission->sid, '@add' => $address[0])));
+      }
+      else {
+        drupal_set_message(t('Server error. Submission #@sid was not resent to @add.', array('@sid' => $submission->sid, '@add' => $address[0])));
+      }
+    }
+  }
+}
+
+function email_wrappers_form_email_wrapper_node_form_alter(&$form, &$form_state, $form_id) {
+  $token_set = array('node');
+  $form['tokenset'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Available tokens'),
+    '#description' => t('Tokens may be used in the "Subject," "HTML Message" and "Text Message" Fields.'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+    '#weight' => 15,
+  );
+
+  // Then add any other token set as needed.
+  $form['tokenset']['tokens'] = array(
+    '#type' => 'item',
+    '#title' => t('Drupal tokens'),
+    '#description' => theme('token_tree', array('token_types' => $token_set, 'recursion_limit' => 2, 'click_insert' => FALSE)),
+  );
+  $form['tokenset']['webform_tokens'] = array(
+    '#type' => 'item',
+    '#title' => t('Webform tokens'),
+    '#description' => theme('webform_token_help', array()),
+  );
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * For donation forms, set default "to" email address to donation form email
+ * address component on webform email add form.
+ */
+function email_wrappers_form_webform_emails_form_alter(&$form, $form_state) {
+  if (module_exists('fundraiser') && fundraiser_is_donation_type($form['#node']->type)) {
+    $cid = _email_wrappers_get_cid($form['#node']->webform['components'], 'mail');
+    $form['add']['email_option']['#default_value'] = 'component';
+    if ($cid) {
+      $form['add']['email_component']['#default_value'] = $cid;
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Adds mail template UI to Fundraiser donation form and webform confirmation
+ * settings form.
+ */
+function email_wrappers_form_webform_email_edit_form_alter(&$form, &$form_state, $form_id) {
+  // Add a few tweaks to the webform email list form.
+  if ($form_id === 'webform_email_edit_form') {
+    $path = drupal_get_path('module', 'email_wrappers');
+    // Attached the script for showing a warning.
+    $form['#attached']['js'][] = $path . '/script/email_wrappers.template_select.js';
+
+    // Include the ctools functions for the modal preview.
+    ctools_form_include($form_state, 'ajax');
+    ctools_form_include($form_state, 'modal');
+    // We have to use an after build to run ctools_modal_add_js() when form is cached.
+    $form['#after_build'][] = '_email_wrappers_form_webform_email_edit_after_build';
+
+    global $base_path;
+
+    $defaults = array();
+    // Check the db for settings.
+    if (isset($form['eid']['#value'])) {
+      $defaults = email_wrappers_load_settings($form['node']['#value']->nid, $form['eid']['#value']);
+    }
+
+    // Alter email header values based on defaults.
+    if (isset($defaults['subject'])) {
+      _email_wrappers_webform_option_defaults($form, 'subject', $defaults['subject']);
+    }
+    if (isset($defaults['from_mail'])) {
+      _email_wrappers_webform_option_defaults($form, 'from_address', $defaults['from_mail']);
+    }
+    if (isset($defaults['from_name'])) {
+      _email_wrappers_webform_option_defaults($form, 'from_name', $defaults['from_name']);
+    }
+
+    if (!isset($defaults['html_message'])) {
+      $defaults['html_message'] = '';
+    }
+
+    if (!isset($defaults['text_message'])) {
+      $defaults['text_message'] = '';
+    }
+
+    // We're gonna cache these since they may come in handy later.
+    $form['email_wrappers_defaults'] = array(
+      '#type' => 'value',
+      '#value' => $defaults,
+    );
+
+    $form['email_wrappers_email_template'] = array(
+      '#type' => 'select',
+      '#title' => t('Email Template'),
+      '#options' => _email_wrappers_list_templates(),
+      '#description' => t('Select a template to load its settings and provide additional functionality.'),
+      '#weight' => -50,
+      '#default_value' => (isset($defaults['tid']) && $defaults['tid']) ? $defaults['tid'] : 0,
+      '#ajax' => array(
+        'callback' => 'email_wrappers_email_ajax',
+      ),
+    );
+
+    $form['email_wrappers_bcc'] = array(
+      '#type' => 'textfield',
+      '#title' => t('BCC addresses'),
+      '#description' => t('BCC the following email addresses when an email is sent. Addresses must be separated by a comma. Example: test1@example.com,test2@example.com.'),
+      '#weight' => 7,
+      '#default_value' => isset($defaults['bcc_email']) ? $defaults['bcc_email'] : '',
+      '#states' => array(
+        'visible' => array(
+          ':input[name="email_wrappers_email_template"]' => array('!value' => '0'),
+        ),
+      ),
+    );
+
+    // Hide webform's built in templating system when a template is selected.
+    $form['template']['template_option']['#states'] = array(
+      'invisible' => array(
+        ':input[name="email_wrappers_email_template"]' => array('!value' => '0'),
+      ),
+    );
+
+    $form['template']['template']['#states'] = array(
+      'invisible' => array(
+        ':input[name="email_wrappers_email_template"]' => array('!value' => '0'),
+      ),
+    );
+
+    // TODO: include filter settings?
+    $form['template']['email_wrappers_html_message'] = array(
+      '#type' => 'textarea',
+      '#title' => t('HTML message'),
+      '#description' => t('This version of your message will be displayed by users who can view HTML email'),
+      '#default_value' => $defaults['html_message'],
+      '#states' => array(
+        'visible' => array(
+          ':input[name="email_wrappers_email_template"]' => array('!value' => '0'),
+         ),
+        'required' => array(
+          ':input[name="email_wrappers_email_template"]' => array('!value' => '0'),
+        ),
+      ),
+    );
+
+    $form['template']['email_wrappers_text_message'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Text-only message (no HTML allowed)'),
+      '#description' => t('This version of your message will be displayed if a user can only view email in plaintext.'),
+      '#default_value' => $defaults['text_message'],
+      '#states' => array(
+        'visible' => array(
+           ':input[name="email_wrappers_email_template"]' => array('!value' => '0'),
+        ),
+        'required' => array(
+          ':input[name="email_wrappers_email_template"]' => array('!value' => '0'),
+        ),
+      ),
+    );
+
+    $form['template']['tokens']['#weight'] = 9;
+    $form['template']['components']['#weight'] = 10;
+
+    // Ctools modals setup for preview button.
+    $form['template']['preview_url'] = array(
+      '#type' => 'hidden',
+      '#attributes' => array('class' => array('email-wrappers-preview-url')),
+      '#value' => url('email_wrappers/preview_modal/nojs/preview'),
+    );
+
+    $form['template']['preview-container'] = array(
+      '#type' => 'container',
+      '#weight' => 20,
+      '#states' => array(
+        'visible' => array(
+          ':input[name="email_wrappers_email_template"]' => array('!value' => '0'),
+        ),
+      ),
+    );
+    $form['template']['preview-container']['preview'] = array(
+      '#type' => 'button',
+      '#value' => t('Preview'),
+      '#attributes' => array('class' => array('ctools-use-modal'), 'id' => 'email-wrappers-preview'),
+    );
+
+    $form['#validate'][] = 'email_wrappers_email_validate_callback';
+    $form['#submit'][] = 'email_wrappers_email_submit_callback';
+  }
+
+  if ($form_id == 'webform_email_delete_form') {
+    $form['#submit'][] = 'email_wrappers_delete_callback';
+  }
+}
+
+/**
+ * After build function to run ctools_modal_add_js().
+ */
+function _email_wrappers_form_webform_email_edit_after_build($form, $form_state) {
+  ctools_modal_add_js();
+  return $form;
+}
+
+/**
+ * Validate callback for webform email edit form.
+ */
+function email_wrappers_email_validate_callback($form, $form_state) {
+  if (!empty($form_state['values']['email_wrappers_email_template'])) {
+    // Display error if the HTML or text messages are empty.
+    if (empty($form_state['values']['email_wrappers_html_message'])) {
+      form_error($form['template']['email_wrappers_html_message'], t('HTML message field is required.'));
+    }
+
+    if (empty($form_state['values']['email_wrappers_text_message'])) {
+      form_error($form['template']['email_wrappers_text_message'], t('Text message field is required.'));
+    }
+  }
+}
+
+/**
+ * Submit callback for webform email edit form.
+ */
+function email_wrappers_email_submit_callback($form, $form_state) {
+  $values = $form_state['values'];
+
+  // Delete any existing configurations for this email.
+  email_wrappers_delete_settings($values['node']->nid, $values['eid']);
+
+  // Save the new settings.
+  if (is_numeric($values['email_wrappers_email_template']) && $values['email_wrappers_email_template'] > 0) {
+    $settings = array(
+      'nid' => $values['node']->nid,
+      'eid' => $values['eid'],
+      'tid' => $values['email_wrappers_email_template'],
+      'bcc_email' => is_array($values['email_wrappers_bcc']) ? implode(',', $values['email_wrappers_bcc']) : $values['email_wrappers_bcc'],
+      'html_message' => $values['email_wrappers_html_message'],
+      'html_message_format' => '',
+      'text_message' => $values['email_wrappers_text_message'],
+      // If any information has been added to "extra" by other modules,
+      // it is saved at this time.
+      'extra' => !empty($form_state['extra']) ? serialize($form_state['extra']) : serialize(array()),
+    );
+    email_wrappers_save_settings($values['node']->nid, $values['eid'], $settings);
+  }
+}
+
+/**
+ * Submit callback for the Webform email delete form.
+ *
+ * Remove any settings for an email that is being deleted.
+ */
+function email_wrappers_delete_callback($form, $form_state) {
+  $nid = $form_state['values']['email']['nid'];
+  $eid = $form_state['values']['email']['eid'];
+  email_wrappers_delete_settings($nid, $eid);
+}
+
+/**
+ * Delete settings for a given webform email.
+ *
+ * @param int $nid
+ *   Webform node id.
+ *
+ * @param int $eid
+ *   Email id.
+ */
+function email_wrappers_delete_settings($nid, $eid) {
+  db_delete('email_wrappers_webform')
+    ->condition('nid', $nid)
+    ->condition('eid', $eid)
+    ->execute();
+}
+
+/**
+ * Save webform email settings.
+ *
+ * @param int $nid
+ *   Webform node id.
+ *
+ * @param int $eid
+ *   Email id.
+ *
+ * @param array $settings
+ *   Associative array of settings.
+ *   Valid keys:
+ *     tid: template node id
+ *     bcc: comma separated list of BCC email addresses
+ *     html_message: html version of the email message body,
+ *     should not include structural markup defined in the template.
+ *     text_message: text-only version of the email message body.
+ */
+function email_wrappers_save_settings($nid, $eid, array $settings) {
+  drupal_write_record('email_wrappers_webform', $settings);
+}
+
+/**
+ * Fetch an array of email template node ids.
+ *
+ * @return array
+ *   An indexed array of email_wrapper node ids.
+ */
+function email_wrappers_get_nodes() {
+  $result = db_select('node', 'n')
+    ->fields('n', array('nid'))
+    ->condition('type', 'email_wrapper')
+    ->execute();
+
+  return $result->fetchCol();
+}
+
+/**
+ * Implements hook_mail().
+ */
+function email_wrappers_mail($key, &$message, $params) {
+  $token_set = array(
+    'node' => isset($params['node']) ? $params['node'] : NULL,
+  );
+  if (isset($params['donation'])) {
+   $token_set['donation'] = $params['donation'];
+  }
+  if ($key == 'wf_submission') {
+
+    // Fish the original message array out of params.
+    $message = $params['message'];
+    $message['module'] = 'email_wrappers';
+    $message['subject'] = token_replace($params['subject'], $token_set, array('clear' => TRUE));
+    $eid = $params['email']['eid'];
+    $nid = $params['email']['nid'];
+    $settings = $params['settings'];
+
+    $message['params']['boundary'] = '----=_NextPart_' . md5(uniqid());
+    if (isset($settings['bcc_email'])) {
+      $message['headers']['Bcc'] = $settings['bcc_email'];
+    }
+    $message['headers']['MIME-version'] = '1.0';
+    $message['headers']['Content-Type'] = 'multipart/alternative; boundary="' . $message['params']['boundary'] . '"';
+    $message['body'] = array(
+      email_wrappers_render_email_body($eid, $message, $settings),
+    );
+  }
+  elseif(isset($params['mail']->subject)) {
+    $params['mail']->subject = token_replace($params['mail']->subject, $token_set, array('clear' => TRUE));
+  }
+}
+
+/**
+ * Implements hook_mail_alter().
+ *
+ * Halt processing of the original email and re-process using Email Wrappers
+ * implementation of MailSystemInterface. Required to send HTML email
+ * since core strips HTML.
+ */
+function email_wrappers_mail_alter(&$message) {
+  global $user;
+  $account = $user; //this is wrong value for resends, and perhaps other cases.
+  $resend = isset($message['params']['submission']->resend) ? $message['params']['submission']->resend : FALSE;
+  if ($resend && isset($message['to'])) {
+    $has_account = user_load_by_mail($message['to']);
+    if ($has_account) {
+      $account = $has_account;
+    }
+  }
+  if ($message['id'] == 'webform_submission' && $message['module'] == 'webform') {
+    $eid = $message['params']['email']['eid'];
+    $nid = $message['params']['email']['nid'];
+    $token_set = array(
+      'node' => isset($nid) ? node_load($nid) : NULL,
+    );
+    $message['subject'] = token_replace($message['subject'], $token_set, array('clear' => TRUE));
+    if (!isset($message['params']['settings'])) {
+      $settings = email_wrappers_load_settings($nid, $eid);
+    }
+    else {
+      $settings = $message['params']['settings'];
+    }
+    if ($settings) {
+      $extra = $settings['extra'];
+      $params = $message['params'];
+      $params['settings'] = $settings;
+      $params['message'] = $message;
+      $sid = $params['submission']->sid;
+      if ($resend) {
+        if (module_exists('fundraiser_webform')) {
+          $donation = _fundraiser_webform_get_donation_by_sid($sid);
+          $params['donation'] = $donation;  //needed for subject line in email_wrappers_mail
+          $params['message']['params']['donation'] = $donation;  //needed for body in email_wrappers_render_email_body
+        }
+      }
+
+      // If email is not set send on submission we stash parameters required
+      // to send in a static setting on the assumption that some other code
+      // will pick up where we left off.
+      // Passing the templated message into a static array lets other modules
+      // send the email at any point during page execution.
+      // This drives conditional sending when an email needs to be sent
+      // in response to a webform submission, but only if certain conditions
+      // are met.
+      //
+      // Example: Webform Confirmations uses this strategy to send
+      // confirmation emails conditionally when a donation is successful
+      // or if it fails.
+      //
+      // Note: other modules may set extra['send_on_submission'] to FALSE
+      // to defer sending an email.
+      if (!isset($extra['send_on_submission']) || $extra['send_on_submission'] === TRUE || $resend) {
+        $response = drupal_mail('email_wrappers', 'wf_submission', $message['to'], user_preferred_language($account), $params);
+        if ($resend) {
+          // we intercepted error messages in the resend form alter above
+          //because the "$message['send'] = FALSE;" below causes an erroneous
+          //error message to be displayed to site administrator.
+          if (isset($response['result']) && $response['result']) {
+            drupal_set_message(t('Successfully re-sent confirmation to @add', array('@add' => $message['to'])));
+          }
+          else {
+            drupal_set_message(t('Confirmation was not sent to @add due to a server error.', array('@add' => $message['to'])), 'error');
+          }
+        }
+      }
+      else {
+        // //we set both a static cache and db cache
+        $mail_queue = &drupal_static('email_wrappers_mail_queue');
+        $mail_queue[$nid][$eid] = array(
+          'params' => $params,
+        );
+        if (module_exists('webform_confirmations')) {
+          // deferred notification ala Paypal WPS
+          $cache_time = '+1 hour';
+          $expire = strtotime($cache_time, time());
+          cache_set('wrapper_mail_queue_'. $nid . '_' . $eid. '_' . $sid, array('params' => $params), 'cache_webform_confirm', $expire);
+        }
+      }
+      $message['send'] = FALSE;
+    }
+  }
+
+  // Processing an email constructed via the dev API.
+  if ($message['module'] == 'email_wrappers' && isset($message['params']['module'], $message['params']['delta'])) {
+    // Format body & headers.
+    $message['params']['boundary'] = '----=_NextPart_' . md5(uniqid());
+    $message['headers']['MIME-version'] = '1.0';
+    $message['headers']['Content-Type'] = 'multipart/alternative; boundary="' . $message['params']['boundary'] . '"';
+    $token_set = array(
+      'node' => isset($message['params']['node']) ? $message['params']['node'] : NULL,
+    );
+    $message['subject'] = token_replace($message['params']['mail']->subject, $token_set, array('clear' => TRUE));
+
+    $message['body'] = array(email_wrappers_render_email_body(FALSE, $message));
+
+    // Add Cc and Bcc headers if needed.
+    foreach (array('cc', 'bcc') as $item) {
+      if (!empty($message['params']['mail']->$item)) {
+        $message['headers'][ucfirst($item)] = $message['params']['mail']->$item;
+      }
+    }
+  }
+}
+
+/**
+ * Render email message body.
+ *
+ * Concat message & template content fragments and perform token replacement.
+ *
+ * @param int $eid
+ *   Webform email id.
+ *
+ * @param array $message
+ *   Email message array.
+ *
+ * @param array $settings
+ *   Email templates settings for this email.
+ *
+ * @return string
+ *   Email message body, formatted for multipart MIME.
+ */
+function email_wrappers_render_email_body($eid, $message, $settings = array()) {
+  $token_set = array();
+  if (isset($message['params']['node'])) {
+    $token_set['node'] = $message['params']['node'];
+  }
+  if (isset($message['params']['donation'])) {
+    $token_set['donation'] = $message['params']['donation'];
+  }
+  drupal_alter('email_wrappers_token_set', $token_set, $message);
+  $eid = isset($message['params']['email']['eid']) ? $message['params']['email']['eid'] : FALSE;
+  $boundary = $message['params']['boundary'];
+  // TODO: filter HTML by field input type where appropriate.
+  if (isset($settings['html_message'], $settings['text_message'])) {
+    $html_raw = str_replace('%html_message', $settings['html_message'], $settings['html_template']);
+    $text_raw = str_replace('%text_message', $settings['text_message'], $settings['text_template']);
+  }
+  else {
+    $html_raw = $message['params']['mail']->html_message;
+    $text_raw = $message['params']['mail']->text_message;
+  }
+  $html_raw = token_replace($html_raw, $token_set, array('clear' => TRUE));
+  $text_raw = token_replace($text_raw, $token_set, array('clear' => TRUE));
+  $multi_body  = "
+
+This is a multi-part message in MIME format.
+
+--$boundary
+Content-Type: text/plain; charset=UTF-8; format=flowed;
+Content-Transfer-Encoding: 8bit
+
+$text_raw
+
+--$boundary
+Content-Type: text/html; charset=UTF-8; format=flowed;
+Content-Transfer-Encoding: 8bit
+
+$html_raw
+
+";
+
+  $token_set = array(
+    'node' => isset($message['params']['node']) ? $message['params']['node'] : NULL,
+  );
+  if (isset($message['params']['donation'])) {
+    $token_set['donation'] = $message['params']['donation'];
+  }
+
+  $multi_body = token_replace($multi_body, $token_set, array('clear' => TRUE));
+  if ($eid) {
+    $multi_body = _webform_filter_values($multi_body, $message['params']['node'], $message['params']['submission'], $message['params']['node']->webform['emails'][$eid], FALSE, TRUE);
+  }
+  return $multi_body;
+}
+
+/**
+ * List available email template nodes.
+ *
+ * @return array
+ *   An array of node titles keyed to nid.
+ */
+function _email_wrappers_list_templates() {
+  $options = array('0' => t('- Select -'));
+  $results = db_select('node', 'n')
+    ->fields('n', array('nid', 'title'))
+    ->condition('type', 'email_wrapper')
+    ->execute();
+  while ($record = $results->fetchAssoc()) {
+    $options[$record['nid']] = $record['title'];
+  }
+  return $options;
+}
+
+/**
+ * Load template settings for a specific webform & email.
+ *
+ * @param int $nid
+ *   Webform node id.
+ *
+ * @param int $eid
+ *   Webform email id.
+ *
+ * @return array
+ *   Keyed array of settings. Array keys:
+ *     nid - Webform node id
+ *     eid - Webform email id
+ *     tid - email template node id
+ *     html_message - HTML version of the message portion of this email.
+ *     html_template - HTML template value, shared by any emails
+ *     that use a given template
+ *     text_message - plaintext version of the message portion of this email.
+ *     text_template - plaintext template value, shared by any emails that
+ *     use a given template
+ *     extra - serialized array of additional settings
+ */
+function email_wrappers_load_settings($nid, $eid = FALSE) {
+  if ($eid) {
+    $query = db_select('email_wrappers_webform', 'e');
+    $query->join('field_data_email_wrapper_html_template', 'f', 'e.tid = f.entity_id');
+    $query->join('field_data_email_wrapper_text_template', 't', 'e.tid = t.entity_id');
+    $query->fields('e', array(
+        'nid',
+        'eid',
+        'tid',
+        'html_message',
+        'text_message',
+        'bcc_email',
+        'extra',
+      )
+    )
+      ->condition('e.nid', $nid)
+      ->condition('eid', $eid);
+    $query->addField('f', 'email_wrapper_html_template_value', 'html_template');
+    $query->addField('t', 'email_wrapper_text_template_value', 'text_template');
+    $results = $query->execute();
+    $data = $results->fetchAssoc();
+    // If we don't have settings we want to be sure to send a value
+    // that parses as FALSE.
+    // Otherwise Email Templates will think it has settings and will try to alter
+    // generic untemplated mail that is generated by webform module.
+    if (!empty($data['extra'])) {
+      $data['extra'] = unserialize($data['extra']);
+    }
+    return !empty($data['tid']) ? $data : FALSE;
+  }
+  else {
+    $data = array();
+    $query = db_select('email_wrappers_webform', 'e');
+    $query->fields('e', array(
+        'nid',
+        'eid',
+        'tid',
+        'html_message',
+        'text_message',
+        'bcc_email',
+        'extra',
+      )
+    )
+      ->condition('e.nid', $nid);
+    $results = $query->execute();
+    while ($result = $results->fetchAssoc()) {
+      $result['extra'] = unserialize($result['extra']);
+      $data[] = $result;
+    }
+    return count($data) ? $data : FALSE;
+  }
+}
+
+
+/**
+ * Mail configuration loader.
+ *
+ * @param array $params
+ *   Should contain either 'mid' or ('module' and 'delta') to identify
+ *   the email template.
+ *
+ * @return object|bool
+ *   The email template object, or FALSE if one can't be found.
+ */
+function email_wrappers_mail_load($params = array()) {
+  $mid = isset($params['mid']) ? $params['mid'] : FALSE;
+
+  static $settings = array();
+  if ($mid && $settings[$mid]) {
+    return $settings[$mid];
+  }
+  elseif ($mid) {
+    $query = db_select('email_wrappers', 'e');
+    $query->fields('e');
+    $query->condition('mid', $mid);
+    $result = $query->execute();
+    $mail = $result->fetchObject();
+    $settings[$mid] = $mail;
+  }
+  elseif (isset($params['module']) && isset($params['delta'])) {
+    $query = db_select('email_wrappers', 'e');
+    $query->fields('e');
+    $query->condition('module', $params['module']);
+    $query->condition('delta', $params['delta']);
+    $result = $query->execute();
+    $mail = $result->fetchObject();
+
+    if (isset($mail->mid)) {
+      $mid = $mail->mid;
+      $settings[$mid] = $mail;
+    }
+  }
+
+  return $mid ? $settings[$mid] : FALSE;
+}
+
+/**
+ * Delete mail configuration.
+ *
+ * @param array $params
+ *   mid or (module and delta)
+ */
+function email_wrappers_mail_delete($params) {
+  $mid = isset($params['mid']) ? $params['mid'] : FALSE;
+
+  if ($mid) {
+    db_delete('email_wrappers')
+      ->condition('mid', $mid)
+      ->execute();
+  }
+  elseif (isset($params['module']) && isset($params['delta'])) {
+    db_delete('email_wrappers')
+      ->condition('module', $params['module'])
+      ->condition('delta', $params['delta'])
+      ->execute();
+  }
+}
+
+/**
+ * Delete all email templates mail configurations defined by a module.
+ *
+ * Mainly used for cleanup during a module uninstall.
+ *
+ * @param string $module
+ *   The module name.
+ */
+function email_wrappers_mail_delete_all($module) {
+  db_delete('email_wrappers')
+    ->condition('module', $module)
+    ->execute();
+}
+
+/**
+ * Load email settings from db.
+ *
+ * @param int $nid
+ *   Node id.
+ *
+ * @return array
+ *   Associative array of defaults taken from the template node.
+ */
+function email_wrappers_load_defaults_from_template($nid) {
+
+  $node = node_load($nid);
+
+  // So appaently retrieving field values can't just rely on the node->lang
+  // property.
+  // When the node language is set (example: en) these fields still store
+  // values under 'und'.
+  // This leads to mass confusion if you're trying to use the node language
+  // setting to fish for field values directly in the node object. True story.
+  $subject = field_get_items('node', $node, 'email_wrapper_subject');
+  $from_name = field_get_items('node', $node, 'email_wrapper_from_name');
+  $from_mail = field_get_items('node', $node, 'email_wrapper_from_email');
+  $reply_to_email = field_get_items('node', $node, 'email_wrapper_reply_to_email');
+  $bcc_email = field_get_items('node', $node, 'email_wrapper_bcc_email');
+  $html_template = field_get_items('node', $node, 'email_wrapper_html_template');
+  $html_message = field_get_items('node', $node, 'email_wrapper_html_message');
+  $text_template = field_get_items('node', $node, 'email_wrapper_text_template');
+  $text_message = field_get_items('node', $node, 'email_wrapper_text_message');
+
+  // BCC gets special handling as it's the only field that may have
+  // multiple values.
+  if (is_array($bcc_email)) {
+    $bcc_addresses = array();
+    foreach ($bcc_email as $bcc) {
+      $bcc_addresses[] = $bcc['value'];
+    }
+  }
+  else {
+    // This is to match the existing behavior when the bcc field ie empty.
+    $bcc_addresses = NULL;
+  }
+
+  return array(
+    'subject' => $subject[0]['value'],
+    'from_name' => $from_name[0]['value'],
+    'from_mail' => $from_mail[0]['value'],
+    'reply_to_email' => $reply_to_email[0]['value'],
+    'bcc_email' => $bcc_addresses,
+    'html_template' => $html_template[0]['value'],
+    'html_message' => $html_message[0]['value'],
+    'text_template' => $text_template[0]['value'],
+    'text_message' => $text_message[0]['value'],
+  );
+
+}
+
+/**
+ * Translate template node BCC field values into a comma-separated list.
+ *
+ * @param object $node
+ *   Email template node object.
+ *
+ * @return string
+ *   Returns BCC field values as a comma-separated string.
+ */
+function _email_wrappers_concat_bcc($node) {
+  $bccs = array();
+  $lang = $node->language;
+  foreach ($node->email_wrapper_bcc_email[$lang] as $bcc) {
+    $bccs[] = $bcc['value'];
+  }
+  return implode(',', $bccs);
+}
+
+/**
+ * Toggle email header form elements to "custom" and set a default value.
+ *
+ * Webform does some interesting things with form elements in the
+ *   "email header details" section of the e-mail add/edit form.
+ *
+ * @param array $form
+ *   Form array
+ *
+ * @param string $field_key
+ *   Valid options: subject, from_name, from_address
+ *
+ * @param string $value
+ *   Default value for the "custom" textfield.
+ */
+function _email_wrappers_webform_option_defaults(&$form, $field_key, $value) {
+  $form[$field_key . '_option']['default']['#value'] = '';
+  $form[$field_key . '_option']['custom']['#value'] = 'custom';
+  $form[$field_key . '_custom']['#default_value'] = $value;
+}
+
+/**
+ * Ajax callback for template select box.
+ */
+function email_wrappers_email_ajax($form, $form_state) {
+  // Load the default settings for the selected template.
+  $template_nid = $form_state['values']['email_wrappers_email_template'];
+  if (empty($template_nid)) {
+    return array();
+  }
+
+  $defaults = email_wrappers_load_defaults_from_template($template_nid);
+
+  $commands = array();
+
+  // Set the values on the various webform email settings.
+  $commands[] = ajax_command_invoke('input[name=subject_option][value=custom]', 'prop', array('checked', TRUE));
+  $commands[] = ajax_command_invoke('input[name=subject_custom]', 'val', array($defaults['subject']));
+
+  $commands[] = ajax_command_invoke('input[name=from_name_option][value=custom]', 'prop', array('checked', TRUE));
+  $commands[] = ajax_command_invoke('input[name=from_name_custom]', 'val', array($defaults['from_name']));
+
+  $commands[] = ajax_command_invoke('input[name=from_address_option][value=custom]', 'prop', array('checked', TRUE));
+  $commands[] = ajax_command_invoke('input[name=from_address_custom]', 'val', array($defaults['from_mail']));
+
+  // BCC email will be an array when coming from the node.
+  $bcc_email = is_array($defaults['bcc_email']) ? implode($defaults['bcc_email'], ',') : $defaults['bcc_email'];
+  $commands[] = ajax_command_invoke('input[name=email_wrappers_bcc]', 'val', array($bcc_email));
+
+  $commands[] = ajax_command_invoke('textarea[name=email_wrappers_html_message]', 'val', array($defaults['html_message']));
+  $commands[] = ajax_command_invoke('textarea[name=email_wrappers_text_message]', 'val', array($defaults['text_message']));
+
+  return array('#type' => 'ajax', '#commands' => $commands);
+}
+
+/**
+ * Generate modal preview.
+ */
+function _email_wrappers_preview($op, $message, $nid) {
+
+  $output = '';
+  switch ($op) {
+    case 'html':
+      $result = db_query("SELECT email_wrapper_html_template_value FROM {field_data_email_wrapper_html_template} WHERE entity_id = :nid", array(':nid' => $nid));
+      if ($result) {
+        $output = $result->fetchColumn();
+        $output = preg_replace('/%html_message/', $message, $output);
+      }
+      else {
+        $output = $message;
+      }
+      break;
+
+    case 'text':
+      $result = db_query("SELECT email_wrapper_text_template_value FROM {field_data_email_wrapper_text_template} WHERE entity_id = :nid", array(':nid' => $nid));
+      if ($result) {
+        $output = $result->fetchColumn();
+        $output = preg_replace('/%text_message/', $message, $output);
+      }
+      else {
+        $output = $message;
+      }
+      $output = '<pre>' . check_plain($output) . '</pre>';
+      break;
+
+    default:
+      break;
+  }
+  return $output;
+}
+
+/**
+ * Get a webform component ID given components and form key.
+ *
+ * Quick and dirty helper function to dredge up the cid of a webform component
+ * given the standard array of components and a form key.
+ */
+function _email_wrappers_get_cid($components, $form_key) {
+  foreach ($components as $cid => $component) {
+    if ($component['form_key'] == $form_key) {
+      return $cid;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Implements hook_clone_node_alter().
+ */
+/**
+ * Implements hook_node_insert().
+ */
+function email_wrappers_node_insert($node) {
+  // If the new node is a clone, clone things.
+  if (!isset($node->clone_from_original_nid)) {
+    return;
+  }
+  // We're only interested in webform nodes with configured emails.
+  if (in_array($node->type, webform_variable_get('webform_node_types')) && isset($node->webform['emails'])) {
+    $settings = email_wrappers_load_settings($node->clone_from_original_nid);
+    if ($settings) {
+      foreach ($settings as $data) {
+        // Update the node id of existing record with the nid of the clone and
+        // save.
+        $data['nid'] = $node->nid;
+        $data['extra'] = serialize($data['extra']);
+        drupal_write_record('email_wrappers_webform', $data);
+      }
+    }
+  }
+}
+
+/**
+ * @todo Add garbage collection on node delete.
+ */

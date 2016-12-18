@@ -1,0 +1,24 @@
+<?php
+/**
+ * @file
+ * Install and uninstall for DSR.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function dsr_uninstall() {
+  variable_del('dsr_posted_select_s');
+  variable_del('dsr_refunded_select_s');
+  variable_del('dsr_partially_refunded_select_s');
+  variable_del('dsr_posted_aggregate_s');
+  variable_del('dsr_refunded_aggregate_s');
+  variable_del('dsr_partially_refunded_aggregate_s');
+}
+
+/**
+ * Implements hook_update_last_removed().
+ */
+function dsr_update_last_removed() {
+  return 6001;
+}

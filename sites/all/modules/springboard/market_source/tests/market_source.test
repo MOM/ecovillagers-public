@@ -1,0 +1,119 @@
+<?php
+
+/**
+ * @file
+ * Test suite for Market Source module.
+ */
+
+class MarketSourceTestCase extends DrupalWebTestCase {
+  protected $privileged_user;
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Market Source',
+      'description' => 'Market Source tests',
+      'group' => 'Market Source',
+    );
+  }
+
+  public function setUp() {
+    parent::setUp('market_source', 'webform');
+
+    $this->privileged_user = $this->drupalCreateUser(array(
+      'administer site configuration',
+      'access all webform results',
+      'create webform content',
+      'edit own webform content',
+    ));
+  }
+
+  /**
+   * Test to ensure the default market source fields are created on a
+   * new webform.
+   */
+  public function testMarketSourceDefaultFields() {
+    $this->drupalLogin($this->privileged_user);
+    $node = $this->marketSourceCreateWebform();
+
+    // Check to see if the default fields were created.
+    $this->drupalGet('node/1/webform');
+    $this->assertText('Market Source', t('Default market source component found.'));
+    $this->assertText('Campaign ID', t('Default campaign id component found.'));
+    $this->assertText('Referrer', t('Default referrer component found.'));
+    $this->assertText('Initial Referrer', t('Default initial referrer component found.'));
+    $this->assertText('Search Engine', t('Default search engine component found.'));
+    $this->assertText('Search String', t('Default search string component found.'));
+    $this->assertText('User Agent', t('Default user agent component found.'));
+  }
+
+  /**
+   * Confirms fields are added to the form view.
+   */
+  public function testMarketSourceFieldPopulation() {
+    $node = $this->marketSourceCreateWebform();
+
+    $this->drupalGet('node/1', array('query' => array('ms' => 'ms_from_query')));
+    $this->assertFieldByName('submitted[ms]', '', t('ms field found on form.'));
+    $this->assertFieldByName('submitted[cid]', '', t('cid field found on form.'));
+    $this->assertFieldByName('submitted[referrer]', '', t('referrer field found on form.'));
+    $this->assertFieldByName('submitted[initial_referrer]', '', t('initial_referrer field found on form.'));
+    $this->assertFieldByName('submitted[search_engine]', '', t('search_engine field found on form.'));
+    $this->assertFieldByName('submitted[search_string]', '', t('search_string field found on form.'));
+    $this->assertFieldByName('submitted[user_agent]', '', t('user_agent field found on form.'));
+  }
+
+  /**
+   * Tests the ability to add and remove custom market source fields.
+   */
+  public function testMarketSourceAddCustomField() {
+    $this->drupalLogin($this->privileged_user);
+    // confirm admin form elements.
+    $this->drupalGet('admin/config/search/market-source');
+    $this->assertFieldById('edit-market-source-global-fields-custom-fields-wrapper-0-name', '', t('Name field found.'));
+    $this->assertFieldById('edit-market-source-global-fields-custom-fields-wrapper-0-key', '', t('Key field found.'));
+    $this->assertFieldById('edit-market-source-global-fields-custom-fields-wrapper-0-default', '', t('Default field found.'));
+
+    // confirm custom settings.
+    $settings = array(
+      'market_source_global_fields[custom_fields_wrapper][0][name]' => 'UTM Medium',
+      'market_source_global_fields[custom_fields_wrapper][0][key]' => 'utm_medium',
+      'market_source_global_fields[custom_fields_wrapper][0][default]' => 'utm default',
+    );
+    $this->drupalPost('admin/config/search/market-source', $settings, 'Save settings');
+    $this->drupalGet('admin/config/search/market-source');
+
+    $this->assertFieldById('edit-market-source-global-fields-custom-fields-wrapper-0-name', 'UTM Medium', t('Name field found with correct value.'));
+    $this->assertFieldById('edit-market-source-global-fields-custom-fields-wrapper-0-key', 'utm_medium', t('Key field found with correct value.'));
+    $this->assertFieldById('edit-market-source-global-fields-custom-fields-wrapper-0-default', 'utm default', t('Default field found with correct value.'));
+
+    // Create a new form, verify field is on it and submit it.
+    $edit = array(
+      'title' => t('MS Test'),
+    );
+
+    $this->drupalPost('node/add/webform', $edit, t('Save'));
+
+    $this->drupalGet('node/1');
+    $this->assertFieldByName('submitted[utm_medium]', 'utm default', t('Custom field added to new form.'));
+
+
+    $edit = array(
+      'submitted[utm_medium]' => 'utm medium from query',
+    );
+
+    $this->drupalPost('node/1', $edit, 'Submit');
+  }
+
+  /**
+   * Creates a webform for testing.
+   */
+  private function marketSourceCreateWebform() {
+
+    $settings = array(
+      'type' => 'webform',
+    );
+
+    // confirm components are created.
+    return $this->drupalCreateNode($settings);
+  }
+}

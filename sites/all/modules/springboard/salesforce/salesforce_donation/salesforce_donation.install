@@ -1,0 +1,140 @@
+<?php
+
+/**
+ * @file
+ * Manages webform to Salesforce mappings.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function salesforce_donation_install() {
+  // Create default SF map insert into table.
+  $map = array();
+  $map = entity_create('salesforce_genmap_map', $map);
+  $map->nid = -1;
+  $map->map_handler = 'salesforce_donation';
+  $map->salesforce_object_type = 'Opportunity';
+  $object_type = '';
+  module_load_include('inc', 'salesforce_genmap', 'includes/salesforce_genmap.map');
+  if (function_exists('salesforce_get_api')) {
+    $sfapi = salesforce_get_api();
+    if ($sfapi->isAuthorized()) {
+      if (function_exists('_sfw_salesforce_record_type_list')) {
+        $sf_records = _sfw_salesforce_record_type_list($sfapi, 'Opportunity');
+        $sf_records = array_flip($sf_records);
+        $object_type = $sf_records['Donation'];
+      }
+    }
+  }
+  $map->salesforce_record_type = $object_type;
+  $map->field_map = array(
+    'salesforce_donation_map' => array(
+      'did' => 'Order_ID__c',
+      'gateway_name' => 'Payment_Gateway__c',
+      'txn_id' => 'Gateway_Reference__c',
+      'close_date' => 'CloseDate',
+      'transaction_date' => 'Transaction_Date_Time__c',
+      'form_URL' => 'Donation_Form_URL__c',
+      'probability' => 'Probability',
+      'stage' => 'StageName',
+      'user_salesforce_account_id' => 'AccountId',
+      'full_name' => 'Name',
+      'amount' => 'Amount',
+      'address' => 'Billing_Street__c',
+      'address_line_2' => 'Billing_Street_Line_2__c',
+      'city' => 'Billing_City__c',
+      'country' => 'Billing_Country__c',
+      'state' => 'Billing_State__c',
+      'zip' => 'Billing_Zip__c',
+      'card_number' => 'CC_Last_4__c',
+      'card_expiration_month' => 'CC_Exp_Month__c',
+      'card_expiration_year' => 'CC_Exp_Year__c',
+      'card_type' => 'CC_Type__c',
+    ),
+    'salesforce_webform_map' => array(
+      'cid' => 'CampaignId',
+      'ms' => 'Market_Source__c',
+      'referrer' => 'Referrer__c',
+      'initial_referrer' => 'Initial_Referrer__c',
+      'search_engine' => 'Search_Engine__c',
+      'search_string' => 'Search_String__c',
+      'user_agent' => 'User_Agent__c',
+      'device_type' => 'Device_Type__c',
+      'device_name' => 'Device_Name__c',
+      'device_os' => 'Device_OS__c',
+      'device_browser' => 'Device_Browser__c',
+    ),
+    'salesforce_node_map' => array(
+      'title' => 'Donation_Form_Name__c',
+    ),
+  );
+  $map->sync_options = array(
+    'insert' => 'insert',
+    'update' => 'update',
+    'delete' => 'delete',
+  );
+  $map->status = 1;
+  $map->module = 'salesforce_donation';
+  salesforce_genmap_save_map($map, 'salesforce_donation');
+}
+
+/**
+ * Implements hook_requirements().
+ */
+function salesforce_donation_requirements($phase) {
+  $requirements = array();
+
+  if ($phase === 'runtime' ) {
+    // Get the default stage map that represents the system in a perfect configuration.
+    $default_stages = salesforce_donation_default_stage_map();
+
+    // Get the order statuses that are important (payment_received, pending_future_payment, canceled, etc.).
+    $order_statuses = array_values($default_stages);
+
+    // Verify the order statuses are mapped. Return an empty array by default because we're going
+    // to assume the mapping has never been set correctly, i.e. stage names can differ in Salesforce.
+    $mapped_stages = variable_get('salesforce_donation_mapped_stages', array());
+
+    // Arrays for tracking mapped/unmapped stages.
+    $mapped = array();
+    $unmapped = array();
+
+    // If the variable is still empty, assume the setting has not been addressed at all
+    // and no stages are mapped correctly.
+    if (empty($mapped_stages)) {
+      $unmapped = $order_statuses;
+    }
+    else {
+      foreach ($order_statuses as $status) {
+        // Check each status, if it's in $mapped_stages we should be good.
+        if (!in_array($status, $mapped_stages)) {
+          $unmapped[] = $status;
+        }
+        else {
+          $mapped[] = $status;
+        }
+      }
+    }
+
+    // Default values for the status screen.
+    $requirements['salesforce_donation_stages'] = array(
+      'title' => t('Salesforce donation stages'),
+      'description' => t('To ensure proper syncing of donations the Salesforce stages should be mapped. '),
+    );
+
+    // Add additional items depending on mapped status.
+    if (!empty($unmapped)) {
+      $requirements['salesforce_donation_stages']['severity' ]= REQUIREMENT_WARNING;
+      $requirements['salesforce_donation_stages']['value'] = t('You have unmapped Salesforce donation stages.');
+      $admin_link = l('map', 'admin/config/salesforce/salesforce-donation');
+      $requirements['salesforce_donation_stages']['description'] .= t('Please !map these donation stages: @unmapped.', array('!map' => $admin_link, '@unmapped' => implode(', ', $unmapped)));
+    }
+    elseif (!empty($mapped)) {
+      $requirements['salesforce_donation_stages']['value'] = t('All Salesforce donation stages are mapped.');
+      $requirements['salesforce_donation_stages']['description'] .= t('These donation stages are configured: @mapped.', array('@mapped' => implode(', ', $mapped)));
+    }
+  }
+
+  return $requirements;
+}

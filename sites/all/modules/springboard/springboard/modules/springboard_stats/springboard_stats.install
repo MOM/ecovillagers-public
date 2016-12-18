@@ -1,0 +1,95 @@
+<?php
+/**
+ * @file
+ * Install, uninstall, and update hooks for the springboard_admin module.
+ */
+
+include_once 'springboard_stats.fields.inc';
+
+/**
+ * Implements hook_install().
+ *
+ * Add stats fields to existing Fundraiser and Webform node types, and populate with initial values.
+ */
+function springboard_stats_install() {
+  // Get all Webform types. The array returned by webform_variable_get() might contain a blank value. 
+  $webform_types_all = webform_variable_get('webform_node_types');
+  $webform_types_all = array_filter($webform_types_all, create_function('$value', 'return !empty($value);'));
+  
+  // Add stats fields to all Webform and Fundraiser node types.
+  foreach ($webform_types_all as $type_name) {
+    springboard_stats_add_fields($type_name);
+  }
+  
+  // Populate stats fields for all existing nodes of any Webform or Fundraiser type.
+  $webform_types = array();
+  $fundraiser_types = array();
+  foreach ($webform_types_all as $type_name) {
+    if (fundraiser_is_donation_type($type_name)) {
+      $fundraiser_types[] = $type_name;
+    } else {
+      $webform_types[] = $type_name;
+    }
+  }
+  if(!empty($webform_types)) {
+    $q = db_query("SELECT nid FROM {node} WHERE type IN (:types)", array(':types' => $webform_types));
+    while ($r = $q->fetchAssoc()) {
+      $node = node_load($r['nid']);
+      springboard_stats_update_field($node, 'count_submissions');
+    }
+  }
+  if(!empty($fundraiser_types)) {
+    $q = db_query("SELECT nid FROM {node} WHERE type IN (:types)", array(':types' => $fundraiser_types));
+    while ($r = $q->fetchAssoc()) {
+      $node = node_load($r['nid']);
+      springboard_stats_update_all_fields($node);
+    }
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * Delete stats fields from all Fundraiser and Webform node types.
+ */
+function springboard_stats_uninstall() {
+  $field_names = array_merge(array_keys(_springboard_stats_webform_fields_settings('')), array_keys(_springboard_stats_fundraiser_fields_settings('')));
+  $type_names = array_keys(node_type_get_names());
+  foreach ($field_names as $field_name) {
+    if ($field = field_info_field($field_name)) {
+      foreach ($type_names as $type_name) {
+        if ($field_instance = field_info_instance('node', $field_name, $type_name)) {
+          field_delete_instance($field_instance);
+        }
+      }
+      field_delete_field($field['field_name']);
+    }
+  }
+  drupal_set_message('Springboard Statistics fields deleted from all Webform and Fundraiser node types.');
+}
+
+/**
+ * Adds dollar total and count fields for donation refunds.
+ */
+function springboard_stats_update_7001() {
+  // Add stats fields to all Fundraiser node types.
+  foreach (webform_variable_get('webform_node_types') as $type_name) {
+    if (fundraiser_is_donation_type($type_name)) {
+      _springboard_stats_add_default_fields($type_name, TRUE);
+    }
+  }
+
+  // Populate refund stats fields for all existing nodes of any Fundraiser type.
+  $fundraiser_types = array();
+  foreach (webform_variable_get('webform_node_types') as $type_name) {
+    if (fundraiser_is_donation_type($type_name)) {
+      $fundraiser_types[] = $type_name;
+    }
+  }
+  $q = db_query("SELECT nid FROM {node} WHERE type IN (:types);", array(':types' => $fundraiser_types));
+  while ($r = $q->fetchAssoc()) {
+    $node = node_load($r['nid']);
+    springboard_stats_update_field($node, 'count_refunds');
+    springboard_stats_update_field($node, 'total_refunds');
+  }
+}

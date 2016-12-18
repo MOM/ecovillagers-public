@@ -1,0 +1,15 @@
+name = "Token insert (text)"
+description = "Allows you to insert tokens in a textfield with one click of a button. Tokens are inserted in the format Token Filter (http://drupal.org/project/token_filter) works with."
+core = 7.x
+package = Token insert
+dependencies[] = token
+dependencies[] = token_insert
+files[] = token_insert_text.js
+files[] = token_insert_text.module
+
+
+; Information added by drush on 2016-12-18
+version = "4630189ef4115ca05211507ddb3193d5af814f8b-dev"
+project = "token_insert"
+datestamp = "1482080370"
+

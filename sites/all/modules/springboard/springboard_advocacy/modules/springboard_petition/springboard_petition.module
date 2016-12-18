@@ -1,0 +1,569 @@
+<?php
+/**
+ * @file
+ * Code for the Springboard Advocacy feature.
+ */
+
+/**
+ * Determines if a content type is a petition type.
+ *
+ * @param string $type
+ *   The content type name.
+ *
+ * @return bool
+ *   TRUE if the content type is a petition type.
+ */
+function springboard_petition_is_petition_type($type) {
+  static $petition_types;
+  // Cache fundraiser content types during page execution.
+  if (!isset($petition_types[$type])) {
+    $petition_types[$type] = variable_get('petition_' . $type, FALSE);
+  }
+  return $petition_types[$type];
+}
+
+/**
+ * Helper function, determine if this node type supports donation forms.
+ */
+function springboard_petition_get_petition_types() {
+  // For all types, check if they are a fundraiser type.
+  $types = node_type_get_types();
+  $petition_types = array();
+  foreach ($types as $type => $type_info) {
+    $petition_types[$type] = variable_get('petition_' . $type, FALSE);
+  }
+  return $petition_types;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Prevents required webform components from being deleted.
+ * Right now it only protects the mail field. Add to the required fields
+ * array if there are other fields that need protecting.
+ */
+function springboard_petition_form_webform_component_delete_form_alter(&$form, &$form_state, $form_id) {
+  // Make sure we are dealing with a petition type.
+  if (springboard_petition_is_petition_type($form['node']['#value']->type)) {
+    // Check vs. required fields to make sure we can't delete them.
+    $required_fields = array('mail');
+    $cid = $form['component']['#value']['cid'];
+    $component = $form['node']['#value']->webform['components'][$cid];
+    // Check to see if the form_key is in our required fields array.
+    if (in_array($component['form_key'], $required_fields)) {
+      $message = t('<strong>!name</strong> is a required petition field and cannot be deleted from this form.',
+        array('!name' => $component['name']));
+      $form['description']['#markup'] = $message;
+      unset($form['actions']['submit']);
+    }
+  }
+}
+
+/**
+ * Implements hook_webform_submission_delete().
+ *
+ * Removes a springboard_petition_opt_in record on submission deletion.
+ */
+function springboard_petition_webform_submission_delete($node, $submission) {
+  if ($node->type != 'springboard_petition') {
+    return;
+  }
+  db_query("DELETE FROM {springboard_petition_opt_in} WHERE sid = :sid AND nid = :nid",
+    array(
+      ':sid' => $submission->sid,
+      ':nid' => $node->nid,
+    )
+  );
+}
+
+/**
+ * Implements hook_node_delete().
+ *
+ * Removes all related springboard_petition_opt_in and springboard_petition_opt_in_block
+ * records upon donation webform deletion.
+ */
+function springboard_petition_node_delete($node) {
+  if ($node->type != 'springboard_petition') {
+    return;
+  }
+  db_query("DELETE FROM {springboard_petition_opt_in} WHERE nid = :nid",
+    array(':nid' => $node->nid));
+  db_query("DELETE FROM {springboard_petition_opt_in_block} WHERE nid = :nid",
+    array(':nid' => $node->nid));
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function springboard_petition_form_node_type_form_alter(&$form, $form_state) {
+  $form_type = isset($form['type']['#default_value']) ? $form['type']['#default_value'] : FALSE;
+  if ($form_type == 'springboard_petition') {
+    $form['#submit'][] = 'springboard_petition_node_type_submit';
+  }
+}
+
+
+/**
+ * Auxiliary petition submit function.
+ *
+ * @param $form
+ * @param $form_state
+ */
+function springboard_petition_node_type_submit($form, $form_state) {
+  if (isset($form_state['values']['webform_user']) && $form_state['values']['webform_user'] == 1) {
+    // Prevent webform user from overwriting the signature opt-in field
+    // when field configuration is changed.
+    if (isset($form_state['values']['webform_user_default_fields'])) {
+      $default_fields = variable_get('webform_user_default_fields_springboard_petition', '');
+      $default_fields[] = 'sbp_rps_optin';
+      variable_set('webform_user_default_fields_springboard_petition', $default_fields);
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Add the Display settings -> Recent Signers List setting to the petition node edit form:
+ */
+function springboard_petition_form_springboard_petition_node_form_alter(&$form, &$form_state) {
+  if (empty($form['springboard_display'])) {
+    $form['springboard_display'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Display settings'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#group' => 'additional_settings',
+    );
+  }
+  $form['springboard_display']['recent_signers'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Recent Signers List'),
+    '#description' => t('Choose whether petition signers can opt-in to having their name displayed on the petition page.'),
+    '#collapsible' => TRUE,
+    '#collapsed' => FALSE,
+  );
+  $visibility = isset($form['#node']->enable_recent_signers) ? $form['#node']->enable_recent_signers : FALSE;
+  $form['springboard_display']['recent_signers']['show_signers'] = array(
+    '#type' => 'checkbox',
+    '#title' => t('Allow users to opt-in and show recent signers list'),
+    '#default_value' => $visibility,
+    '#weight' => -4,
+  );
+  $form['#submit'][] = '_springboard_petition_process_recent_signers_setting_submit';
+}
+
+/**
+ * Save the submitted value for the "Recent Signers List" checkbox.
+ */
+function _springboard_petition_process_recent_signers_setting_submit(&$form, &$form_state) {
+  $data = array(
+    'nid' => $form_state['values']['nid'],
+    'visibility' => $form_state['values']['show_signers']
+  );
+  $exists = db_select('springboard_petition_opt_in_block', 'p')
+    ->fields('p', array('nid'))
+    ->condition('nid', $data['nid'], '=')
+    ->execute()
+    ->fetchField();
+  if ($exists) {
+    drupal_write_record('springboard_petition_opt_in_block', $data, 'nid');
+  }
+  // If the record doesn't exist, save the submitted value for use during node insertion:
+  else {
+    variable_set('sb_petition_last_signers_opt_in_val', $form_state['values']['show_signers']);
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Add opt-in tracking submit handler to Petition webforms.
+ */
+function springboard_petition_form_alter(&$form, $form_state, $form_id) {
+  if (strstr($form_id, 'webform_client_form') && isset($form['#node']->type)) {
+    if (springboard_petition_is_petition_type($form['#node']->type)) {
+      $form['#submit'][] = 'springboard_petition_petition_submit';
+    }
+  }
+}
+
+/**
+ * Submit callback for petition webforms, tracks user opt-in.
+ */
+function springboard_petition_petition_submit($form, $form_state) {
+  $submission_fields = _springboard_advocacy_webform_submission_flatten($form['#node']->nid, $form_state['values']['submitted_tree']);
+  if (!empty($submission_fields['mail'])) {
+    $account = (array) user_load_by_mail($submission_fields['mail']);
+    $sid = !empty($form_state['values']['details']['sid']) ? $form_state['values']['details']['sid'] : FALSE;
+    if (isset($submission_fields['sbp_rps_optin'])) {
+      $opt_in = count($submission_fields['sbp_rps_optin']) ? TRUE : FALSE;
+      if ($opt_in && !empty($account['uid'])) {
+        springboard_petition_log_opt_in($form['#node']->nid, $account['uid'], $opt_in, $sid);
+      }
+    }
+    springboard_advocacy_success($form['#node'], $account, $submission_fields, $sid);
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function springboard_petition_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'springboard_petition'),
+  );
+}
+
+/**
+ * Implemenents hook_webform_user_profile_fields_alter().
+ *
+ * Add field definition for opt in component.
+ */
+function springboard_petition_webform_user_profile_fields_alter(&$fields, $node) {
+  if (springboard_petition_is_petition_type($node->type)) {
+    // For Springboard Petition nodes, include a checkbox
+    // so users can opt to have their signature shown on
+    // recent signatures list.
+    //
+    // Note: additional fiddling with webform's
+    // per content type field settings is required
+    // to convince it to add this field.
+    // See springboard_rps_install() for additional
+    // implementation details.
+    $fields[] = array(
+      'name' => 'sbp_rps_optin',
+      'title' => t('Show my signature'),
+      'type' => 'list_boolean',
+      'mandatory' => 0,
+      'weight' => 0,
+      'explanation' => '',
+      'options' => array(0, 1),
+      'category_key' => NULL,
+      'category_name' => NULL,
+      'extra' => array('title_display' => 'none'),
+    );
+  }
+}
+
+/**
+ * Implements hook_token_info().
+ */
+function springboard_petition_token_info() {
+  $info['types']['springboard_petition'] = array(
+    'name' => t('Springboard Petition'),
+    'description' => ('Springboard Petition tokens.'),
+  );
+  $info['tokens']['springboard_petition']['recent_signers'] = array(
+    'name' => t('Recent Petition Signers'),
+    'description' => t('Embed the recent petition signers view using a token.'),
+    'dynamic' => FALSE,
+  );
+  return $info;
+}
+
+/**
+ * Implements hook_tokens().
+ */
+function springboard_petition_tokens($type, $tokens, array $data = array(), array $options = array()) {
+  $replacements = array();
+  if ($type == 'springboard_petition') {
+    foreach ($tokens as $key => $token) {
+      if ($key == 'recent_signers' && !empty($data['node']->nid)) {
+        $replacements[$token] = views_embed_view('recent_petition_signatures', 'default', $data['node']->nid);
+      }
+    }
+  }
+  return $replacements;
+}
+
+/**
+ * Implements hook_node_load().
+ *
+ * Add enable_recent_signers to the node object.
+ */
+function springboard_petition_node_load($nodes, $types) {
+  // If no petition nodes are loaded no need to continue.
+  if (!in_array('springboard_petition', $types)) {
+    return;
+  }
+
+  foreach ($nodes as $nid => $node) {
+    if ($node->type != 'springboard_petition') {
+      continue;
+    }
+    $visibility = db_select('springboard_petition_opt_in_block', 'p')
+      ->fields('p', array('visibility'))
+      ->condition('nid', $nid, '=')
+      ->execute()
+      ->fetchField();
+    $node->enable_recent_signers = $visibility ? TRUE : FALSE; 
+  }
+}
+
+/**
+ * Returns form_layouts template definitions.
+ */
+function _springboard_petition_get_form_layouts_templates() {
+  $path = drupal_get_path('module', 'springboard_petition') . '/templates';
+  $templates['two_column_petition_form_left'] = array(
+    'name' => t('Two column: petition with the form on the left'),
+    'types' => array('petition'),
+    'theme' => 'two_column_petition_form_left',
+    'pattern' => 'two_column_petition_form_left_\'0-9\'+',
+    'template' => 'two-column-petition-form-left',
+    'path' => $path,
+    'hide title' => TRUE,
+  );
+
+  $templates['two_column_petition_form_right'] = array(
+    'name' => t('Two column: petition with the form on the right'),
+    'types' => array('petition'),
+    'theme' => 'two_column_petition_form_right',
+    'pattern' => 'two_column_petition_form_right_\'0-9\'+',
+    'template' => 'two-column-petition-form-right',
+    'path' => $path,
+    'hide title' => TRUE,
+  );
+
+  $templates['one_column_petition_form_top'] = array(
+    'name' => t('One column: petition with the form on the top'),
+    'types' => array('petition'),
+    'theme' => 'one_column_petition_form_top',
+    'pattern' => 'one_column_petition_form_top_\'0-9\'+',
+    'template' => 'one-column-petition-form-top',
+    'path' => $path,
+    'hide title' => TRUE,
+  );
+  return $templates;
+}
+
+/**
+ * Returns TRUE if the recent signers feature is enabled for a given node.
+ *
+ * @param $nid
+ *   Node ID of the springboard_petition node in question.
+ */
+function _springboard_petition_is_recent_signers_enabled($nid) {
+  $enabled = db_select('springboard_petition_opt_in_block', 'p')
+    ->fields('p', array('visibility'))
+    ->condition('nid', $nid, '=')
+    ->execute()
+    ->fetchField();
+  return $enabled ? TRUE : FALSE;
+}
+
+/**
+ * Log opt in.
+ *
+ * @param int $nid
+ *   Node ID.
+ * @param int $uid
+ *   User ID.
+ * @param bool $opt_in
+ *   User opt in TRUE/FALSE.
+ * @param int $sid
+ *   Submission ID.
+ */
+function springboard_petition_log_opt_in($nid, $uid, $opt_in, $sid) {
+  db_delete('springboard_petition_opt_in')
+    ->condition('sid', $sid, '=')
+    ->execute();
+
+  $record = array(
+    'sid' => $sid,
+    'nid' => $nid,
+    'uid' => $uid,
+    'opt_in' => $opt_in ? 1 : 0,
+    'created' => time(),
+  );
+  drupal_write_record('springboard_petition_opt_in', $record);
+}
+
+/**
+ * Look up the user ID associated with a webform submission.
+ *
+ * @param int $sid
+ *   Webform submission id.
+ *
+ * @return mixed
+ *   Numeric user id or FALSE if no record is found.
+ */
+function _springboard_petition_get_uid_from_sid($sid) {
+  $result = db_query('SELECT uid FROM {webform_submissions} WHERE sid = :sid', array(':sid' => $sid));
+  return $result->fetchField();
+}
+
+/**
+ * Duplicates the node-specific, opt-in settings for a given node.
+ * This is used during node cloning.
+ *
+ * @param $original_nid
+ *   The node ID of the original donation form.
+ * @param $new_nid
+ *   The node ID of the newly cloned donation form.
+ */
+function _springboard_petition_clone_node_optin_data($original_nid, $new_nid) {
+  // Fetch the original node's opt-in data:
+  $opt_in_query = db_query("SELECT visibility " .
+    "FROM {springboard_petition_opt_in_block} " .
+    "WHERE nid = :nid",
+    array(':nid' => $original_nid));
+  foreach ($opt_in_query as $data) {
+    // Duplicate the original node's opt-in data for the newly cloned node:
+    db_query("INSERT INTO {springboard_petition_opt_in_block} " .
+      "(nid, visibility) VALUES (:nid, :visibility)",
+      array(
+        ':nid' => $new_nid,
+        ':visibility' => $data->visibility,
+      ));
+    break;
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ * 
+ * - When a petition node is cloned by the node_clone module, also copy its opt-in setting value.
+ * - When a new petition node is created, create an opt-in record, with opt-in disabled by default.
+ */
+function springboard_petition_node_insert($node) {
+  if ($node->type != 'springboard_petition') {
+    return;
+  }
+
+  // Support for node cloning:
+  if (isset($node->clone_from_original_nid)) {
+    _springboard_petition_clone_node_optin_data($node->clone_from_original_nid, $node->nid);
+  }
+  // If this isn't a clone then insert a record with opt-in disabled:
+  else {
+    $visibility = variable_get('sb_petition_last_signers_opt_in_val', FALSE);
+    variable_del('sb_petition_last_signers_opt_in_val');
+    db_query("INSERT INTO {springboard_petition_opt_in_block} " .
+      "(nid, visibility) VALUES (:nid, :visibility)",
+       array(
+        ':nid' => $node->nid,
+        ':visibility' => !empty($visibility) ? 1 : 0,
+      ));
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function springboard_petition_node_update($node) {
+  // Add the opt-in checkbox if it does not already exist and opt-in is enabled for this node:
+  if (_springboard_petition_is_recent_signers_enabled($node->nid)) {
+    _springboard_petition_add_opt_in_webform_component($node);
+  }
+  // Remove the opt-in checkbox if recent signers is disabled for this node:
+  else {
+    _springboard_petition_remove_opt_in_webform_component($node);
+  } 
+}
+
+/**
+ * Inserts the opt-in checkbox onto the petition webform if it
+ * does not already exist.  It will be placed at the form, above the
+ * lowest-weighted element.
+ *
+ * This returns the new checkbox's cid if successful; otherwise, FALSE.
+ *
+ * @param $node
+ *   The node object for the webform on which the opt-in checkbox will be added.
+ */
+function _springboard_petition_add_opt_in_webform_component($node) {
+  // Do nothing if the opt-in checkbox's form_key already exists on the form:
+  $lowest_component_weight = 0;
+  if (isset($node->webform['components']) && !empty($node->webform['components'])) {
+    foreach ($node->webform['components'] as $component) {
+      // Ensure this component sits below any others by find the highest component
+      if ($component['weight'] < $lowest_component_weight) {
+        $lowest_component_weight = $component['weight'];
+      }
+      if ($component['form_key'] == 'sbp_rps_optin') {
+        return FALSE;
+      }
+    }
+  }
+
+  $component = array(
+    'nid' => $node->nid,
+    'form_key' => 'sbp_rps_optin',
+    'pid' => 0,
+    'name' => t('Opt in') . ' ',
+    'type' => 'select',
+    'extra' => array(
+      'items' => 'sbp_rps_optin' . '|' .
+        t('Show my signature'),
+        'multiple' => 1,
+      'title_display' => 'none',
+    ),
+    'weight' => $lowest_component_weight - 1,
+  );
+
+  return webform_component_insert($component);
+}
+
+/**
+ * Deletes the opt-in checkbox from the petition webform if it exists.
+ *
+ * @param $node
+ *   The ID of the webform node whose checkbox component should be deleted.
+ */
+function _springboard_petition_remove_opt_in_webform_component($node) {
+  $lowest_component_weight = 0;
+  if (isset($node->webform['components']) && !empty($node->webform['components'])) {
+    foreach ($node->webform['components'] as $component) {
+      if ($component['form_key'] == 'sbp_rps_optin') {
+        webform_component_delete($node, $component);
+      }
+    }
+  }
+}
+
+/**
+ * Get the recent signers opt-in view's rendered HTML.
+ */
+function _springboard_petition_render_recent_signers_view() {
+  $arg1 = arg(1);
+  $output = '';
+  if (!is_numeric($arg1)) {
+    return $output;
+  }
+  $view = views_get_view('recent_petition_signatures');
+  $view->set_display('block_1');
+  $view->set_arguments(array($arg1));
+  $view->pre_execute();
+  $view->execute();
+  if (isset($view->total_rows) && $view->total_rows) {
+    $output .= '<h2>' . $view->get_title() . '</h2>';
+  }
+  $output .= $view->preview('block_1');
+  return $output;
+}
+
+/**
+ * These functions implement hook_proprocess_HOOK() to include the
+ * recent signers view block's HTML as a variable within these templates:
+ */
+function springboard_petition_preprocess_one_column_petition_form_top(&$vars) {
+  if (isset($vars['element']['#node']->nid)
+    && _springboard_petition_is_recent_signers_enabled($vars['element']['#node']->nid)) {
+    $vars['recent_signers_opt_in_view'] = _springboard_petition_render_recent_signers_view();
+  }
+}
+function springboard_petition_preprocess_two_column_petition_form_left(&$vars) {
+  if (isset($vars['element']['#node']->nid)
+    && _springboard_petition_is_recent_signers_enabled($vars['element']['#node']->nid)) {
+    $vars['recent_signers_opt_in_view'] = _springboard_petition_render_recent_signers_view();
+  }
+}
+function springboard_petition_preprocess_two_column_petition_form_right(&$vars) {
+  if (isset($vars['element']['#node']->nid)
+    && _springboard_petition_is_recent_signers_enabled($vars['element']['#node']->nid)) {
+    $vars['recent_signers_opt_in_view'] = _springboard_petition_render_recent_signers_view();
+  }
+}

@@ -1,0 +1,224 @@
+<?php
+
+/**
+ * @file
+ * Configuration form tests
+ */
+
+include_once dirname(__FILE__) . '/salesforce_queue.test';
+
+/**
+ * @file
+ * Salesforce queue module config form tests.
+ */
+class SalesforceQueueAdminTestCase extends SalesforceQueueTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Salesforce queue configuration tests'),
+      'description' => t('Tests of configuration settings for the Salesforce queue module.'),
+      'group' => t('Salesforce Queue'),
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    parent::setUp($modules, $permissions);
+
+    // Path to config page.
+    $this->queueAdminPath = 'admin/config/salesforce/salesforce-queue';
+
+    // Connect to Salesforce.
+    $this->salesforceConnect();
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Tests that the form renders properly.
+   */
+  public function testAdminForm() {
+    $this->drupalGet($this->queueAdminPath);
+
+    // Ensure each field is there with the correct default value.
+    $this->assertFieldByName('lease_time', '', 'Lease Time field exists.');
+    $this->assertFieldByName('lease_time', 60, 'Lease Time field has the correct default value.');
+    $this->assertFieldByName('cron_frequency', '', 'Cron Frequency field exists.');
+    $this->assertFieldByName('cron_frequency', 1, 'Cron Frequency field has the correct default value.');
+    $this->assertFieldByName('max_items', '', 'Max Items field exists.');
+    $this->assertFieldByName('max_items', 1000, 'Max Items field has the correct default value.');
+    $this->assertFieldByName('max_retries', '', 'Max Retries field exists.');
+    $this->assertFieldByName('max_retries', 5, 'Max Retries field has the correct default value.');
+    $this->assertNoText('Tracked Queues of the Multi-Queue Processor', 'Tracked queues field does not show up by default');
+    $this->assertNoFieldById('edit-tracked-queues-fail', '', 'Fail queue does not show up for tracked queues.');
+    $this->assertNoFieldById('edit-tracked-queues-new', '', 'New queue does not show up for tracked queues.');
+    $this->assertNoFieldById('edit-tracked-queues-retry', '', 'Retry queue does not show up for tracked queues.');
+    $this->assertFieldByName('object_order[Account][value]', '', 'Account reorder row exists.');
+    $this->assertFieldByName('object_order[Contact][value]', '', 'Contact reorder row exists.');
+    $this->assertFieldByName('object_order[Opportunity][value]', '', 'Opportunity reorder row exists.');
+
+    // The tracked queues option is hidden by default.  Lets show it and check
+    // if its default values are correct.
+    variable_set('salesforce_queue_tracked_queues_show_config', TRUE);
+    $this->drupalGet($this->queueAdminPath);
+    $this->assertText('Tracked Queues of the Multi-Queue Processor', 'Tracked queues field showed up after enabling it.');
+    $this->assertFieldById('edit-tracked-queues-fail', '', 'Fail queue showed up for tracked queues.');
+    $this->assertNoFieldChecked('edit-tracked-queues-fail', 'Fail queue is not checked by default.');
+    $this->assertFieldById('edit-tracked-queues-new', '', 'New queue showed up for tracked queues.');
+    $this->assertFieldChecked('edit-tracked-queues-new', 'New queue is checked by default.');
+    $this->assertFieldById('edit-tracked-queues-retry', '', 'Retry queue showed up for tracked queues.');
+    $this->assertFieldChecked('edit-tracked-queues-retry', 'Retry queue is checked by default.');
+
+    // Ensure there are no other tracked queue options.
+    module_load_include('inc', 'salesforce_queue', 'includes/salesforce_queue.admin');
+    $queue_count = count(salesforce_queue_get_queue_names());
+    $this->assertEqual(3, $queue_count, 'There are ' . $queue_count . ' of 3 known queues.');
+
+    // Add more queues for tracked queue options to find and see if they show
+    // up.
+    variable_set('salesforce_queue_foo_lease_expire', 3600);
+    $bar_queue = salesforce_queue_load('bar');
+    $this->createQueueItems($bar_queue);
+    $this->drupalGet($this->queueAdminPath);
+    $this->assertFieldById('edit-tracked-queues-foo', '', 'Foo queue showed up for tracked queues.');
+    $this->assertNoFieldChecked('edit-tracked-queues-foo', 'Foo queue is not checked by default.');
+    $this->assertFieldById('edit-tracked-queues-bar', '', 'Bar queue showed up for tracked queues.');
+    $this->assertNoFieldChecked('edit-tracked-queues-bar', 'Bar queue is not checked by default.');
+    $queue_count = count(salesforce_queue_get_queue_names());
+    $this->assertEqual(5, $queue_count, 'There are ' . $queue_count . ' of 5 known queues.');
+  }
+
+  /**
+   * Tests that the form will validate submissions properly.
+   */
+  public function testAdminFormValidate() {
+    $fields = array(
+      'lease_time',
+      'cron_frequency',
+      'max_items',
+      'max_retries',
+    );
+    foreach ($fields as $field) {
+      // Is numeric.
+      $this->drupalGet($this->queueAdminPath);
+      $edit = array($field => 'abc');
+      $this->drupalPost($this->queueAdminPath, $edit, 'Save');
+      $this->assertText('must be numeric', $field . ' field fails validation when value is not numeric.');
+      $this->assertNoText('Your settings have been saved.', 'Form does not save when ' . $field . ' field fails numeric validation.');
+
+      // Is a positive value.
+      $this->drupalGet($this->queueAdminPath);
+      $edit = array($field => -5);
+      $this->drupalPost($this->queueAdminPath, $edit, 'Save');
+      $this->assertText('must be a positive number', $field . ' field fails validation when value is not a positive number.');
+      $this->assertNoText('Your settings have been saved.', 'Form does not save when ' . $field . ' field fails positive value validation.');
+    }
+  }
+
+  /**
+   * Tests that form submissions are performed and values are saved properly.
+   */
+  public function testAdminFormSubmit() {
+    $this->drupalGet($this->queueAdminPath);
+
+    // Make the tracked queues and extra queues show up.
+    variable_set('salesforce_queue_tracked_queues_show_config', TRUE);
+    variable_set('salesforce_queue_foo_lease_expire', 3600);
+    $bar_queue = salesforce_queue_load('bar');
+    $this->createQueueItems($bar_queue);
+
+    // Set values.
+    $edit = array(
+      'lease_time' => 11,
+      'cron_frequency' => 12,
+      'max_items' => 13,
+      'max_retries' => 15,
+      'tracked_queues[fail]' => TRUE,
+      'tracked_queues[new]' => FALSE,
+      'tracked_queues[retry]' => FALSE,
+      'tracked_queues[foo]' => TRUE,
+      'tracked_queues[bar]' => TRUE,
+    );
+
+    // Cancel and make sure no values were changed.
+    $this->drupalPost($this->queueAdminPath, $edit, 'Cancel');
+    $this->assertText('The form has been reset to its original values', 'Cancelling the form posted correctly.');
+    $this->assertFieldByName('lease_time', 60, 'Lease Time value did not change after cancelling form.');
+    $this->assertEqual(NULL, variable_get('salesforce_queue_lease_time', NULL), 'Lease Time value did not save after cancelling form.');
+    $this->assertFieldByName('cron_frequency', 1, 'Cron Frequency value did not change after cancelling form.');
+    $this->assertEqual(NULL, variable_get('salesforce_queue_cron_frequency', NULL), 'Cron Frequency value did not save after cancelling form.');
+    $this->assertFieldByName('max_items', 1000, 'Max Items value did not change after cancelling form.');
+    $this->assertEqual(NULL, variable_get('salesforce_queue_max_items', NULL), 'Max Items value did not save after cancelling form.');
+    $this->assertFieldByName('max_retries', 5, 'Max Retries value did not change after cancelling form.');
+    $this->assertEqual(NULL, variable_get('salesforce_queue_max_retries', NULL), 'Max Retries value did not save after cancelling form.');
+    $this->assertNoFieldChecked('edit-tracked-queues-fail', 'Fail queue did not get selected after cancelling form.');
+    $this->assertFieldChecked('edit-tracked-queues-new', 'New queue did not get unselected after cancelling form.');
+    $this->assertFieldChecked('edit-tracked-queues-retry', 'Retry queue did not unget selected after cancelling form.');
+    $this->assertNoFieldChecked('edit-tracked-queues-foo', 'Fail queue did not get selected after cancelling form.');
+    $this->assertNoFieldChecked('edit-tracked-queues-bar', 'Fail queue did not get selected after cancelling form.');
+    $this->assertEqual(NULL, variable_get('salesforce_queue_tracked_queues', NULL), 'Tracked Queues did not save after cancelling form.');
+
+    // Save and make sure the values were changed.
+    $this->drupalPost($this->queueAdminPath, $edit, 'Save');
+    $this->assertText('Your settings have been saved', 'Saving the form posted correctly.');
+    $this->assertFieldByName('lease_time', 11, 'Lease Time value changed after saving form.');
+    $this->assertEqual(660, variable_get('salesforce_queue_lease_time', NULL), 'Lease Time value saved after saving form.');
+    $this->assertFieldByName('cron_frequency', 12, 'Cron Frequency value changed after saving form.');
+    $this->assertEqual(720, variable_get('salesforce_queue_cron_frequency', NULL), 'Cron Frequency value saved after saving form.');
+    $this->assertFieldByName('max_items', 13, 'Max Items value changed after saving form.');
+    $this->assertEqual(13, variable_get('salesforce_queue_max_items', NULL), 'Max Items value saved after saving form.');
+    $this->assertFieldByName('max_retries', 15, 'Max Retries value changed after saving form.');
+    $this->assertEqual(15, variable_get('salesforce_queue_max_retries', NULL), 'Max Retries value saved after saving form.');
+    $this->assertFieldChecked('edit-tracked-queues-fail', 'Fail queue was selected after saving form.');
+    $this->assertNoFieldChecked('edit-tracked-queues-new', 'New queue was unselected after saving form.');
+    $this->assertNoFieldChecked('edit-tracked-queues-retry', 'Retry queue was unselected after saving form.');
+    $this->assertFieldChecked('edit-tracked-queues-foo', 'Fail queue was selected after saving form.');
+    $this->assertFieldChecked('edit-tracked-queues-bar', 'Fail queue was selected after saving form.');
+    $tracked_queues = array(
+      'bar' => 'bar',
+      'fail' => 'fail',
+      'foo' => 'foo',
+    );
+    $this->assertEqual($tracked_queues, variable_get('salesforce_queue_tracked_queues', NULL), 'Tracked Queues saved after saving form.');
+
+    // Remove the identifiers for the 'foo' and 'bar' queues and verify that
+    // they still show up on the form since they are selected.
+    variable_del('salesforce_queue_foo_lease_expire');
+    $bar_queue->deleteQueue();
+    $this->drupalGet($this->queueAdminPath);
+    $this->assertFieldById('edit-tracked-queues-foo', '', 'Foo queue showed up for tracked queues.');
+    $this->assertFieldById('edit-tracked-queues-bar', '', 'Bar queue showed up for tracked queues.');
+
+    // If I uncheck them they'll disappear.
+    $edit['tracked_queues[foo]'] = FALSE;
+    $edit['tracked_queues[bar]'] = FALSE;
+    $this->drupalPost($this->queueAdminPath, $edit, 'Save');
+    $this->drupalGet($this->queueAdminPath);
+    $this->assertNoFieldById('edit-tracked-queues-foo', '', 'Foo queue disappeared for tracked queues.');
+    $this->assertNoFieldById('edit-tracked-queues-bar', '', 'Bar queue disappeared for tracked queues.');
+
+    // Put and object as the first ordered object, and verify that it is now
+    // first and the former first ordered object is second.  This is just
+    // testing setting the weight via the drop down.  I don't know how to test
+    // the actual drag and drop ability at all.
+    $current_order = variable_get('salesforce_queue_object_order', NULL);
+    $this->assertTrue(is_array($current_order), 'Object order was saved.');
+    if (is_array($current_order)) {
+      $edit = array('object_order[Event][weight]' => -10);
+      $this->drupalPost($this->queueAdminPath, $edit, 'Save');
+      $new_order = variable_get('salesforce_queue_object_order', NULL);
+      $this->assertEqual('Event', array_shift($new_order), 'Event is the first item in the array.');
+      $this->assertEqual(array_shift($new_order), array_shift($current_order), 'The first item of the old order is the second item of the new order.');
+    }
+  }
+}

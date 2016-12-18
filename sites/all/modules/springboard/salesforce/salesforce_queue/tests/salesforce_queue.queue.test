@@ -1,0 +1,231 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for includes/salesforce_queue.queue.inc
+ */
+
+include_once dirname(__FILE__) . '/salesforce_queue.test';
+
+/**
+ * Tests basic set up for queueing data for Salesforce and sending it.
+ */
+class SalesforceQueueQueueTestCase extends SalesforceQueueTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'SalesforceQueue',
+      'description' => 'Ensure that the SalesforceQueue class functions properly.',
+      'group' => 'Salesforce Queue',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Test the SalesforceQueue class.
+   */
+  public function testSalesforceQueue() {
+    module_load_include('inc', 'system', 'system.queue');
+
+    // get() && __construct() && createQueue()
+    // You can work against the entire queue at once ignoring if items are
+    // slated for a certain task or not, or you can grab items specified for
+    // something specific, like retries, permenant failures, etc.  It is
+    // completely arbitrary, so for the case of testing I'm using "foo" for the
+    // arbitrary queue, and 'new', 'retry' and 'fail' for the standard queues.
+    $whole_queue = SalesforceQueue::Get();
+    $foo_queue = SalesforceQueue::Get('foo');
+    $new_queue = SalesforceQueue::Get('new');
+    $retry_queue = SalesforceQueue::Get('retry');
+    $fail_queue = SalesforceQueue::Get('fail');
+
+    // List the queues for future use.
+    $queues = array(
+      'foo' => $foo_queue,
+      'new' => $new_queue,
+      'retry' => $retry_queue,
+      'fail' => $fail_queue,
+    );
+
+    // createItem()
+    // The "whole" queue does not have a subset defined, so it will actually put
+    // all of the new items in the "new" queue by default.  All of the items in
+    // the other queues will be placed into their queues.
+    $this->createQueueItems($whole_queue);
+    foreach ($queues as $queue_name => $queue) {
+      $this->createQueueItems($queue);
+    }
+
+    // numberOfItems()
+    // Note that the "whole" queue is going to count both the items that it
+    // added as well as all other items in all other queues.
+    $count = $whole_queue->numberOfItems();
+    $this->assertEqual(25, $count, 'Counted ' . $count . ' records for the entire queue when there should be 25.');
+    foreach ($queues as $queue_name => $queue) {
+      $count = $queue->numberOfItems();
+      // 'all' and 'new' create records for 'new'.
+      $expected = $queue_name == 'new' ? 10 : 5;
+      $this->assertEqual($expected, $count, 'Counted ' . $count . ' records for the "' . $queue_name . '" queue when there should be ' . $expected . '.');
+    }
+
+    // claimItem() && leaseQueue() && queueIsLeased()
+    // NOTE: Although claimItem() is a wrapper for claimBatch(), it changes the
+    // returned result so claimBatch() should be tested independantly.
+    // Each will claim an item from its own queue.  Whole is special case, we'll
+    // address next.
+    $queue_items = array();
+    foreach ($queues as $queue_name => $queue) {
+      $queue_item = $queue->claimItem();
+      $this->assertTrue(is_object($queue_item), 'Retreived an item from the "' . $queue_name . '" queue');
+      $this->assertEqual($queue_name, $queue_item->queue, 'Retreived an item from the "' . $queue_name . '" queue.');
+      $this->assertTrue(isset($queue_item->sobject->type), 'The sObject has been defined in the "' . $queue_name . '" queue item.');
+      $queue_items[$queue_name] = $queue_item;
+    }
+
+    // The 'all' queue cannot claim an item because the 'new' queue and 'retry'
+    // queue have leases on their queues.
+    $this->assertFalse($whole_queue->claimItem(), 'The "all" queue cannot claim an item because "new" and "retry" have a lease.');
+
+    // releaseItem() && releaseBatch()
+    // We're going to use the two back and forth to test them both.
+    $new_queue->releaseItem($queue_items['new']);
+    $retry_queue->releaseBatch($queue_items['retry']->leaseKey);
+    $this->assertEqual(0, variable_get('salesforce_queue_new_lease_expire', NULL), 'New queue had their lease reset.');
+    $this->assertEqual(0, variable_get('salesforce_queue_retry_lease_expire', NULL), 'Retry queue had their lease reset.');
+
+    // Once the 'new' and 'retry' queues release their leases, then the 'all'
+    // queue can claim an item.  Since 'all' does not track 'foo' and 'fail'
+    // queues, their leases do not block 'all' from claiming a lease.
+    $whole_queue_item = $whole_queue->claimItem();
+    $this->assertTrue(is_object($whole_queue_item), 'Retreived an item from the queue');
+    $this->assertTrue(isset($whole_queue_item->sobject->type), 'The sObject has been defined in the "all" queue item.');
+
+    // And now the 'new' and 'retry' queues cannot claim items because the 'all'
+    // queue has a lease on all of its tracked queues.
+    $this->assertFalse($new_queue->claimItem(), 'The "new" queue cannot claim an item because the "all" queue has a lease.');
+    $this->assertFalse($retry_queue->claimItem(), 'The "retry" queue cannot claim an item because the "all" queue has a lease.');
+
+    // But the 'foo' and 'fail' queues can still freely release and claim items.
+    $foo_queue->releaseItem($queue_items['foo']);
+    $fail_queue->releaseBatch($queue_items['fail']->leaseKey);
+    $this->assertEqual(0, variable_get('salesforce_queue_foo_lease_expire', NULL), 'Foo queue had their lease reset.');
+    $this->assertEqual(0, variable_get('salesforce_queue_fail_lease_expire', NULL), 'Fail queue had their lease reset.');
+    $queue_items['foo'] = $foo_queue->claimItem();
+    $queue_items['fail'] = $fail_queue->claimItem();
+    $this->assertTrue(is_object($queue_items['foo']), 'Retreived an item from the "foo" queue');
+    $this->assertTrue(is_object($queue_items['fail']), 'Retreived an item from the "fail" queue');
+
+    // Release remaining claims.
+    $foo_queue->releaseItem($queue_items['foo']);
+    $fail_queue->releasebatch($queue_items['fail']->leaseKey);
+    $whole_queue->releaseItem($whole_queue_item);
+
+    // claimItem() and its queue item update ability
+    // If you create an item with the same primary keys [drupal_id, module,
+    // delta, object_type] as another item already in the queue, then that
+    // item will be replaced with the new data instead of a new queue item being
+    // created. Lets re-create an item we just fetched and see it merge.
+    $data = (array) $whole_queue_item;
+    // Unset everything we don't use when creating a new item.
+    $keys = array(
+      'drupal_id',
+      'module',
+      'delta',
+      'object_type',
+      'operation',
+      'dedupe_field',
+      'sobject',
+    );
+    foreach ($data as $key => $value) {
+      if (!in_array($key, $keys)) {
+        unset($data[$key]);
+      }
+    }
+
+    // Change one value that is not a primary key, create a queue item and
+    // ensure that it was merged with the original.
+    $data['dedupe_field'] = 'foobar';
+    $whole_queue->createItem($data);
+    $dedupe_value = db_select('salesforce_queue', 'q')
+      ->fields('q', array('dedupe_field'))
+      ->condition('item_id', $whole_queue_item->item_id)
+      ->execute()
+      ->fetchField();
+    $this->assertEqual('foobar', $dedupe_value, 'Requeing item updated old queue item.');
+
+    // deleteItem().
+    foreach ($queues as $queue_name => $queue) {
+      // Claim an item and verify that it can be found in the queue.
+      $queue_item = $queue->claimItem();
+      $item_record = db_select('salesforce_queue', 'q')
+        ->fields('q', array('item_id'))
+        ->condition('item_id', $queue_item->item_id)
+        ->execute()
+        ->fetchObject();
+      $this->assertEqual($queue_item->item_id, $item_record->item_id, 'Claimed queue item can be found in the queue.');
+
+      // Delete the claimed item and verify that it can no longer be found.
+      $this->assertTrue($queue->deleteItem($queue_item), 'deleteItem() returned success.');
+      $item_record = db_select('salesforce_queue', 'q')
+        ->fields('q', array('item_id'))
+        ->condition('item_id', $queue_item->item_id)
+        ->execute()
+        ->fetchObject();
+      $this->assertFalse($item_record, 'The deleted queue item is nowhere to be found in the queue.');
+    }
+
+    // deleteQueue()
+    // When you define a specific sub queue, it deletes all items in that queue
+    // only.
+    $total_remaining = $whole_queue->numberOfItems();
+    foreach ($queues as $queue_name => $queue) {
+      $count = $queue->numberOfItems();
+      $queue->deleteQueue();
+      $this->assertEqual(0, $queue->numberOfItems(), 'The "' . $queue_name . '" queue is empty after being deleted.');
+      $total_remaining = $total_remaining - $count;
+      $this->assertEqual($total_remaining, $whole_queue->numberOfItems(), 'Found ' . $total_remaining . ' items left in the entire queue after deleting the "' . $queue_name . '" queue.');
+    }
+
+    // When you delete from the 'all' queue, the entire queue empties.
+    $this->createQueueItems($whole_queue);
+    foreach ($queues as $queue_name => $queue) {
+      $this->createQueueItems($queue);
+    }
+    $whole_queue->deleteQueue();
+    $this->assertEqual(0, $whole_queue->numberOfItems(), 'The "all" queue is empty after the whole queue was deleted.');
+    foreach ($queues as $queue_name => $queue) {
+      $this->assertEqual(0, $queue->numberOfItems(), 'The "' . $queue_name . '" queue is empty after the whole queue was deleted.');
+    }
+
+    // itemInQueue() && claimBatch()
+    // Lets see if an item we've claimed is in the queue.  Claiming a batch
+    // will give us multiple items at once to work with.
+    $this->createQueueItems($whole_queue, 15);
+    $items = $whole_queue->claimBatch(5);
+    $data = (array) $items[4];
+    $this->assertTrue($whole_queue->itemInQueue($data), 'The claimed item is in queue.');
+    // Now lets change just one trait and ensure it fails.
+    $keys = array('drupal_id', 'module', 'delta', 'object_type');
+    foreach ($keys as $num => $key) {
+      $data = (array) $items[$num];
+      $data[$key] = 'foo';
+      $this->assertFalse($whole_queue->itemInQueue($data), 'The altered claimed item is not in the queue.');
+    }
+  }
+}

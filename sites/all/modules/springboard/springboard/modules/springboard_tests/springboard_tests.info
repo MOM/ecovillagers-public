@@ -1,0 +1,10 @@
+name = Springboard testing support
+description = General support module for Springboard testing.
+package = Testing
+version = 7.x-4.x-dev
+core = 7.x
+hidden = TRUE
+
+dependencies[] = simpletest
+
+files[] = SpringboardTests.php

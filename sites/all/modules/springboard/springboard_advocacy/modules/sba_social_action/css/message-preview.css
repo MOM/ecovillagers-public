@@ -1,0 +1,158 @@
+.message-preview-header {
+    margin: 1em 0 0 0;
+    width: 100%;
+}
+.message-preview-intro {
+    margin: 0 0 0.3em 0;
+    font-size: 1em;
+}
+
+.message-preview-person {
+    margin: 0;
+    font-weight: bold;
+}
+
+.message-preview-container {
+    padding: 0;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+.message-preview-container div.sba-message {
+
+    display: block;
+    max-width: 770px;
+}
+.message-preview-container div.sba-message.last {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.message-preview-container div.sba-message:after{
+    clear: both;
+    content: "";
+    display: table;
+}
+
+.message-preview-container .sba-message input,
+.message-preview-container .sba-message textarea,
+div.form-type-item {
+    width: 100%;
+}
+
+.message-preview-container .sba-message textarea {
+    margin-bottom: 0;
+    max-width:770px;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+#edit-actions {
+    clear:left;
+    padding: 0;
+    margin: 0;
+    margin-top: 2em;
+    border-top: 1px dashed #ccc;
+}
+
+#edit-actions input {
+    background: #247AAD;
+    border: none;
+    moz-border-radius: 4px;
+    webkit-border-radius: 4px;
+    border-radius: 4px;
+    color: #fff;
+    margin-top: 1em;
+    margin-left: 0;
+    font-size: 1.5em;
+    padding: 10px;
+    text-shadow: none;
+    width: auto;
+}
+
+#edit-actions input:hover {
+    background: #1E72A3;
+}
+
+label.required {
+    color: #f00;
+    cursor: default;
+}
+
+.form-item label {
+    font-size: 12px;
+}
+
+#multiflow-send-now-wrapper {
+    display: inline-block;
+}
+
+.message-preview-container .sba-alternate-contact {
+    clear: left;
+}
+
+a.sba-privacy {
+    margin-left: 1em;
+    font-size: 0.9em;
+    display:inline-block;
+}
+
+div.twit-auth {
+    margin-top: 1em;
+}
+
+input#edit-twitter-sign-in {
+    background: #ccc;
+    border: none;
+    moz-border-radius: 4px;
+    webkit-border-radius: 4px;
+    border-radius: 4px;
+    color: #000;
+    margin-left: 0;
+    font-size: 1.2em;
+    padding: 10px;
+    text-shadow: none;
+    min-width: 120px;
+}
+
+input#edit-twitter-sign-in:hover {
+    background: #ddddff;
+}
+
+.uneditable-message-preview {
+    padding: 10px;
+    max-width: 770px;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+
+}
+
+.editable-message-preview {
+    padding: 10px;
+    max-width: 770px;
+    margin-bottom : 8px;
+    -moz-box-sizing: border-box;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+.uneditable-message-preview .form-item.control-group,
+.message-preview-message-fieldset .control-group{
+    float: none;
+}
+
+.preview-twitter-user {
+    margin: 1em 0;
+}
+
+.sba-display-hint {
+    margin-top: 8px;
+    font-weight: 500;
+}
+
+.sba-web-intent-link {
+    display: inline-block;
+    margin-left: 8px;
+}

@@ -134,11 +134,10 @@ function shorten_url($original = '', $service = '') {
   if (!$original) {
     $original = url($_GET['q'], array('absolute' => TRUE, 'alias' => !variable_get('shorten_use_alias', 1)));
   }
-  $original_for_caching = urlencode($original); // https://www.drupal.org/node/2324925
   if (!$service) {
     $service = variable_get('shorten_service', 'is.gd');
   }
-  $cached = cache_get($original_for_caching, 'cache_shorten');
+  $cached = cache_get($original, 'cache_shorten');
   if (!empty($cached->data) && REQUEST_TIME < $cached->expire) {
     return $cached->data;
   }
@@ -147,19 +146,19 @@ function shorten_url($original = '', $service = '') {
     $url = _shorten_get_url($original, $services[$service], $service);
   }
   // If the primary service fails, try the secondary service.
-  if (empty($url)) {
+  if (!$url) {
     $service = variable_get('shorten_service_backup', 'TinyURL');
     if (isset($services[$service])) {
       $url = _shorten_get_url($original, $services[$service], $service);
     }
     // If the secondary service fails, use the original URL.
-    if (empty($url)) {
+    if (!$url) {
       $url = $original;
     }
   }
   $url = trim($url); // Redundant for most services.
   // Replace "http://" with "www." if the URL is abbreviated because it's shorter.
-  if ($url != $original && variable_get('shorten_www', FALSE)) {
+  if ($url != $original && variable_get('shorten_www', TRUE)) {
     if (strpos($url, 'http://') === 0) {
       $url = drupal_substr($url, 7);
       if (strpos($url, 'www.') !== 0) {
@@ -184,7 +183,7 @@ function shorten_url($original = '', $service = '') {
   else {
     $expire = CACHE_PERMANENT;
   }
-  cache_set($original_for_caching, $url, 'cache_shorten', $expire);
+  cache_set($original, $url, 'cache_shorten', $expire);
   module_invoke_all('shorten_create', $original, $url, $service);
   return $url;
 }
@@ -207,7 +206,7 @@ function _shorten_get_url($original, $api, $service) {
   $method = drupal_strtoupper(variable_get('shorten_method', _shorten_method_default()));
   $service = t('an unknown service');
   if (is_string($api)) {
-    $url = shorten_fetch($api . urlencode($original));
+    $url = shorten_fetch($api . $original);
     $service = $api;
   }
   elseif (is_array($api)) {
@@ -217,7 +216,6 @@ function _shorten_get_url($original, $api, $service) {
       'json' => FALSE,
     );
     if (!empty($api['url'])) {
-      $original = urlencode($original);
       // Typically $api['custom'] == 'xml' although it doesn't have to.
       if (!empty($api['tag'])) {
         $url = shorten_fetch($api['url'] . $original, $api['tag']);
@@ -268,12 +266,12 @@ function shorten_shorten_service() {
     );
   }
   if (variable_get('shorten_bitly_login', '') && variable_get('shorten_bitly_key', '')) {
-    $services['bit.ly'] = 'https://api-ssl.bitly.com/v3/shorten?format=txt&login=' .
+    $services['bit.ly'] = 'http://api.bit.ly/v3/shorten?format=txt&login=' .
       variable_get('shorten_bitly_login', '') . '&apiKey=' .
       variable_get('shorten_bitly_key', '') . '&x_login=' .
       variable_get('shorten_bitly_login', '') . '&x_apiKey=' .
       variable_get('shorten_bitly_key', '') . '&longUrl=';
-    $services['j.mp'] = 'https://api-ssl.bitly.com/v3/shorten?format=txt&domain=j.mp&login=' .
+    $services['j.mp'] = 'http://api.bit.ly/v3/shorten?format=txt&domain=j.mp&login=' .
       variable_get('shorten_bitly_login', '') . '&apiKey=' .
       variable_get('shorten_bitly_key', '') . '&x_login=' .
       variable_get('shorten_bitly_login', '') . '&x_apiKey=' .
@@ -295,6 +293,11 @@ function shorten_shorten_service() {
     'ri.ms' => 'http://ri.ms/api-create.php?url=',
     'TinyURL' => 'http://tinyurl.com/api-create.php?url=',
   );
+  if (module_exists('shorturl')) {
+    $services['Drupal ShortURL module'] = array(
+      'custom' => '_shorten_shorturl',
+    );
+  }
   if (variable_get('shorten_cligs', '')) {
     $services['cli.gs'] = 'http://cli.gs/api/v1/cligs/create?appid=drupal&key=' . variable_get('shorten_cligs', '') . '&url=';
   }
@@ -333,6 +336,13 @@ function _shorten_googl($original) {
   }
   watchdog('shorten', 'Error fetching shortened URL from goo.gl.', array(), WATCHDOG_ERROR, $url);
   return FALSE;
+}
+
+/**
+ * Helps get a shortened URL via the Short URLs module.
+ */
+function _shorten_shorturl($original) {
+  return shorturl_shorten($original, TRUE);
 }
 
 /**
@@ -386,31 +396,18 @@ function shorten_fetch($url, $tag = '', $special = '', $options = array()) {
     $c = curl_init();
     curl_setopt($c, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($c, CURLOPT_CONNECTTIMEOUT, $options['timeout']);
-    // https://drupal.org/node/1481634
-    //if (ini_get('open_basedir') == '' && ini_get('safe_mode' == 'Off')) {
-    //  curl_setopt($c, CURLOPT_FOLLOWLOCATION, TRUE);
-    //}
+    //curl_setopt($c, CURLOPT_FOLLOWLOCATION, TRUE);
     curl_setopt($c, CURLOPT_MAXREDIRS, $options['max_redirects']);
-    // defined() checks due to https://drupal.org/node/1469400
-    // Specifying the protocol is necessary to avoid malicious redirects to POP
-    // in libcurl 7.26.0 to 7.28.1
-    if (defined('CURLOPT_REDIR_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
-      curl_setopt($c, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-    }
     curl_setopt($c, CURLOPT_URL, $url);
     if ($options['method'] != 'GET') {
       $uri = @parse_url($url);
       if ($uri['scheme'] == 'http') {
         curl_setopt($c, CURLOPT_PORT, isset($uri['port']) ? $uri['port'] : 80);
-        if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP')) {
-          curl_setopt($c, CURLOPT_PROTOCOLS, CURLPROTO_HTTP);
-        }
+        //curl_setopt($c, CURLOPT_PROTOCOLS, CURLPROTO_HTTP);
       }
       elseif ($uri['scheme'] == 'https') {
         curl_setopt($c, CURLOPT_PORT, isset($uri['port']) ? $uri['port'] : 443);
-        if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
-          curl_setopt($c, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
-        }
+        //curl_setopt($c, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
       }
       if (!empty($options['headers'])) {
         $curl_headers = array();
@@ -473,8 +470,7 @@ function _shorten_xml($xml, $tag) {
  * Returns HTML representing the shorten form.
  */
 function shorten_form_shorten_form() {
-  $form = drupal_get_form('shorten_form_shorten');
-  return drupal_render($form);
+  return drupal_render(drupal_get_form('shorten_form_shorten'));
 }
 
 /**
@@ -652,8 +648,7 @@ function _shorten_service_form($last_service = NULL) {
  * Returns HTML representing the short URL form.
  */
 function shorten_current_form() {
-  $form = drupal_get_form('shorten_current');
-  return drupal_render($form);
+  return drupal_render(drupal_get_form('shorten_current'));
 }
 
 /**
@@ -687,19 +682,13 @@ function _shorten_method_default() {
  * Implements hook_token_info().
  */
 function shorten_token_info() {
-  $info = array();
-
-  $info['tokens']['node']['short-url'] = array(
-    'name' => t('Short Url'),
-    'description' => t('The shortened URL for the node. <strong>Deprecated:</strong> use [node:url:shorten] or [node:url:unaliased:shorten] instead.'),
-  );
-
-  $info['tokens']['url']['shorten'] = array(
-   'name' => t('Shorten'),
-    'description' => t("Shorten URL using the default service."),
-  );
-
-  return $info;
+  if (variable_get('shorten_generate_token', 1)) {
+    $return['tokens']['node']['short-url'] = array(
+      'name' => t('Short Url'),
+      'description' => t('The shortened URL for the node.'),
+    );  
+    return $return;
+  }
 }
 
 /**
@@ -708,45 +697,14 @@ function shorten_token_info() {
 function shorten_tokens($type, $tokens, array $data = array(), array $options = array()) {
   $replacements = array();
   if ($type == 'node'
-      && !empty($data['node'])
-      && isset($tokens['short-url'])) {
+  && !empty($data['node'])
+  && isset($tokens['short-url'])
+  && variable_get('shorten_generate_token', 1)) {
     $node = (object) $data['node'];
     $replacements[$tokens['short-url']] = shorten_url(url('node/' . $node->nid, array(
       'absolute' => TRUE,
       'alias' => variable_get('shorten_use_alias', 1),
     )));
   }
-
-  // General URL token replacement
-  $url_options = array('absolute' => TRUE);
-  if (isset($options['language'])) {
-    $url_options['language'] = $options['language'];
-    $language_code = $options['language']->language;
-  }
-  else {
-    $language_code = NULL;
-  }
-
-  $sanitize = !empty($options['sanitize']);
-
-  // URL tokens.
-  if ($type == 'url' && !empty($data['path'])) {
-    $path = $data['path'];
-
-    if (isset($data['options'])) {
-      // Merge in the URL options if available.
-      $url_options = $data['options'] + $url_options;
-    }
-
-    foreach ($tokens as $name => $original) {
-      switch ($name) {
-        case 'shorten':
-          $value = url($path, $url_options);
-          $replacements[$original] = shorten_url($value);
-          break;
-      }
-    }
-  }
-
   return $replacements;
 }

@@ -1,0 +1,6 @@
+name = Springboard Improved Multi Select
+description = Replaces the JS file included with Improved multi select with one that works for springboard.
+package = Form Elements
+core = 7.x
+version = 7.x-4.x
+dependencies[] = improved_multi_select

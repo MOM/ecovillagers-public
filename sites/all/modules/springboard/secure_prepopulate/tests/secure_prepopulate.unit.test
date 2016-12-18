@@ -1,0 +1,182 @@
+<?php
+/**
+ * Administration tests for my module.
+ */
+class SecurePrepopulateUnitTestCase extends DrupalWebTestCase {
+
+  /**
+   * Implements getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Secure pre-populate unit tests'),
+      'description' => t('Tests secure prepopulate encryption and decryption.'),
+      'group' => t('Secure Prepopulate'),
+    );
+  }
+
+  public function setUp() {
+    parent::setUp(array('secure_prepopulate'));
+  }
+
+  /**
+   * Tests encrypting a query string.
+   */
+  public function testEncrypt() {
+    $data = $this->getTestData();
+
+    foreach ($data as $case) {
+      $this->setVariables($case['variables']);
+      $query_string = $this->constructQueryString($case['decrypted']);
+
+      $encrypted = secure_prepopulate_encrypt($query_string);
+
+      $this->assertIdentical($case['encrypted'], $encrypted, 'secure_prepopulate_encrypt() returns expected values.');
+    }
+  }
+
+  /**
+   * Tests the decryption of an encrypted string.
+   */
+  public function testDecrypt() {
+    $data = $this->getTestData();
+
+    foreach ($data as $case) {
+      $this->setVariables($case['variables']);
+
+      $decrypted = secure_prepopulate_decrypt_qs($case['encrypted']);;
+
+      foreach ($case['decrypted'] as $key => $value) {
+        $this->assertEqual($decrypted[$key], $value, 'Decrypted ' . $key . ' field equals expected value of  ' . $value);
+      }
+    }
+  }
+
+  /**
+   * Ensure cron jobs are working correctly.
+   */
+  public function testCron() {
+    $expire_days = 30;
+    variable_set('secure_prepopulate_expired_date_limit', $expire_days);
+
+    // Create dummy entries.
+    foreach (range(0, (2 * $expire_days)) as $num) {
+      $row = array(
+        'hash' => md5($num),
+        'expire_date' => (REQUEST_TIME - ($num * 24 * 60 * 60)),
+      );
+      drupal_write_record('secure_prepopulate_expired', $row);
+    }
+
+    // Run cron. Everything older than 30 days should be deleted.
+    $this->cronRun();
+
+    // Verify entries were removed.
+    $max_date = REQUEST_TIME - ($expire_days * 24 * 60 * 60);
+    $expired_count = db_select('secure_prepopulate_expired', 's')
+      ->fields('s', array('hash'))
+      ->condition('expire_date', $max_date, '<')
+      ->execute()
+      ->rowCount();
+    $this->assertEqual(0, $expired_count);
+
+    // Verify the other entries weren't removed.
+    $not_expired_count = db_select('secure_prepopulate_expired', 's')
+      ->fields('s', array('hash'))
+      ->condition('expire_date', $max_date, '>')
+      ->execute()
+      ->rowCount();
+    $this->assertEqual(30, $not_expired_count);
+  }
+
+  /**
+   * Provide test cases for the encrypt and decrypt tests.
+   *
+   * @return array
+   *   An array of test cases.
+   */
+  protected function getTestData() {
+    $cases = array();
+
+    $cases[] = array(
+      'variables' => array(
+        'secure_prepopulate_iv' => 'cae023134cfcbf45',
+        'secure_prepopulate_key' => '7576586e4a5cb0611e3a1f080a30615a',
+      ),
+      'decrypted' => array(
+        'first_name' => 'Allen',
+        'last_name' => 'Freeman',
+        'email' => 'allen.freeman@example.com',
+        'address' => '12345 Test Dr',
+        'address_line_2' => 'Apt 2',
+        'city' => 'Springfield',
+        'country' => 'US',
+        'state' => 'IL',
+        'zip' => '55555',
+      ),
+      'encrypted' => '7vGjVvf/xlO/nVEq8FtS+/VAjjZGbAYBHddPjrpNCN5twzqjTrOf4W/RV5MEdvbpGAZ1c5wjBeIjljD8a9A5O2iQuxjk/lVnUWBO8Vg+WRCqH0basvWtivCxQg060w4vaDEZvoBcgzkkODZ9om4pR5psjwL1Q2wtcZQxmBoOsED8UTtjo73ufEOmXR411N93bIEMiJMJnS3Wb97F2FKCRA==',
+    );
+
+    $cases[] = array(
+      'variables' => array(
+        'secure_prepopulate_iv' => '1234567890123456',
+        'secure_prepopulate_key' => '12345678901234561234567890123456',
+      ),
+      'decrypted' => array(
+        'first_name' => 'Euro',
+        'last_name' => 'Guy',
+        'uid' => '29',
+      ),
+      'encrypted' => 'zBYBEVb6oX39UMG3b7HFlWTHbQ/L6Gd20MM2JexIVQ6msawBjeTa/MMjQFc9jnNA',
+    );
+
+    $cases[] = array(
+      'variables' => array(
+        'secure_prepopulate_iv' => '2QzFjpkYq8CsscZM',
+        'secure_prepopulate_key' => 'P4FLWBTjp2]ciKEMuy2h2rpemofXJLKf',
+      ),
+      'decrypted' => array(
+        'first_name' => 'Gary',
+        'last_name' => '',
+        'email' => 'gary@example.com',
+        'address' => '',
+        'address_line_2' => '',
+        'city' => '',
+        'zip' => '',
+      ),
+      'encrypted' => 'ggFLo2N6X8/SirEmw6RM3p2wc4K5dYoW3nJDfw3ZFpaHkmEjvzRStv5iKL3L9mYrEn+rs2WXxjj+aAVKfUc8x+ArjwuOKLpUfJC5WQZKa2OQ7EAS4iiiUNxwUvwcnZcK',
+    );
+
+    return $cases;
+  }
+
+  /**
+   * Sets some drupal variables.
+   *
+   * @param array $variables
+   *   An array keyed by drupal variable name with variable value.
+   */
+  protected function setVariables(array $variables) {
+    foreach ($variables as $key => $value) {
+      variable_set($key, $value);
+    }
+  }
+
+  /**
+   * Converts an array of fields into a query string.
+   *
+   * @param array $fields
+   *   The field names and values.
+   *
+   * @return string
+   *   The query string, without the leading ?.
+   */
+  protected function constructQueryString(array $fields) {
+    $query = array();
+    foreach ($fields as $key => $value) {
+      $query[] = "$key=$value";
+    }
+    return implode('&', $query);
+  }
+
+}

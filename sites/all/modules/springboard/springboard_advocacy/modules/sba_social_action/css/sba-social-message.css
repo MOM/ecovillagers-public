@@ -1,0 +1,29 @@
+#springboard-advocacy-message-recipients .sba-target-status,
+#springboard-advocacy-message-recipients .sba-charcount-status {
+    margin-left: 1.5em;
+    color: #000;
+}
+
+#edit-field-sba-twitter-editable .form-item,
+#sba_message_sba_social_action_twitter_message_form_group_sba_target_options .form-item{
+    display: inline-block;
+    margin-right: 20px;
+}
+
+#edit-field-sba-twitter-editable label.option,
+#sba_message_sba_social_action_twitter_message_form_group_sba_target_options label.option {
+    top: 4px;
+}
+
+.twit-too-long {
+    color: red;
+}
+
+.undistricted-update {
+    font-weight: lighter;
+}
+
+#edit-sba-target-options-warning {
+    position:relative;
+    top: -8px;
+}

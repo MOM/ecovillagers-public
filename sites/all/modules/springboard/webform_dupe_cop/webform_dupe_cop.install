@@ -1,0 +1,43 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the webform_dupe_cop module.
+ *
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function webform_dupe_cop_schema() {
+  $schema['webform_dupe_cop'] = array(
+    'description' => 'A register of MD5 hashes for Webform submissions',
+    'fields' => array(
+      'sid' => array(
+        'description' => 'Submission ID from {webform_submissions}',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'submission_hash' => array(
+        'description' => 'MD5 hash of all submission data',
+        'type' => 'char',
+        'length' => 32,
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('sid'),
+    'indexes' => array(
+      'submission_hash' => array('submission_hash'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Add index for submission_hash column.
+ */
+function webform_dupe_cop_update_7001() {
+  db_add_index('webform_dupe_cop', 'submission_hash', array('submission_hash'));
+  return array();
+}

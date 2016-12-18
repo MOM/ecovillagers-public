@@ -1,0 +1,5 @@
+name = Commerce offline check
+core = 7.x
+package = Fundraiser
+project = commerce_offline_check
+dependencies[] = fundraiser_commerce

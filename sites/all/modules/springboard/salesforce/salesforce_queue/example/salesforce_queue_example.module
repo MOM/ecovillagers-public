@@ -1,0 +1,148 @@
+<?php
+
+/**
+ * @file
+ * Provides examples for working with the Salesforce Queue integration method.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function salesforce_queue_example_menu() {
+  $items['high-score/add'] = array(
+    'title' => 'Add a high score',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('salesforce_queue_example_high_score_form'),
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}
+
+/**
+ * Adds a high score record to the Salesforce queue.
+ *
+ * @param int $id
+ *   The high score record to add.
+ */
+function salesforce_queue_example_add_high_score_to_queue($id) {
+  $high_score = salesforce_queue_example_load_high_score($id);
+  $sobject = salesforce_queue_example_create_high_score_object($high_score);
+
+  $item = array(
+    'drupal_id' => $id,
+    'module' => 'salesforce_queue_example',
+    'delta' => 'high_score',
+    'object_type' => 'High_Score__c',
+    'operation' => 'CREATE',
+    'sobject' => $sobject,
+  );
+
+  $queue = salesforce_queue_load();
+  $result = $queue->createItem($item);
+}
+
+/**
+ * Converts a Drupal high score record to a Salesforce High_Score__c object.
+ *
+ * @param int $high_score
+ *   The high score record to convert.
+ */
+function salesforce_queue_example_create_high_score_object($high_score) {
+  // Create a fields array.
+  $fields = array(
+    'Contact__c' => salesforce_queue_example_create_user_token($high_score->uid),
+    'Game__c' => $high_score->game,
+    'High_Score_Date__c' => date('c', strtotime($high_score->date_earned)),
+    'Score__c' => $high_score->score,
+    'Submission_Id__c' => $high_score->id,
+  );
+
+  // This is SOAP partner API format.
+  $sobject = new stdClass();
+  $sobject->type = 'High_Score__c';
+
+  // If using record types you could ad $sobject->record and set it to a valid
+  // record type id.
+  $sobject->fields = $fields;
+
+  return $sobject;
+}
+
+/**
+ * Loads a high score record from the database.
+ *
+ * @param int $id
+ *   The id of the high score to load.
+ */
+function salesforce_queue_example_load_high_score($id) {
+  $high_score = db_select('salesforce_queue_example_high_score', 'h')
+    ->fields('h')
+    ->condition('id', $id)
+    ->execute()
+    ->fetchObject();
+
+  return $high_score;
+}
+
+/**
+ * Form for creating a new high score record.
+ */
+function salesforce_queue_example_high_score_form() {
+  $form['game'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Game'),
+    '#description' => t('The name of the game'),
+  );
+
+  $form['score'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Score'),
+    '#size' => 10,
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save'),
+  );
+
+  return $form;
+}
+
+/**
+ * Submission handler for high score add form.
+ */
+function salesforce_queue_example_high_score_form_submit($form, $form_state) {
+  global $user;
+
+  $record = array(
+    'game' => check_plain($form_state['values']['game']),
+    'score' => check_plain($form_state['values']['score']),
+    'uid' => $user->uid,
+  );
+
+  $result = drupal_write_record('salesforce_queue_example_high_score', $record);
+
+  if ($result) {
+    // Add item to queue. Could improve performance here by passing the
+    // object/array instead of it's id.
+    salesforce_queue_example_add_high_score_to_queue($record['id']);
+    drupal_set_message(check_plain(t('High score for !game added.', array('!game' => $record['game']))));
+  }
+}
+
+/**
+ * Creates a relationship token in the expected queue format.
+ *
+ * @param int $uid
+ *   The uid to create the token form. This will be used to find the
+ *   corrosponding Salesforce contact id.
+ */
+function salesforce_queue_example_create_user_token($uid) {
+  // Relationship tokens are in the format of:
+  // * salesforce object type.
+  // * drupal delta or entity bundle.
+  // * drupal id.
+  return sprintf('[Contact:user:%d]', $uid);
+}

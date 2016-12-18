@@ -1,0 +1,1 @@
+Views templates can live here.

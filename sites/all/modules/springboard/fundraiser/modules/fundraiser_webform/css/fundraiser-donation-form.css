@@ -1,0 +1,20 @@
+/* Processing message that's shown when they click submit */
+div.donation-processing-wrapper {
+  clear: right;
+  float: right;
+  text-align: center;
+  width: 200px;
+  padding-right: 75px;
+}
+p.donation-thank-you {
+  margin: 0;
+  padding: 0 0 0.5em 0;
+}
+p.donation-processing {
+  margin: 0;
+  padding: 0 0 1em 0;
+}
+div.donation-processing-spinner {
+  height: 16px;
+  background: url(../images/loader.gif) no-repeat center;
+}

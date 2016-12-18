@@ -1,0 +1,275 @@
+<?php
+
+/**
+ * @file
+ * Provides a UI layer for Salesforce synchronization.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function salesforce_sync_ui_menu() {
+  $items['user/%/salesforce_sync'] = array(
+    'title' => 'Salesforce sync',
+    'page callback' => 'salesforce_sync_ui_user_details',
+    'page arguments' => array(1),
+    'access callback' => 'user_access',
+    'access arguments' => array('delete sync map records'),
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  $items['salesforce_sync/retrieve/%'] = array(
+    'title' => 'Salesforce sync retrieve',
+    'page callback' => 'salesforce_sync_ui_retrieve_object',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['admin/config/salesforce/salesforce-sync/%/delete'] = array(
+    'title' => 'Delete sync map',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('salesforce_sync_ui_map_removal_form_confirm', 4),
+    'access arguments' => array('delete sync map records'),
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_NONE,
+  );
+
+  $items['admin/salesforce-sync/%/%/%/sync'] = array(
+    'title' => 'Sync item',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('salesforce_sync_ui_sync_confirm', 2, 3, 4),
+    'access arguments' => array('manually sync items'),
+    'type' => MENU_CALLBACK,
+    'context' => MENU_CONTEXT_NONE,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function salesforce_sync_ui_permission() {
+  return array(
+    'delete sync map records' => array(
+      'description' => t('Remove the sync relationship between Drupal and Salesforce.'),
+      'title' => t('Delete sync map records'),
+      'restrict access' => TRUE,
+    ),
+    'manually sync items' => array(
+      'description' => t('Manually sync an item to Salesforce'),
+      'title' => t('Manually sync items'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Page callback for user/%/salesforce_sync.
+ *
+ * @param int $uid
+ *   The id of the user whose mapping records we want to examine.
+ */
+function salesforce_sync_ui_user_details($uid) {
+  $dest = 'user/' . $uid . '/salesforce_sync';
+  return salesforce_sync_ui_details_page($uid, 'user', 'user', $dest);
+}
+
+/**
+ * Page callback for saleforce sync details page.
+ *
+ * @param int $id
+ *   The drupal id of the mapping record.
+ * @param string $module
+ *   The module responsible for the item.
+ * @param string $delta
+ *   The sub-type of the item.
+ * @param string $dest
+ *   The path to where the details are being displayed.
+ */
+function salesforce_sync_ui_details_page($id, $module, $delta, $dest) {
+  $items = _salesforce_sync_get_synced_items($id, $module, $delta);
+  $rmids = array();
+  $labels = array();
+
+  // Item hasn't been exported, nothing to see here.
+  if (empty($items)) {
+    $sync_path = 'admin/salesforce-sync/';
+    $sync_path .= $module . '/';
+    $sync_path .= $delta . '/';
+    $sync_path .= $id . '/sync';
+
+    $output = array(
+      'salesforce_sync_ui_not_exported' => array(
+        '#type' => 'markup',
+        '#markup' => '<p>This ' . $delta . ' has not been exported to Salesforce.</p>',
+      ),
+      'salesforce_sync_ui_sync' => array(
+        '#type' => 'markup',
+        '#markup' => l(t('Export this @delta', array('@delta' => $delta)), $sync_path, array('query' => array('destination' => $dest))),
+      ),
+    );
+  }
+  else {
+    foreach ($items as $item) {
+      $labels[] = $item->object_type . ' ' . $item->sfid;
+      $rmids[] = $item->rmid;
+    }
+
+    $output = array(
+      'overview' => array(
+        '#type' => 'markup',
+        '#markup' => '<p>This ' . $delta . ' has been exported and is mapped to the following Salesforce objects.</p>',
+      ),
+      'items' => array(
+        '#items' => $labels,
+        '#theme' => 'item_list',
+      ),
+      'delete' => array(
+        '#type' => 'markup',
+        '#markup' => l(t('Remove all mapping records'), 'admin/config/salesforce/salesforce-sync/' . implode(',', $rmids) . '/delete', array('query' => array('destination' => $dest))),
+      ),
+    );
+  }
+
+  return $output;
+}
+
+/**
+ * Confirmation form for manually adding items to the Salesforce export queue.
+ */
+function salesforce_sync_ui_sync_confirm($form, &$form_state, $module, $delta, $drupal_id) {
+  // Pull the destination from the url.
+  $dest = filter_xss($_GET['destination']);
+
+  $form['module'] = array(
+    '#type' => 'hidden',
+    '#default_value' => $module,
+  );
+
+  $form['delta'] = array(
+    '#type' => 'hidden',
+    '#default_value' => $delta,
+  );
+
+  $form['drupal_id'] = array(
+    '#type' => 'hidden',
+    '#default_value' => $drupal_id,
+  );
+
+  return confirm_form($form,
+      t('Are you sure you want to sync %type %id with Salesforce?', array('%type' => $delta, '%id' => $drupal_id)),
+      $dest,
+      t('Clicking the Sync now button will add the %delta to the export queue.', array('%delta' => $delta)),
+      t('Sync now'),
+      t('Cancel')
+    );
+}
+
+/**
+ * Submit handler for the sync confirm form.
+ */
+function salesforce_sync_ui_sync_confirm_submit($form, &$form_state) {
+  if ($form_state['values']['confirm']) {
+    // Load the entity and add it to the queue.
+    $delta = $form_state['values']['delta'];
+    $drupal_id = $form_state['values']['drupal_id'];
+    $entity = entity_load($form_state['values']['module'], array($drupal_id));
+
+    // Delete the item from any other queue first.
+    salesforce_mapping_dequeue_entity($entity[$form_state['values']['drupal_id']], $form_state['values']['module']);
+
+    // Attempt to add the item to the queue.
+    $success = salesforce_mapping_send_entity_to_queue($entity[$form_state['values']['drupal_id']], $form_state['values']['module'], 'CREATE');
+
+    // salesforce_mapping_send_entity_to_queue returns FALSE if no fieldmap
+    // exists for the entity.
+    if ($success !== FALSE) {
+      drupal_set_message(t('%delta %drupal_id successfully added to the Saleforce export queue.', array('%delta' => ucfirst($delta), '%drupal_id' => $drupal_id)));
+    }
+    else {
+      drupal_set_message(t('%delta %drupal_id was not added to the Salesforce export queue. The most likely cause is there is no fieldmap defined.', array('%delta' => $delta, '%drupal_id' => $drupal_id)));
+    }
+  }
+}
+
+/**
+ * Confirmation form for deleting sync mapping records.
+ */
+function salesforce_sync_ui_map_removal_form_confirm($form, &$form_state, $rmids) {
+  // Pull the destination from the url.
+  $dest = filter_xss($_GET['destination']);
+
+  $form['dest'] = array(
+    '#type' => 'hidden',
+    '#default_value' => $dest,
+  );
+
+  // Load up the sync map records.
+  $record_maps = entity_load('salesforce_sync_map', explode(',', $rmids));
+
+  // If nothing is found, throw a 404.
+  if (empty($record_maps)) {
+    drupal_not_found();
+    exit();
+  }
+  else {
+    $form['rmids'] = array(
+      '#prefix' => '<ul>',
+      '#suffix' => '</ul>',
+      '#tree' => TRUE,
+    );
+
+    foreach ($record_maps as $rmid => $record_map) {
+      $form['rmids'][$rmid] = array(
+        '#type' => 'hidden',
+        '#value' => $rmid,
+        '#prefix' => '<li>',
+        '#suffix' => $record_map->object_type . ' (' . $record_map->sfid . ')</li>',
+      );
+
+      // Set some vars to use in the confirmation form title.
+      $type = $record_map->delta;
+      $drupal_id = $record_map->drupal_id;
+    }
+
+    return confirm_form($form,
+      t('Are you sure you want to delete these sync mapping records for %type %id.', array('%type' => $type, '%id' => $drupal_id)),
+      $dest,
+      t('This action cannot be undone.'),
+      t('Delete'),
+      t('Cancel')
+    );
+  }
+}
+
+/**
+ * Submit callback for the map removal form.
+ */
+function salesforce_sync_ui_map_removal_form_confirm_submit($form, &$form_state) {
+  if ($form_state['values']['confirm']) {
+    $rmids = $form_state['values']['rmids'];
+    if (!empty($rmids)) {
+      $record_maps = entity_load('salesforce_sync_map', array_keys($rmids));
+      foreach ($record_maps as $rmid => $record_map) {
+        $result = entity_delete('salesforce_sync_map', $rmid);
+        if ($result === FALSE) {
+          drupal_set_message(check_plain('Failed to delete mapping to ' . $record_map->object_type . ' ' . $record_map->sfid));
+        }
+        else {
+          module_invoke_all('salesforce_sync_mapping_delete', $record_map);
+          drupal_set_message(check_plain('Deleted sync mapping to ' . $record_map->object_type . ' ' . $record_map->sfid));
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Retrieves an object from Salesforce by id.
+ */
+function salesforce_sync_ui_retrieve_object($sfid) {
+  drupal_json_output(array('salesforce object here'));
+  exit();
+}

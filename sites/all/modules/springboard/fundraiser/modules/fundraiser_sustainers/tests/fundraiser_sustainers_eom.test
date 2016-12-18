@@ -1,0 +1,201 @@
+<?php
+/**
+ * @file
+ * Fundraiser sustainer tests for end of month behavior change implemented
+ * in version 4.6.3.
+ */
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+class FundraiserSustainersEOMTestCase extends DrupalUnitTestCase {
+
+  /**
+   * Implements getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser sustainers end of month handling',
+      'description' => 'Tests fundraiser sustainers end of month behavior change.',
+      'group' => 'Fundraiser Sustainers',
+    );
+  }
+
+  function setUp() {
+    // Load the include files.
+    module_load_include('inc', 'fundraiser_sustainers', 'includes/schedules/sustainersMonthlySchedule');
+    module_load_include('inc', 'fundraiser_sustainers', 'includes/schedules/sustainersBaseSchedule');
+    parent::setUp();
+  }
+
+  /**
+   * Ensures non-leap year Feburary's are handled correctly when the
+   * initial date is the 29th of the month.
+   */
+  function testTwentyNinethHandling() {
+    $start = date('Y-m-d', strtotime('2015-1-29'));
+    $end = date('Y-m-d', strtotime('+11 months', strtotime($start)));
+
+    $timestamps = $this->month_timestamps($start, $end);
+
+    foreach($timestamps as $timestamp) {
+      $month_number = date('n', $timestamp);
+      $day = date('d', $timestamp);
+      $month_name = date('F', $timestamp);
+
+      // If the month is Feburary the payment date should be the 28th because there is no 29th in a non-leap year.
+      if ($month_number == 2) {
+        $this->assertEqual(28, $day, 'Payment for Feburary falls on the 28th.');
+      }
+      else {
+        $this->assertEqual(29, $day, t('Payment for @month_name falls on the 29th (@date).', array('@month_name' => $month_name, '@date' => date('m-d-Y', $timestamp))));
+      }
+    }
+
+    // Ensure 12 dates were generated.
+    $this->assertEqual(12, count($timestamps), t('12 payment dates where generated the first year.'));
+  }
+
+  /**
+   * Ensures non-leap year Feburary's are handled correctly when the
+   * initial date is the 30th of the month.
+   */
+  function testThirtiethHandling() {
+    $start = date('Y-m-d', strtotime('2015-1-30'));
+    $end = date('Y-m-d', strtotime('+11 months', strtotime($start)));
+
+    $timestamps = $this->month_timestamps($start, $end);
+
+    foreach($timestamps as $timestamp) {
+      $month_number = date('n', $timestamp);
+      $day = date('d', $timestamp);
+      $month_name = date('F', $timestamp);
+
+      // If the month is Feburary the payment date should be the 28th because there is no 30th in a non-leap year.
+      if ($month_number == 2) {
+        $this->assertEqual(28, $day, 'Payment for Feburary falls on the 28th.');
+      }
+      else {
+        $this->assertEqual(30, $day, t('Payment for @month_name falls on the 30th (@date).', array('@month_name' => $month_name, '@date' => date('m-d-Y', $timestamp))));
+      }
+    }
+
+    // Ensure 12 dates were generated.
+    $this->assertEqual(12, count($timestamps), t('12 payment dates where generated the first year.'));
+  }
+
+  /**
+   * Ensures all generated dates are the last day in the month.
+   */
+  function testThirtyFirstHandling() {
+    $start = date('Y-m-d', strtotime('2015-1-31'));
+    $end = date('Y-m-d', strtotime('+11 months', strtotime($start)));
+
+    $timestamps = $this->month_timestamps($start, $end);
+
+    foreach ($timestamps as $timestamp) {
+      $is_last_day_in_month = $this->dayIsLastDayOfMonth($timestamp);
+      $date = date('m-d-Y', $timestamp);
+      $month_name = date('F', $timestamp);
+      $this->assertTrue($is_last_day_in_month, t('Payment for @month_name falls on the last day of the month, @date.', array('@month_name' => $month_name, '@date' => $date)));
+    }
+
+    // Ensure 12 dates were generated.
+    $this->assertEqual(12, count($timestamps), t('12 payment dates where generated the first year.'));
+  }
+
+  /**
+   * Ensures leap year Feburary's are handled correctly.
+   *
+   * Extend the dates over a 2 year period to test non-leap years as well.
+   */
+  function testLeapYearHandling() {
+    $start = date('Y-m-d', strtotime('2012-1-31'));
+    $end = date('Y-m-d', strtotime('+23 months', strtotime($start)));
+
+    $timestamps = $this->month_timestamps($start, $end);
+
+    $first_year_transaction_count = 0;
+
+    foreach($timestamps as $timestamp) {
+      $month_number = date('n', $timestamp);
+      $day = date('d', $timestamp);
+      $date = date('m-d-Y', $timestamp);
+      $year = date('Y', $timestamp);
+      $month_name = date('F', $timestamp);
+
+      // Keep track of the first year's count so we can check it later.
+      if ($year == 2012) {
+        $first_year_transaction_count++;
+      }
+
+      // If the month is Feburary the payment date should be the 29th in a leap year.
+      if ($month_number == 2 && $year == 2012) {
+        $this->assertEqual(29, $day, 'Payment for Feburary on a leap year falls on the 29th.');
+      }
+      else if ($month_number == 2 && $year == 2013) {
+        // Non-leap year should go back to the 28th.
+        $this->assertEqual(28, $day, 'Payment for Feburary on a non-leap year falls on the 28th.');
+      }
+      else {
+        $is_last_day_in_month = $this->dayIsLastDayOfMonth($timestamp);
+        $this->assertTrue($is_last_day_in_month, t('Payment for @month_name falls on the last day of the month, @date.', array('@month_name' => $month_name, '@date' => $date)));
+      }
+    }
+
+    // Ensure 12 dates were generated.
+    $this->assertEqual(12, $first_year_transaction_count, t('12 payment dates where generated the first year.'));
+  }
+
+  /**
+   * Ensures payment date that exists in all months is calculated properly.
+   */
+  function testNormalDayHandling() {
+    $start = date('Y-m-d', strtotime('2015-1-15'));
+    $end = date('Y-m-d', strtotime('+11 months', strtotime($start)));
+
+    $timestamps = $this->month_timestamps($start, $end);
+
+    foreach($timestamps as $timestamp) {
+      $day = date('d', $timestamp);
+      $month_name = date('F', $timestamp);
+
+      // Every payment should fall on the 15th of the month.
+      $this->assertEqual(15, $day, t('Payment for @month_name falls on the 15th (@date).', array('@month_name' => $month_name, '@date' => date('m-d-Y', $timestamp))));
+    }
+
+    // Ensure 12 dates were generated.
+    $this->assertEqual(12, count($timestamps), t('12 payment dates where generated the first year.'));
+  }
+
+  /**
+   * Determines if a given date is the last day of the month.
+   */
+  function dayIsLastDayOfMonth($timestamp) {
+    $days_in_month = date('t', $timestamp);
+    $computed_day = date('d', $timestamp);
+    return $days_in_month == $computed_day;
+  }
+
+  /**
+   * Create array of timestamps for sustainers.
+   *
+   * TODO: This would get removed and we'd call the actual fundraiser sustainers function instead.
+   */
+  function month_timestamps($start, $end) {
+    $schedule = new sustainersMonthlySchedule($start, $end);
+
+    // Create timestamps for each month until the end time is reached.
+    $processed = 0;
+
+    // This while loop matches the one sustainers uses to generate the series.
+    while ($processed <= $schedule->scheduleAmount()) {
+      // Get the next months charge date.
+      $next = $schedule->advanceDate($processed);
+      $times[] = $next->format('U');
+      $processed++;
+    }
+
+    return $times;
+  }
+}

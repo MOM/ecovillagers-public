@@ -1,0 +1,40 @@
+<?php
+/**
+ * @file
+ * Parent helper class for Gateway tests.
+ */
+
+abstract class FundraiserCommerceGatewayTestSetup extends FundraiserSetup {
+  protected $privileged_user;
+
+  public function setUp($modules = array(), $permissions = array()) {
+    parent::setUp($modules);
+
+    $permissions = array_merge($permissions, array(
+      'administer site configuration',
+      'administer nodes',
+      'create donation form',
+      'edit any donation form',
+      'configure store',
+      'administer payment methods',
+      'administer payments',
+      'view payments',
+    ));
+    $this->privileged_user = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->privileged_user);
+
+    $this->donation_form = $this->createDonationForm();
+  }
+
+  protected function _importGatewayRule($config) {
+    $rules_config = rules_import($config);
+    if ($existing_config = rules_config_load($rules_config->name)) {
+      // Copy DB id and remove the new indicator to overwrite the existing record.
+      $rules_config->id = $existing_config->id;
+      unset($rules_config->is_new);
+    }
+    $rules_config->active = 1;
+    $rules_config->save();
+  }
+
+}

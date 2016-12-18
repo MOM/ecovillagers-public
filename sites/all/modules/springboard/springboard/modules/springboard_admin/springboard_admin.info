@@ -1,0 +1,10 @@
+name = Springboard Administration
+description = Custom administration interface for Springboard-related functionality.
+package = Jackson River Springboard
+core = 7.x
+version = 7.x-4.x-dev
+
+dependencies[] = menu
+dependencies[] = springboard
+
+files[] = springboard_admin.menu.inc

@@ -1,0 +1,505 @@
+<?php
+
+/**
+ * @file
+ * Authenticates automated user actions using HMAC tokens.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_hmac_menu() {
+  $items['hmac/%/%'] = array(
+    'title' => '',
+    'description' => 'Endpoint to verify hmac encoded payloads',
+    'page callback' => 'springboard_hmac_verify_page',
+    'page arguments' => array(1, 2),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  $items['admin/config/hmac'] = array(
+    'title' => 'Springboard HMAC Settings',
+    'description' => 'Settings for Springboard HMAC',
+    'page callback' => 'springboard_hmac_settings_page',
+    'access arguments' => array('administer springboard hmac'),
+    'file' => 'springboard_hmac.admin.inc',
+    'file path' => drupal_get_path('module', 'springboard_hmac'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function springboard_hmac_permission() {
+  return array(
+    'administer springboard hmac' => array(
+      'title' => t('Administer Springboard HMAC'),
+      'description' => t('Perform administration tasks for Springboard HMAC.'),
+    ),
+  );
+}
+
+/**
+ * Allow other modules to add allowed action types.
+ *
+ * @return array
+ *   An array of allowed actions, e.g. "su" for sustainer upgrades.
+ */
+function springboard_hmac_allowed_actions() {
+  return module_invoke_all('springboard_hmac_allowed_actions');
+}
+
+/**
+ * Page callback.
+ *
+ * If there is a problem, show an error message to the user.
+ * If not, it is expected that another module has implemented
+ * hook_springboard_hmac_success(), and calls drupal_goto
+ * or some other redirect method, and this page will not be seen.
+ *
+ * @param string $payload
+ *   The base64 encoded payload string.
+ * @param string $hmac
+ *   The hmac hash.
+ *
+ * @return string
+ *   The error message, if any.
+ */
+function springboard_hmac_verify_page($payload, $hmac) {
+  $verify = springboard_hmac_verify($payload, $hmac);
+  $text = '';
+  $format = NULL;
+  if (!empty($verify)) {
+    drupal_set_title(variable_get('springboard_hmac_error_title', ''));
+    $message = variable_get('springboard_hmac_error_message', array('value' => t('An error occurred and we could not complete the operation.'), 'format' => NULL));
+    if (is_array($message)) {
+      $text = $message['value'];
+      $format = $message['format'];
+    }
+    else {
+      $text = $message;
+    }
+    if (user_access('administer springboard hmac')) {
+      drupal_set_message($verify, 'error');
+    }
+  }
+  return check_markup($text, $format);
+}
+
+/**
+ * Verify that a given payload has not been tampered with in route.
+ *
+ * @param string $payload
+ *   A payload string, base64 encoded.
+ * @param string $hmac
+ *   A hased message authentication token.
+ *
+ * @return null|string
+ *   An error message or NULL if successful.
+ */
+function springboard_hmac_verify($payload, $hmac) {
+
+  // Unset a previous session if it exists.
+  if (isset($_SESSION['springboard_hmac'])) {
+    unset($_SESSION['springboard_hmac']);
+  }
+
+  // Check to see if the token has been used previously.
+  $hmac_used = db_query('SELECT hmac from {springboard_hmac} WHERE hmac = :hmac', array(':hmac' => $hmac))->fetchField();
+  if (!empty($hmac_used)) {
+    $reason = t('Authentication token has already been used.');
+    return springboard_hmac_failure($reason);
+  }
+
+  // Decode the payload and stick it in an array.
+  $parsed_payload = springboard_hmac_parse_payload($payload);
+
+  // Check the payload for errors.
+  $failure_reason = springboard_hmac_verify_payload($parsed_payload);
+  if (!empty($failure_reason)) {
+    //springboard_hmac_save($hmac);
+    return springboard_hmac_failure($failure_reason, $parsed_payload);
+  }
+
+  // Get our key.
+  $key = springboard_hmac_get_key();
+  if (empty($key)) {
+    $failure_reason = t('A configuration problem prevented this action from completing.');
+    return springboard_hmac_failure($failure_reason, $parsed_payload);
+  }
+
+  // Regenerate the hmac token given the payload data. If it matches the payload
+  // has not been tampered with in route.
+  $verification_hmac = springboard_hmac_get_verification_hmac($parsed_payload, $key);
+
+  // If the orginal token matches the one we just generated the data is
+  // unaltered and we can continue.
+  if ($hmac != $verification_hmac) {
+    $reason = t('Authentication failed. Tokens do not match.');
+    //springboard_hmac_save($hmac);
+    return springboard_hmac_failure($reason, $parsed_payload);
+  }
+  else {
+    return springboard_hmac_success($parsed_payload, $hmac);
+  }
+}
+
+/**
+ * Check the payload for errors.
+ *
+ * @param array $parsed_payload
+ *   The decoded payload.
+ *
+ * @return null|
+ *   Error reason if validation fails, null if not.
+ */
+function springboard_hmac_verify_payload($parsed_payload) {
+
+  if (empty($parsed_payload)) {
+    return t('Could not locate usable data.');
+  }
+
+  // Check the action to see if the action is valid.
+  $allowed_actions = springboard_hmac_allowed_actions();
+  if (empty($parsed_payload['action']) || empty($allowed_actions) || !in_array($parsed_payload['action'], $allowed_actions)) {
+    return t('Unknown action.');
+  }
+
+  // Check the timestamp to see if the token is expired.
+  if (empty($parsed_payload['timestamp']) || ($parsed_payload['timestamp'] < time())) {
+    return t('Authentication token is missing or expired.');
+  }
+
+  // Verify the user ID.
+  if (empty($parsed_payload['uid'])) {
+    return t('User ID is missing.');
+  }
+
+  // Does the account not exist?
+  $account = user_load($parsed_payload['uid']);
+  if (empty($account->uid)) {
+    return t('Invalid User ID.');
+  }
+
+  // Is there a non-anonymous session and
+  // does the user id not match the payload ID?
+  global $user;
+  if (!user_access('administer springboard hmac') && ($user->uid > 0 && $user->uid != $parsed_payload['uid'])) {
+    return t('Payload User ID does not match User ID.');
+  }
+
+  // Allow other modules to do their own verification.
+  $hook_name = 'springboard_hmac_verify_payload';
+  foreach (module_implements($hook_name) as $module) {
+    $reason = module_invoke($module, $hook_name, $parsed_payload);
+    if (!empty($reason)) {
+      return $reason;
+    }
+  }
+
+  return NULL;
+}
+
+/**
+ * Confirm the HMAC payload's user ID matches the Springboard cookie.
+ */
+function springboard_hmac_verify_user_cookie($payload) {
+  if (!user_is_logged_in()) {  // If the user is logged in, don't worry about the cookie.
+    $cookie = springboard_cookie_get_cookie();
+    if (!user_access('administer springboard hmac') && (empty($cookie['uid']) || $payload['uid'] != $cookie['uid'])) {
+      return t('Payload User ID does not match Springboard Cookie User ID.');
+    }
+  }
+  return NULL;
+}
+
+/**
+ * HMAC authentication was successful.
+ *
+ * Create the session vars and allow other modules to respond.
+ * Return an error message if no modules implement the hook.
+ *
+ * @param array $parsed_payload
+ *   The payload values.
+ * @param string $hmac
+ *    The hash.
+ *
+ * @return null|string
+ *   A failure message if failed, null on success.
+ */
+function springboard_hmac_success($parsed_payload, $hmac) {
+
+  springboard_hmac_create_payload_session($parsed_payload, $hmac);
+
+  // Is it expected that modules using this hook will always
+  // implement drupal_goto()?
+  $invoke = module_invoke_all('springboard_hmac_success', $parsed_payload);
+
+  if (empty($invoke)) {
+    $reason = t('Either no dependencies are enabled, or none have successfully redirected the request.');
+    return springboard_hmac_failure($reason, $parsed_payload);
+  }
+
+  return NULL;
+}
+
+/**
+ * HMAC authentication failure.
+ *
+ * Log watchdog errors, allow other modules to act on failure,
+ * and return error message.
+ *
+ * @param string $reason
+ *   The failure reason.
+ *
+ * @return string
+ *   The reason.
+ */
+function springboard_hmac_failure($reason, $parsed_payload = array()) {
+  $variables = array();
+  $message = $reason;
+  if (!empty($parsed_payload)) {
+    foreach ($parsed_payload as $key => $payload) {
+      $message .= ' | ' . $key . ': @' . $key;
+      $variables['@' . $key] = $payload;
+    }
+  }
+
+  watchdog('springboard_hmac', $message, $variables, WATCHDOG_ERROR);
+  module_invoke_all('springboard_hmac_failure', $reason, $parsed_payload);
+
+  return $reason;
+}
+
+/**
+ * Create a token.
+ *
+ * Can be called from other modules to create a rollback token.
+ *
+ * @param array $values
+ *    The constuent values of the payload.
+ * @param string $key
+ *   The secure prepopulate key.
+ *
+ * @return string
+ *   The hash.
+ */
+function springboard_hmac_create_hmac($values, $key) {
+  $hmac = base64_encode(hash_hmac('sha256', (string) implode('.', $values), (string) $key, TRUE));
+  $hmac = strtr($hmac, array('+' => '-', '/' => '_', '=' => ''));
+  return $hmac;
+}
+
+/**
+ * Parses a message payload string into an array.
+ *
+ * @param array $payload
+ *    The payload from the clicked link.
+ *
+ * @return array
+ *   The payload separated into constituent elements.
+ */
+function springboard_hmac_parse_payload($payload) {
+  // Return the message with delimiter removed.
+  $parsed_payload = array();
+  $message = explode('.', base64_decode($payload));
+  if (count($message) > 3) {
+    $parsed_payload = array(
+      'uid' => $message[0],
+      'timestamp' => $message[1],
+      'action' => $message[2],
+    );
+
+    $parsed_payload += array_splice($message, 3);
+  }
+  return $parsed_payload;
+}
+
+
+/**
+ * Gets a key from secure prepopulate.
+ *
+ * @return mixed
+ *    The secure key, or false.
+ */
+function springboard_hmac_get_key() {
+  $kv = secure_prepopulate_get_key_and_vector();
+  if (!empty($kv)) {
+    return $kv['key'] . $kv['iv'];
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Returns a URL-compatible base64-encoded hmac token.
+ *
+ * @param array $payload
+ *   The payload values.
+ * @param string $key
+ *    The key provided by secure prepoulate module.
+ *
+ * @return string
+ *   The hamc token.
+ */
+function springboard_hmac_get_verification_hmac($payload, $key) {
+  $hmac = base64_encode(hash_hmac('sha256', (string) implode('.', $payload), (string) $key, TRUE));
+  $hmac = strtr($hmac, array('+' => '-', '/' => '_', '=' => ''));
+  return $hmac;
+}
+
+/**
+ * Save a used hmac token to the db.
+ *
+ * @param string $hmac
+ *    Never should be an update.
+ */
+function springboard_hmac_save($hmac) {
+  $data = array(
+    'hmac' => $hmac,
+  );
+  drupal_write_record('springboard_hmac', $data);
+}
+
+/**
+ * Create a session entry with the payload values.
+ *
+ * @param array $payload
+ *    The payload values.
+ * @param string $hmac
+ *    The hmac is included so that a submodule may save it after use.
+ */
+function springboard_hmac_create_payload_session($payload, $hmac) {
+  $_SESSION['springboard_hmac'] = $payload;
+  $_SESSION['springboard_hmac']['hmac'] = $hmac;
+}
+
+/**
+ * Implements hook_springboard_admin_admin_menu_items_alter().
+ */
+function springboard_hmac_springboard_admin_admin_menu_items_alter(&$items) {
+  if (user_access('administer springboard hmac')) {
+    $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/config/hmac'] = array(
+      'link_path' => 'admin/config/hmac',
+      'link_title' => 'Springboard HMAC Settings',
+      'menu_name' => 'springboard_admin_menu',
+      'expanded' => 0,
+      'customized' => 1,
+      'weight' => -2,
+    );
+  }
+}
+
+/**
+ * Implements hook_springboard_admin_alias_patterns().
+ */
+function springboard_hmac_springboard_admin_alias_patterns() {
+  return array(
+    // Springboard Social config page.
+    'admin/config/hmac' => array(
+      'path' => array(
+        'regex' => '|^/admin/config/hmac$|',
+        'replacement' => 'admin/config/hmac',
+      ),
+      'alias' => array(
+        'regex' => '|^springboard/hmac$|',
+        'replacement' => 'springboard/hmac',
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_springboard_hmac_allowed_actions().
+ */
+function springboard_hmac_springboard_hmac_allowed_actions() {
+  return 'lr';
+}
+
+/**
+ * Implements hook_springboard_hmac_success().
+ */
+function springboard_hmac_springboard_hmac_success($payload) {
+  // Built-in actions.
+  switch ($payload['action']) {
+    case 'lr':  // Log in and redirect.
+      // We need a path to redirect to.
+      if (!empty($payload[0])) {
+        // Assemble the redirect URL.
+        $param = urldecode($payload[0]);
+        $query = array();
+        if ($qs_pos = strpos($param, '?')) {
+          $path = substr($param, 0, $qs_pos);
+          parse_str(substr($param, $qs_pos + 1), $query);
+        } else {
+          $path = $param;
+        }
+        $query = array_merge($query, drupal_get_query_parameters());  // Preserve any query string parameters from outside the HMAC.
+        $goto = array($path, array('query' => $query));
+
+        // Log in the user, if not logged in already.
+        global $user;
+        if (!user_is_logged_in()) {
+          // Prep the log-in.
+          $user = user_load($payload['uid']);
+          $form_state = array('uid' => $payload['uid'], 'redirect' => $goto);  // Include redirect info on the off chance some hook preempts our drupal_goto.
+
+          // Is Auto-Logout enabled, and is there a timeout override parameter in the HMAC?
+          // Note: We do this only for a new log-in. An already-logged-in user's timeout shouldn't change mid-session.
+          if (module_exists('autologout') && isset($payload[1]) && is_numeric($payload[1])) {
+            // Is the override necessary?
+            watchdog('trace', '_autologout_get_user_timeout: ' . _autologout_get_user_timeout($user->uid));
+            if (_autologout_get_user_timeout($user->uid) > $payload[1]) {
+              watchdog('trace', 'setting custom autologout setting');
+              // Stash this user's configured timeout if one is set.
+              variable_set('springboard_hmac_autologout_user_' . $user->uid, variable_get('autologout_user_' . $user->uid, "N/A"));
+              variable_set('autologout_user_' . $user->uid, $payload[1]);
+            }
+          }
+
+          // Execute the log-in.
+          user_login_finalize($form_state);
+        }
+        // If user was logged in already, just redirect.
+        call_user_func_array('drupal_goto', $goto);
+
+      }
+      break;
+  }
+}
+
+/**
+ * Implements hook_springboard_hmac_verify_payload().
+ */
+function springboard_hmac_springboard_hmac_verify_payload($payload) {
+  // Built-in actions.
+  switch ($payload['action']) {
+    case 'lr':  // Log in and redirect.
+      // Require a non-logged-in user to match the Springboard cookie.
+      return springboard_hmac_verify_user_cookie($payload);
+  }
+  return NULL;
+}
+
+/**
+ * Implements hook_user_logout().
+ */
+function springboard_hmac_user_logout($user) {
+  // If we set a one-session inactivity timeout for autologout, delete it.
+  $original_timeout = variable_get('springboard_hmac_autologout_user_' . $user->uid, FALSE);
+  if ($original_timeout != FALSE) {
+    if (is_numeric($original_timeout)) {
+      // Switch back to the original timeout.
+      variable_set('autologout_user_' . $user->uid, $original_timeout);
+    } else {
+      // Nothing to switch back to, so kill the autologout variable.
+      variable_del('autologout_user_' . $user->uid);
+    }
+    // Clear our variable too. We're done here.
+    variable_del('springboard_hmac_autologout_user_' . $user->uid);
+  }
+}

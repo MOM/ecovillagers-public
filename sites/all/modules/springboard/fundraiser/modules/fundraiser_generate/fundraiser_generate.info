@@ -1,0 +1,7 @@
+name = Fundraiser generate
+description = Creates donation submissions for testing purposes.
+core = 7.x
+package = Jackson River Springboard - development
+dependencies[] = fundraiser
+dependencies[] = devel_generate
+version = 7.x-4.x-dev

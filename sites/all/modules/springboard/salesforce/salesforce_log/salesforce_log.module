@@ -1,0 +1,422 @@
+<?php
+
+/**
+ * @file
+ * Provides logging of the batch processing of the Salesforce integration.
+ */
+
+/**
+ * @name core_drupal_hooks
+ * @{
+ */
+
+/**
+ * Implements hook_cron().
+ */
+function salesforce_log_cron(){
+  // Cleanup the salesforce_log_item table.
+  $row_limit = variable_get('salesforce_log_item_row_limit', 0);
+  // For row limit n, get the lid of the nth row in descending lid order.
+  // Counting the most recent n rows avoids issues with lid number sequences,
+  // e.g. auto_increment value > 1 or rows deleted directly from the table.
+  if ($row_limit > 0) {
+    $min_row = db_select('salesforce_log_item', 'i')
+      ->fields('i', array('lid'))
+      ->orderBy('lid', 'DESC')
+      ->range($row_limit - 1, 1)
+      ->execute()->fetchField();
+    // Delete all table entries older than the nth row, if nth row was found.
+    if ($min_row) {
+      db_delete('salesforce_log_item')
+        ->condition('lid', $min_row, '<')
+        ->execute();
+    }
+  }
+
+  // Cleanup the salesforce_log_batch table.
+  $row_limit = variable_get('salesforce_log_batch_row_limit', 0);
+  // For row limit n, get the bid of the nth row in descending bid order.
+  // Counting the most recent n rows avoids issues with bid number sequences,
+  // e.g. auto_increment value > 1 or rows deleted directly from the table.
+  if ($row_limit > 0) {
+    $min_row = db_select('salesforce_log_batch', 'b')
+      ->fields('b', array('bid'))
+      ->orderBy('bid', 'DESC')
+      ->range($row_limit - 1, 1)
+      ->execute()->fetchField();
+    // Delete all table entries older than the nth row, if nth row was found.
+    if ($min_row) {
+      db_delete('salesforce_log_batch')
+        ->condition('bid', $min_row, '<')
+        ->execute();
+    }
+  }
+
+}
+
+/**
+ * Implements hook_entity_info().
+ */
+function salesforce_log_entity_info() {
+  return array(
+    'salesforce_log_item' => array(
+      'label' => t('Salesforce log item'),
+      'entity class' => 'Entity',
+      'base table' => 'salesforce_log_item',
+      'entity keys' => array(
+        'id' => 'lid',
+        'label' => 'item_id',
+      ),
+      'fieldable' => FALSE,
+      'exportable' => FALSE,
+      'module' => 'salesforce_log',
+      'deletion callback' => '_salesforce_log_item_entity_delete',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function salesforce_log_menu() {
+  // Reports landing page. The actual report pages are handled by views.
+  $items['admin/reports/salesforce'] = array(
+    'title' => 'Salesforce',
+    'description' => 'View salesforce reports, updates, and errors.',
+    'page callback' => 'salesforce_log_admin_menu_block_page',
+    'access arguments' => array('view salesforce batch logs'),
+    'weight' => 5,
+    'position' => 'left',
+    'file' => 'includes/salesforce_log.admin.inc',
+  );
+
+  // Settings form.
+  $items['admin/config/salesforce/salesforce-log'] = array(
+    'title' => 'Logging',
+    'description' => 'Configuration settings for the Salesforce batch log.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('salesforce_log_settings'),
+    'access arguments' => array('view salesforce batch logs'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'includes/salesforce_log.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function salesforce_log_permission() {
+  return array(
+    'view salesforce batch logs' => array(
+      'title' => t('View Salesforce logs'),
+      'description' => t('View the Salesforce logs.'),
+    ),
+  );
+}
+
+/**
+ * @} core_drupal_hooks
+ */
+
+/**
+ * Implements hook_views_api().
+ */
+function salesforce_log_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'salesforce_log') . '/includes',
+  );
+}
+
+/**
+ * Implements hook_views_pre_view().
+ *
+ * Adding our js files for our views.
+ */
+function salesforce_log_views_pre_view(&$view, &$display_id, &$args) {
+  $views = array(
+    'salesforce_log_item',
+    'salesforce_log_batch',
+    'salesforce_queue',
+  );
+  if (in_array($view->name, $views)) {
+    $path = drupal_get_path('module', 'salesforce_log');
+    drupal_add_js($path . '/js/jquery.expander.min.js');
+    drupal_add_js($path . '/js/salesforce-log.admin.js');
+  }
+}
+
+/**
+ * Implements hook_salesforce_queue_batch_alter().
+ *
+ * Add our log related data to the batch object and items.
+ */
+function salesforce_log_salesforce_queue_batch_alter(&$batch, $queue, $processor) {
+  $batch['start'] = time();
+  $batch['module'] = $batch['items'][0]->module;
+  $batch['delta'] = $batch['items'][0]->delta;
+  drupal_write_record('salesforce_log_batch', $batch);
+  foreach ($batch['items'] as $item) {
+    $record = _salesforce_log_prepare_item_record($item);
+    $record->bid = $batch['bid'];
+    $record->status = 'enqueued';
+    drupal_write_record('salesforce_log_item', $record);
+    $item->lid = $record->lid;
+  }
+}
+
+/**
+ * Implements hook_salesforce_sync_fail_item().
+ */
+function salesforce_log_salesforce_sync_fail_item($item, $message, $result) {
+  $record = _salesforce_log_prepare_item_record($item);
+  $record->status = 'failed';
+  // If the result is an object grab the message from there, otherwise use the
+  // main message variable.
+  if (is_object($result)) {
+    $record->error_code = !empty($result->faultcode) ? $result->faultcode : $result->errors[0]->statusCode;
+    $record->message = !empty($result->faultstring) ? $result->faultstring : $result->errors[0]->message;
+  }
+  else {
+    $record->error_code = '';
+    $record->message = $message;
+  }
+  $primary_keys = isset($record->lid) ? array('lid') : array();
+  drupal_write_record('salesforce_log_item', $record, $primary_keys);
+}
+
+/**
+ * Implements hook_salesforce_sync_pass_item().
+ */
+function salesforce_log_salesforce_sync_pass_item($item, $result) {
+  $record = _salesforce_log_prepare_item_record($item);
+  $record->status = 'synced';
+  $record->sfid = $result->id;
+  $primary_keys = isset($record->lid) ? array('lid') : array();
+  drupal_write_record('salesforce_log_item', $record, $primary_keys);
+}
+
+/**
+ * Implements hook_salesforce_queue_postprocess_batch().
+ */
+function salesforce_log_salesforce_queue_postprocess_batch($batch, $results, $queue) {
+  $batch['end'] = time();
+  // In a soapfault there are no results, all have failed.
+  if (!empty($results)) {
+    $batch['successes'] = count(array_filter($results, '_salesforce_log_array_filter_batch_successes'));
+    $batch['failures'] = $batch['count'] - $batch['successes'];
+  }
+  else {
+    $batch['successes'] = 0;
+    $batch['failures'] = $batch['count'];
+  }
+  drupal_write_record('salesforce_log_batch', $batch, array('bid'));
+}
+
+/**
+ * Array filter callback to find the count of successfully synced batch items.
+ */
+function _salesforce_log_array_filter_batch_successes($result) {
+  if ((int) $result->success === 1) {
+    return TRUE;
+  }
+}
+
+/**
+ * Prepare an item for being written to the log table.
+ *
+ * @param object $item
+ *   Queue item.
+ */
+function _salesforce_log_prepare_item_record($item) {
+  $record = new stdClass();
+  // Values from the queue.
+  $record->item_id = isset($item->item_id) ? $item->item_id : 0;
+  $record->drupal_id = isset($item->drupal_id) ? $item->drupal_id : 0;
+  $record->module = isset($item->module) ? $item->module : '';
+  $record->delta = isset($item->delta) ? $item->delta : '';
+  $record->object_type = $item->object_type;
+  $record->operation = $item->operation;
+  $record->dedupe_field = isset($item->dedupe_field) ? $item->dedupe_field : NULL;
+  $record->retries = isset($item->retries) ? $item->retries : 0;
+  $record->queue = isset($item->queue) ? $item->queue : '';
+  $record->sobject = json_encode($item->sobject);
+
+  // Values from the log process.
+  if (!empty($item->lid)) {
+    $record->lid = $item->lid;
+  }
+  if (!empty($item->bid)) {
+    $record->bid = $item->bid;
+  }
+
+  return $record;
+}
+
+/**
+ * Delete function for the log item entity.
+ */
+function _salesforce_log_item_entity_delete($lid) {
+  db_delete('salesforce_log_item')
+    ->condition('lid', $lid)
+    ->execute();
+}
+
+/**
+ * Helper to return a list of handler modules, or information on a specific one.
+ */
+function salesforce_log_info($module = NULL) {
+  static $modules;
+  if (empty($modules)) {
+    // Gather modules that provide mapping support for generic objects.
+    $modules = module_invoke_all('salesforce_log_info');
+    drupal_alter('salesforce_log_info', $modules);
+  }
+  if (is_null($module)) {
+    return $modules;
+  }
+  return isset($modules[$module]) ? $modules[$module] : array();
+}
+
+/**
+ * Implements hook_salesforce_log_info().
+ */
+function salesforce_log_salesforce_log_info() {
+  return array(
+    'watchdog' => array(
+      'log-00' => t('Any log message about Salesforce'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_token_info().
+ */
+function salesforce_log_token_info() {
+  // Tokens taken from logging_alerts/watchdog_rules module.
+  $type = array(
+    'name' => t('Watchdog tokens'),
+    'description' => t('Watchdog tokens'),
+    'needs-data' => 'watchdog',
+  );
+  $watchdog['ip'] = array(
+    'name' => t("Watchdog ip"),
+    'description' => t('The IP address where the request for the page came from.'),
+  );
+  $watchdog['link'] = array(
+    'name' => t("Watchdog link"),
+    'description' => t('An informational link provided by the module calling watchdog.'),
+  );
+  $watchdog['message'] = array(
+    'name' => t("Watchdog message"),
+    'description' => t('The text of the message to be logged.'),
+  );
+  $watchdog['referer'] = array(
+    'name' => t("Watchdog referer"),
+    'description' => t('The page that referred the user to the page where the event occurred.'),
+  );
+  $watchdog['request_uri'] = array(
+    'name' => t("Watchdog request URI"),
+    'description' => t('The request URI for the page the event happened in.'),
+  );
+  $watchdog['severity'] = array(
+    'name' => t("Watchdog severity"),
+    'description' => t('The degree of severity of the event.'),
+  );
+  $watchdog['timestamp'] = array(
+    'name' => t("Watchdog timestamp"),
+    'description' => t('The UNIX timetamp of the date/time the event occurred.'),
+  );
+
+  return array(
+    'types' => array('watchdog' => $type),
+    'tokens' => array('watchdog' => $watchdog),
+  );
+}
+
+/**
+ * Implements hook_tokens().
+ */
+function salesforce_log_tokens($type, $object = NULL, $options = array()) {
+  // Tokens taken from logging_alerts/watchdog_rules module.
+  $tokens = array();
+  if ($type == 'watchdog' || $type == 'all') {
+    $tokens = array(
+      'ip' => $object['ip'],
+      'link' => $object['link'],
+      'message' => $object['message'],
+      'request_uri' => $object['request_uri'],
+      'referer' => $object['referer'],
+      'severity' => $object['severity'],
+      'timestamp' => $object['timestamp'],
+    );
+    return $tokens;
+  }
+}
+
+/**
+ * Implements hook_trigger_info().
+ */
+function salesforce_log_trigger_info() {
+  $triggers = array();
+  $module_info = salesforce_log_info();
+  foreach ($module_info['watchdog'] as $id => $label) {
+    $triggers['salesforce_log-' . $id] = array(
+      'label' => $label,
+    );
+  }
+  return array(
+    'salesforce_log' => $triggers,
+  );
+}
+
+/**
+ * Implements hook_watchdog().
+ */
+function salesforce_log_watchdog($watchdog_message) {
+  $msg = &$watchdog_message;
+  // Execute that an event as occured when a Salesforce message comes through
+  // and the rules and trigger modules are enabled.
+  if ($watchdog_message['type'] == 'salesforce' && (module_exists('rules') || module_exists('trigger'))) {
+    // The 'Any Salesforce message' event is always included.
+    $ids = array('salesforce_log-log-00');
+    if (isset($watchdog_message['variables']['@id'])) {
+      $ids[] = 'salesforce_log-' . $watchdog_message['variables']['@id'];
+    }
+    global $user;
+    foreach ($ids as $id) {
+      // Support the rules module.
+      if (module_exists('rules')) {
+        rules_invoke_event($id,
+          (!empty($msg['ip']) ? $msg['ip'] : ''),
+          (!empty($msg['link']) ? $msg['link'] : ''),
+          (!empty($msg['message']) ? $msg['message'] : ''),
+          (!empty($msg['referer']) ? $msg['referer'] : ''),
+          (!empty($msg['request_uri']) ? $msg['request_uri'] : ''),
+          (!empty($msg['severity']) ? $msg['severity'] : 7),
+          (!empty($msg['timestamp']) ? $msg['timestamp'] : 0),
+          (!empty($msg['uid']) ? $msg['uid'] : 0),
+          (!empty($msg['user']) ? $msg['user'] : $user)
+        );
+      }
+      // Support the trigger module.
+      // The rules module is much more robust, however, it is also much more
+      // combersome.  Having trigger as a fallback allows for critical messages
+      // to continue to get through if the rules module needs to be throttled
+      // during high load.
+      if (module_exists('trigger')) {
+        global $user;
+        foreach ($ids as $id) {
+          $aids = trigger_get_assigned_actions($id);
+          $context = array(
+            'hook' => 'watchdog',
+            'user' => $user,
+          );
+          actions_do(array_keys($aids), $watchdog_message, $context);
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,679 @@
+<?php
+
+/**
+ * @file
+ * Fundraiser offline, provide a way for an administrative user to sumbit a fundraiser
+ * on behalf of another account. Handles fundraisers coming from outside of the site.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function fundraiser_offline_menu() {
+  $items['node/%node/offline'] = array(
+    'access callback' => 'fundraiser_offline_access_offline',
+    'access arguments' => array(1),
+    'page callback' => 'fundraiser_offline_redirect',
+    'page arguments' => array(1),
+    'title' => 'Create an offline donation',
+    'weight' => 5,
+    'type' => MENU_LOCAL_ACTION,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_url_outbound_alter().
+ */
+function fundraiser_offline_url_outbound_alter(&$path, &$options, $original_path) {
+  // Look for links to offline mode. When found pass along any
+  // existing query string parameters.
+  if (preg_match('|^node/([0-9]*)/offline?|', $path)) {
+    $parts = drupal_parse_url(request_uri());
+    $options['query'] = $parts['query'];
+  }
+}
+
+/**
+ * Access callback for checking to see if the form can
+ * be placed into offline mode.
+ */
+function fundraiser_offline_access_offline($node) {
+  $offline_mode = !empty($_GET['offline']) ? $_GET['offline'] : FALSE;
+  if (fundraiser_is_donation_type($node->type) && user_access('submit donations offline') && !$offline_mode) {
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+/**
+ * Callback for redirecting a form into offline mode.
+ */
+function fundraiser_offline_redirect($node) {
+  // Parse the url to get any existing query string params.
+  $parts = drupal_parse_url(request_uri());
+  $parts['query']['offline'] = 'true';
+  drupal_goto('node/' . $node->nid, array('query' => $parts['query']));
+}
+
+/**
+ * Implements hook_permission().
+ */
+function fundraiser_offline_permission() {
+  return array(
+    'submit donations offline' => array(
+      'title' => t('Submit donations offline'),
+      'description' => t('Grants access to toggle "offline" mode on donation forms and submit offline donations.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_mail_alter(). We want to intercept any email comfirmations coming out to the user.
+ */
+function fundraiser_offline_mail_alter(&$message) {
+  // Intercept all emails being sent in response to actions on this page. *All* of them.
+  // This includes rules triggered emails, so we need to keep that in mind while working.
+  if (_fundraiser_offline_is_offline()) {
+    $message['send'] = FALSE; // Cancel the email, core versions 7.12 and later.
+  }
+}
+
+
+/**
+ * Implements hook_form_alter().
+ */
+function fundraiser_offline_form_alter(&$form, $form_state, $form_id) {
+  // Current form is a webform...
+  if (strpos($form_id, 'webform_client_form_') !== FALSE && !empty($form['#node'])) {
+    $node = $form['#node'];
+    // .. that is also a Fundraiser donation form ...
+    if (fundraiser_is_donation_type($node->type)) {
+      $offline_mode = FALSE;
+      if (!empty($_GET['offline']) || !empty($form_state['values']['offline_mode'])) {
+        $offline_mode = TRUE;
+      }
+      // .. and Offline mode is enabled.
+      if ($offline_mode && user_access('submit donations offline')) {
+        $form['offline_mode'] = array(
+          '#type' => 'value',
+          '#value' => TRUE,
+        );
+        $form['#attributes']['class'][] = 'offline';
+        $form['#node']->fundraiser_offline = TRUE;
+        // Make MS fields visible.
+        if (module_exists('market_source')) {
+          if (isset($form['submitted']['ms'])) {
+            $form['submitted']['ms']['#type'] = 'textfield';
+          }
+          if (isset($form['submitted']['cid'])) {
+            $form['submitted']['cid']['#type'] = 'textfield';
+            $form['submitted']['cid']['#default_value'] = isset($_GET['cid']) ? $_GET['cid'] : '';
+          }
+        }
+        // Disable validation on mail field. This is a story in two parts.
+        // Act 1 involves stripping the element validate callback
+        // set by Fundraiser. In the 2nd act we conditionally create
+        // a placeholder value for this field before Webform User's validation
+        // throws an error on missing email address.
+        _fundraiser_offline_form_not_required($form, array('mail'));
+        _fundraiser_offline_modify_type($form, array('mail'), 'textfield');
+        _fundraiser_offline_form_not_validate($form, array('mail', 'card_cvv'));
+        // We only need validation and submit handlers if the form is in
+        // offline mode.
+        $form['#submit'][] = 'fundraiser_offline_donation_form_submit';
+        $form['#validate'][] = 'fundraiser_offline_donation_form_validate';
+        // Back out webform user's validation callback as it checks email.
+        $form['#validate'] = array_diff($form['#validate'], array('webform_user_webform_validate'));
+        // Alter field required states on CC payment fields.
+        if (!empty($form['submitted']['payment_information']['payment_fields']['credit'])) {
+          unset($form['submitted']['payment_information']['payment_fields']['credit']['#states']['required']);
+          unset($form['submitted']['payment_information']['payment_fields']['credit']['#states']['optional']);
+          // Re-add required field flags for cc# and exp date
+          //$form['submitted']['payment_information']['payment_fields']['credit']['card_number']['#required'] = TRUE;
+          if (!empty($form['submitted']['payment_information']['payment_fields']['credit']['expiration_date'])) {
+            foreach (element_children($form['submitted']['payment_information']['payment_fields']['credit']['expiration_date']) as $field) {
+              $form['submitted']['payment_information']['payment_fields']['credit']['expiration_date'][$field]['#required'] = TRUE;
+            }
+          }
+        }
+      }
+    }
+  }
+  // Add "offline only" UI to payment methods on donation form edit screen.
+  if (strstr($form_id, '_node_form') !== FALSE && fundraiser_is_donation_type($form['#node']->type)) {
+    $gateway_elements = element_children($form['payment_methods']['gateways']);
+    // Only available on node edit forms, missing on node add form.
+    $node_gateways = isset($form_state['node']->gateways) ? $form_state['node']->gateways : FALSE;
+    if (!$node_gateways) {
+      // Must be an edit form, try for defaults:
+      $node_gateways = variable_get('fundraiser_payment_method_config_defaults', array());
+    }
+    $offline_only = 0;
+    foreach ($gateway_elements as $gateway) {
+      $form['payment_methods']['gateways'][$gateway]['offline_only'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Offline Only'),
+        '#default_value' => isset($node_gateways[$gateway]['offline_only']) ? $node_gateways[$gateway]['offline_only'] : 0,
+      );
+    }
+  }
+  // Add "offline only" UI to default payment method configuration on admin
+  // screen.
+  if ($form_id == 'fundraiser_admin_settings') {
+    $defaults = variable_get('fundraiser_payment_method_config_defaults', array());
+    $gateway_elements = element_children($form['fundraiser']['fundraiser_payment_method_config_defaults']);
+    foreach ($gateway_elements as $gateway) {
+      $form['fundraiser']['fundraiser_payment_method_config_defaults'][$gateway]['offline_only'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('Offline Only'),
+        '#default_value' => isset($defaults[$gateway]['offline_only']) ? $defaults[$gateway]['offline_only'] : 0,
+      );
+    }
+  }
+}
+
+/**
+ * Submission callback for donation forms.
+ */
+function fundraiser_offline_donation_form_submit($form, &$form_state) {
+  $nid = $form['#node']->nid;
+  $query = array(
+    'offline' => 'true',
+  );
+  // If a campaign id was submitted with the offline donation we want this
+  // value to persist when the form reloads. This value is added to the redirect
+  // query string and then set in the form element when the form re-renders.
+  if (isset($form_state['input']['submitted']['cid'])) {
+    $query['cid'] = $form_state['input']['submitted']['cid'];
+  }
+  $form_state['redirect'] = array("node/$nid");
+  $form_state['redirect'][] = array('query' => $query);
+}
+
+/**
+ * Validation callback for offline donations.
+ */
+function fundraiser_offline_donation_form_validate(&$form, &$form_state) {
+  // Webform User automatically validates the email field so we need to
+  // get in front of it and generate a placeholder if the form submission
+  // did not include an email address.
+  if ($form_state['values']['offline_mode']) {
+    $form_state['webform_user_skip_user_check'] = TRUE;
+  }
+
+  $fields = _webform_user_flatten_tree($form_state['values']['submitted'], $form['#node']->nid);
+  if (!isset($fields['mail'])) {
+    $mail = sprintf('%s@%s', time(), 'sb-offline-donation.com');
+
+    // Set the value on the field's form_state key.
+    $mail_field = _fundraiser_webform_find_field($form, _fundraiser_webform_parse_component($form['#node']->nid, 'mail'));
+    drupal_array_set_nested_value($form_state['values'], $mail_field['#parents'], $mail);
+  }
+}
+
+/**
+ * Implements hook_node_load().
+ */
+function fundraiser_offline_node_load($nodes, $types) {
+  global $user;
+  $offline = isset($_GET['offline']) ? $_GET['offline'] : FALSE;
+  $can_offline = user_access('submit donations offline', $user);
+  foreach ($nodes as $node) {
+    // If this isn't a fundraiser type, ignore it.
+    if (fundraiser_is_donation_type($node->type)) {
+      $nodes[$node->nid]->fundraiser_offline = $offline && $can_offline;
+    }
+  }
+}
+
+/**
+ * Implements hook_commerce_payflow_api_request_alter().
+ */
+function fundraiser_offline_commerce_payflow_api_request_alter(&$nvp, $order, $payment_method) {
+  // Use email from submitted donation data instead of order if offline.
+  if (!empty($_GET['offline'])) {
+    $donation = fundraiser_donation_get_donation($order->order_id);
+    if (!empty($donation->submission_data['mail'])) {
+      $nvp['EMAIL'] = $donation->submission_data['mail'];
+    }
+  }
+}
+
+/**
+ * Implements hook_commerce_authnet_aim_request_alter().
+ */
+function fundraiser_offline_commerce_authnet_aim_request_alter(&$nvp) {
+  // Use email from submitted donation data instead of order if offline.
+  if (!empty($_GET['offline'])) {
+    $donation = fundraiser_donation_get_donation($nvp['x_invoice_num']);
+    if (!empty($donation->submission_data['mail'])) {
+      $nvp['x_email'] = $donation->submission_data['mail'];
+    }
+  }
+}
+
+function fundraiser_offline_sage_payment_request_sale_alter(&$request_parameters, $context) {
+  // Use email from submitted donation data instead of order if offline.
+  if (!empty($_GET['offline'])) {
+    $donation = fundraiser_donation_get_donation($request_parameters['T_ORDERNUM']);
+    if (!empty($donation->submission_data['mail'])) {
+      $request_parameters['C_EMAIL'] = $donation->submission_data['mail'];
+    }
+  }
+}
+
+// Implements hook_fundraiser_field_info_alter();
+function fundraiser_offline_fundraiser_field_info_alter(&$fields) {
+  if (arg(0) == 'node' && is_numeric(arg(1))) {
+    $node = node_load(arg(1));
+    if (isset($node->fundraiser_offline) && $node->fundraiser_offline) {
+      if (isset($fields['payment_information']['payment_fields']['#validate_callback'])) {
+        // Remove validation callback for CVV & other payment fields
+        unset($fields['payment_information']['payment_fields']['#validate_callback']);
+        // Remove validation callback for email field.
+        unset($fields['donor_information']['mail']['#validate_callback']);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_fundraiser_field_info_validate_alter().
+ */
+function fundraiser_offline_fundraiser_field_info_validate_alter(&$field_info, $form) {
+  if (isset($form['#node']) && !empty($form['#node']->fundraiser_offline)) {
+    // jam validation on key fields.
+    $field_info['donor_information']['mail']['#validate_callback'] = FALSE;
+  }
+}
+
+/**
+ * Implements hook_fundraiser_gateway_info_alter().
+ */
+function fundraiser_offline_fundraiser_gateway_info_alter(&$gateways) {
+  if (arg(0) == 'node' && is_numeric(arg(1))) {
+    $node = node_load(arg(1));
+    // If the current form is in offline mode we want to replace any validation
+    // callbacks associated with the payment gateways.
+    if (isset($_GET['offline']) && $_GET['offline']) {
+      $gateway_ids = array_keys($gateways);
+      foreach ($gateway_ids as $id) {
+        if ($gateways[$id]['payment_method'][0] == 'credit') {
+          $gateways[$id]['validate callback']  = 'fundraiser_offline_fundraiser_credit_card_validate';
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Replaces fundraiser commerce CC validation callback, no CVV validation.
+ */
+function fundraiser_offline_credit_card_validate($submission_fields, $form_parents) {
+  $prefix = implode('][', $form_parents) . '][';
+  // Include the file with the validation info.
+  module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
+  $number = $submission_fields['payment_fields']['credit']['card_number'];
+  if (empty($number)) {
+    form_set_error($prefix . 'card_number', t('The credit card number is required.'));
+  }
+  else {
+    $valid = commerce_payment_validate_credit_card_number($number);
+    if ($valid !== TRUE || !ctype_digit($number) || drupal_strlen($number) < 10) {
+      form_set_error($prefix . 'card_number', t('You have entered an invalid credit card number.'));
+    }
+  }
+  $cc_expiration_month = $submission_fields['payment_fields']['credit']['card_expiration_month'];
+  $cc_expiration_year = $submission_fields['payment_fields']['credit']['card_expiration_year'];
+  if (empty($cc_expiration_month) || empty($cc_expiration_year)) {
+    form_set_error($prefix . 'expiration_date][card_expiration_month', t('The credit card expiration date is required.'));
+    form_set_error($prefix . 'expiration_date][card_expiration_year');
+  }
+  else {
+    $valid = commerce_payment_validate_credit_card_exp_date($cc_expiration_month, $cc_expiration_year);
+    if ($valid !== TRUE && !empty($cc_expiration_month) && !empty($cc_expiration_year)) {
+      form_set_error($prefix . 'expiration_date][card_expiration_month', t('The credit card you entered has expired.'));
+      form_set_error($prefix . 'expiration_date][card_expiration_year');
+    }
+  }
+}
+
+
+/**
+ * Implements hook_hook_fundraiser_donation_form_js_validation_alter().
+ *
+ * Disable client side validation on donation forms in offline mode.
+ */
+function fundraiser_offline_fundraiser_donation_form_js_validation_alter(&$settings, $node) {
+  if (isset($node->fundraiser_offline) && $node->fundraiser_offline) {
+    unset($settings['card_cvv']);
+  }
+}
+
+/**
+ * Implements hook_fundraiser_donation_form(). Tweak display to remove confirmation submits.
+ */
+function fundraiser_offline_fundraiser_donation_form($form, $form_state) {
+  if (isset($form['#node']->fundraiser_offline) && $form['#node']->fundraiser_offline) {
+    // Parse out query string to preserve any extra values.
+    $parts = drupal_parse_url(request_uri());
+    // Remove the offline query string to prevent infinite loop.
+    unset($parts['query']['offline']);
+    unset($parts['query']['cid']);
+    $link = l('Click here to return to online mode', 'node/' . $form['#node']->nid, array('query' => $parts['query']));
+    drupal_set_message(t('This form is currently in offline mode. ' .
+      '!link.', array('!link' => $link)));
+  }
+}
+
+/**
+ * Implements hook_fundraiser_donation_post_submit().
+ */
+/*
+function fundraiser_offline_fundraiser_donation_post_submit($form, $form_state, $donation) {
+  // Check our offline state and turn it off if need be.
+  if (_fundraiser_offline_is_offline()) {
+    // Turn off the offline mode now that we've submitted the form.
+    _fundraiser_offline_is_offline(FALSE);
+  }
+}*/
+
+/**
+ * Additional submit form at the end of the donation form. Controls redirect in offline mode.
+ */
+/*
+function _fundraiser_offline_fundraiser_donation_form_submit($form, &$form_state) {
+  $form['redirect'] = url('admin/fundraiser_offline/' . $form['#node']->nid);
+}*/
+
+
+/**
+ * Implements hook_fundraiser_webform_payment_component_payment_methods_alter().
+ *
+ * Limits available payment method radio button values.
+ */
+function fundraiser_offline_fundraiser_webform_payment_component_payment_methods_alter(&$payment_methods) {
+  global $user;
+  $offline = isset($_GET['offline']) ? $_GET['offline'] : FALSE;
+  $user_may_offline = user_access('submit donations offline', $user);
+  foreach ($payment_methods as $type => $method) {
+    if (isset($method['offline_only']) && $method['offline_only']) {
+      if (!$offline || !$user_may_offline) {
+        unset($payment_methods[$type]);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_fundraiser_webform_payment_method_component_methods_alter().
+ *
+ * Modify available payment methods when individual payment method components
+ * are rendered.
+ */
+function fundraiser_offline_fundraiser_webform_payment_method_component_methods_alter(&$payment_methods) {
+  fundraiser_offline_fundraiser_webform_payment_component_payment_methods_alter($payment_methods);
+}
+/**
+ * Hooks to handle a donation as an offline donation.
+ */
+
+/**
+ * Implements hook_fundraiser_donation_submit().
+ */
+function fundraiser_offline_fundraiser_donation_submit($form, $form_state, $donation) {
+  // Check our offline state.
+  if (isset($form['#node']->fundraiser_offline) && $form['#node']->fundraiser_offline) {
+    // Correct the uid, the logged in user is NOT the originating user.
+    if (!isset($donation->donation['mail'])) {
+      $donation->uid = 0;
+      $donation->user = user_load(0);
+      //if (!isset($donation->donation['mail'])) {
+      // If the email has not been set, then we need to set it here.
+      $donation->donation['mail'] = _fundraiser_offline_generate_email();
+    }
+    else {
+      $account = user_load_by_mail($donation->donation['mail']);
+      if ($account) {
+        $donation->uid = 0; //$account->uid;
+        $donation->user = $account;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_fundraiser_donation_success().
+ */
+function fundraiser_offline_fundraiser_donation_success($donation) {
+  // Check our offline state.
+  if (isset($_GET['offline']) && $_GET['offline']) {
+    $record['nid'] = $donation->nid;
+    $record['did'] = $donation->did;
+    global $user;
+    $record['created_by'] = $user->uid;
+    $record['uid'] = $donation->uid;
+    _fundraiser_offline_create_offline_donation($record);
+  }
+}
+
+
+/**
+ * Implements hook_fundraiser_donation_decline().
+ */
+function fundraiser_offline_fundraiser_donation_decline($donation) {
+  // Check our offline state.
+  if (isset($_GET['offline']) && $_GET['offline']) {
+    $record['nid'] = $donation->nid;
+    $record['did'] = $donation->did;
+    global $user;
+    $record['created_by'] = $user->uid;
+    $record['uid'] = $donation->uid;
+    _fundraiser_offline_create_offline_donation($record);
+  }
+}
+
+
+/**
+ * Helper functions.
+ */
+
+/**
+ * Helper function, note if we're offline or not. (Generally tied to page settings.)
+ */
+function _fundraiser_offline_is_offline($set = '') {
+  if ($set === TRUE) {
+    $_SESSION['fundraiser_offline'] = TRUE;
+  }
+  if (isset($_SESSION['fundraiser_offline'])   && $set === FALSE) {
+    unset($_SESSION['fundraiser_offline']);
+  }
+  return isset($_SESSION['fundraiser_offline']) ? TRUE : FALSE;
+}
+
+/**
+ * Helper function, create a new temporary email account.
+ */
+function _fundraiser_offline_generate_email() {
+  return sprintf('%s@%s', time(), 'sb-offline-donation.com');
+}
+
+/**
+ * Helper function, given a donation form and field list make the listed fields not required.
+ */
+function _fundraiser_offline_form_not_required(&$form, $fields) {
+  foreach ($fields as $field_name) {
+    $field = fundraiser_get_form_field('fundraiser_offline', $form, $field_name);
+    $field['#required'] = FALSE;
+    $field['#webform_component']['mandatory'] = 0;
+    $form = fundraiser_update_form_field('fundraiser_offline', $form, $field_name, $field);
+  }
+}
+
+function _fundraiser_offline_modify_type(&$form, $fields, $new_type) {
+  foreach ($fields as $field_name) {
+    $field = fundraiser_get_form_field('fundraiser_offline', $form, $field_name);
+    $field['#webform_component']['type'] = $new_type;
+    $field['#type'] = $new_type;
+    $form = fundraiser_update_form_field('fundraiser_offline', $form, $field_name, $field);
+  }
+}
+
+/**
+ * Helper function, given a donation form and field list make the listed fields not required.
+ */
+function _fundraiser_offline_form_not_hidden(&$form, $fields) {
+  foreach ($fields as $field_name) {
+    $field = fundraiser_get_form_field('fundraiser_offline', $form, $field_name);
+    $field['#type'] = 'textfield';
+    $form = fundraiser_update_form_field('fundraiser_offline', $form, $field_name, $field);
+  }
+}
+
+/**
+ * Helper function, given a donation form and field list make the listed fields not validate.
+ */
+function _fundraiser_offline_form_not_validate(&$form, $fields) {
+  foreach ($fields as $field_name) {
+    $field = fundraiser_get_form_field('fundraiser_offline', $form, $field_name);
+    unset($field['#validate_callback']);
+    $field['#element_validate'] = array();
+    $form = fundraiser_update_form_field('fundraiser_offline', $form, $field_name, $field);
+  }
+}
+
+/**
+ * Database functions.
+ */
+
+/**
+ * CRUD style DB function for fundraiser_offline.
+ */
+function _fundraiser_offline_create_offline($fundraiser) {
+  // Cast fundraiser just in case.
+  $fundraiser = (array) $fundraiser;
+  // Check for old data.
+  $fundraiser_data = FALSE;
+  if (isset($fundraiser['nid'])) {
+    $fundraiser_data = _fundraiser_offline_get_offline_by_nid($fundraiser['nid']);
+  }
+  if (!$fundraiser_data) {
+    $record = $fundraiser;
+    drupal_write_record('fundraiser_offline', $record);
+  }
+  else {
+    _fundraiser_offline_update_offline($fundraiser);
+  }
+}
+
+/**
+ * CRUD style DB function for fundraiser_offline.
+ */
+function _fundraiser_offline_get_offline_by_nid($nid) {
+  return db_query('SELECT * FROM {fundraiser_offline} ' .
+    'WHERE nid = :nid',
+    array(':nid' => $nid))->fetchObject();
+}
+
+/**
+ * CRUD style DB function for fundraiser_offline.
+ */
+function _fundraiser_offline_update_offline($fundraiser) {
+  // Cast fundraiser just in case.
+  $fundraiser_data = FALSE;
+  if (isset($fundraiser['nid'])) {
+    $fundraiser_data = _fundraiser_offline_get_offline_by_nid($fundraiser['nid']);
+  }
+  if (!$fundraiser_data) {
+    _fundraiser_offline_create_offline($fundraiser);
+  }
+  else {
+    $record = array_merge((array) $fundraiser_data, $fundraiser);
+    drupal_write_record('fundraiser_offline', $record, 'nid');
+  }
+}
+
+/**
+ * CRUD style DB function for fundraiser_offline.
+ */
+function _fundraiser_offline_delete_offline($nid) {
+  db_delete('fundraiser_offline')->condition('nid', $nid)->execute();
+}
+
+/**
+ * CRUD style DB function for fundraiser_offline_donation.
+ */
+function _fundraiser_offline_create_offline_donation($donation) {
+  // Cast donation just in case.
+  $donation = (array) $donation;
+  // Check for old data.
+  $donation_data = FALSE;
+  if (isset($donation['did'])) {
+    $donation_data = _fundraiser_offline_get_offline_by_did($donation['did']);
+  }
+  if (!$donation_data) {
+    $record = $donation;
+    drupal_write_record('fundraiser_offline_donation', $record);
+  }
+  else {
+    _fundraiser_offline_update_offline_donation($donation);
+  }
+}
+
+/**
+ * CRUD style DB function for fundraiser_offline_donation.
+ */
+function _fundraiser_offline_get_offline_by_did($did) {
+  return db_query('SELECT * FROM {fundraiser_offline_donation} ' .
+    'WHERE did = :did',
+    array(':did' => $did))->fetchObject();
+}
+
+/**
+ * CRUD style DB function for fundraiser_offline_donation.
+ */
+function _fundraiser_offline_update_offline_donation($donation) {
+  // Cast fundraiser just in case.
+  $donation = (array) $donation;
+  // Check for old data.
+  $donation_data = FALSE;
+  if (isset($donation['did'])) {
+    $donation_data = _fundraiser_offline_get_offline_by_did($donation['did']);
+  }
+  if (!$donation_data) {
+    _fundraiser_offline_create_offline_donation($donation);
+  }
+  else {
+    $record = array_merge((array) $donation_data, $donation);
+    drupal_write_record('fundraiser_offline_donation', $record, 'did');
+  }
+}
+
+/**
+ * CRUD style DB function for fundraiser_offline_donation.
+ */
+function _fundraiser_offline_delete_offline_donation($did) {
+  db_delete('fundraiser_offline_donation')->condition('did', $did)->execute();
+}
+
+/**
+ * DB function for fundraiser_offline_donation.
+ */
+function _fundraiser_offline_delete_offline_donation_by_nid($nid) {
+  db_delete('fundraiser_offline_donation')->condition('nid', $nid)->execute();
+}
+
+/**
+ * DB function for fundraiser_offline_donation.
+ */
+function _fundraiser_offline_get_by_title($string) {
+  $results = db_query('SELECT * FROM {fundraiser_offline} o ' .
+    'LEFT JOIN {node} n ON o.nid = n.nid ' .
+    'WHERE o.status = 1 AND n.title LIKE :string',
+    array(':string' => '%' . $string . '%')
+  );
+  return $results->fetchAll();
+}

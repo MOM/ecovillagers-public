@@ -1,0 +1,63 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for webform_token_selector
+ */
+
+/**
+ * Sets up basic tools for testing Webform Token Selector.
+ */
+class WebformTokenSelectorTestCase extends DrupalWebTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Webform Token Selector',
+      'description' => 'Sets up basic tools for testing Webform Token Selector',
+      'group' => 'Webform Token Selector',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'webform',
+      'wysiwyg',
+      'webform_user',
+      'webform_token_selector',
+    ));
+    parent::setUp($modules);
+
+    $permissions = array_merge($permissions, array(
+      'access content',
+      'administer site configuration',
+      'administer content types',
+      'administer nodes',
+      'administer users',
+    ));
+    $this->admin_user = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->admin_user);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    user_cancel(array(), $this->admin_user->uid, 'user_cancel_delete');
+    parent::tearDown();
+  }
+
+  /**
+   * Test installation of dependencies.
+   *
+   * Remove this test once tests are added for this module.
+   */
+  public function testInstall() {
+    $this->assertTrue(module_exists('webform_token_selector'), 'Module was not enabled correctly.');
+  }
+}

@@ -1,0 +1,28 @@
+/* system messages */
+div.alert {
+  background-image: none;
+}
+
+/* Remove Drupal list images from menus */
+
+ul.nav li {
+  list-style-image: none;
+  list-style-type: none;
+}
+
+/* make sure devel Krumo text is always black */
+div.krumo-root,
+div.krumo-root a,
+div.krumo-root .krumo-node a {
+  color: #000;
+}
+
+/* override Drupal top margin on form items */
+.form-item.control-group {
+  margin-top: 0px;
+}
+
+/* override bootstrap label styling on table cells */
+td.label {
+  display: table-cell;
+}

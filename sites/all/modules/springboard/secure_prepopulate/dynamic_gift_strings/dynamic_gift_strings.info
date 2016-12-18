@@ -1,0 +1,13 @@
+name = Dynamic gift strings
+description = Uses an encrypted url string to dynamically replace the ask amount values on a donation form.
+core = 7.x
+package = Jackson River Springboard - extras
+dependencies[] = fundraiser_webform
+dependencies[] = secure_prepopulate
+
+version = 7.x-4.x-dev
+
+; Testing files
+files[] = tests/dynamic_gift_strings.test
+files[] = tests/gift_string.test
+files[] = tests/form_submit.test

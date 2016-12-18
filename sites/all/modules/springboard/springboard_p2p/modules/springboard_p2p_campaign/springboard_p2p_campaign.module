@@ -1,0 +1,36 @@
+<?php
+/**
+ * @file
+ * Code for the Springboard P2P campaign feature.
+ */
+
+include_once 'springboard_p2p_campaign.features.inc';
+
+/**
+ * Implements hook_node_presave().
+ *
+ * Copies the campaign goal set when a p2p campaign is cloned. Done during
+ * presave so that the campaign goals field value will get saved.
+ */
+function springboard_p2p_campaign_node_presave($node) {
+
+  // P2P campaign and cloning and is_new.
+  if ($node->type == 'p2p_campaign' && isset($node->clone_from_original_nid) && !empty($node->is_new) && $node->is_new) {
+    // Need to reset the node cache, just because.
+    $original = node_load($node->clone_from_original_nid, NULL, TRUE);
+
+    // Gets the DB row.
+    $row = springboard_p2p_fields_get_goal_from_entity($original);
+
+    // Unset this so we get a new id when inserting the row.
+    unset($row['goal_set_id']);
+    $rows = array($row);
+
+    $field = new SpringboardP2pCampaignGoalsField();
+    $new_goal_set_id = $field->save(NULL, $rows);
+
+    // Tell the field about the new goal set. This gets saved during
+    // field_attach_insert().
+    $node->field_p2p_campaign_goals[$node->language][0]['goal_set_id'] = $new_goal_set_id;
+  }
+}

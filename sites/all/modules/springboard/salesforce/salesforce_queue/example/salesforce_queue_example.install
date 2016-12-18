@@ -1,0 +1,50 @@
+<?php
+
+/**
+ * @file
+ * Install hooks for the Salesforce Queue Example module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function salesforce_queue_example_schema() {
+  $schema['salesforce_queue_example_high_score'] = array(
+    'description' => 'Storage for high score records for the Salesforce queue example module.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'Unique id of the high score.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'Id of user who entered the high score.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'game' => array(
+        'description' => 'The game to which the high score applies.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'date_earned' => array(
+        'description' => 'Date the high score was earned.',
+        'type' => 'timestamp',
+        'not null' => TRUE,
+        'default' => 'CURRENT_TIMESTAMP',
+      ),
+      'score' => array(
+        'description' => 'The score.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+
+  return $schema;
+}

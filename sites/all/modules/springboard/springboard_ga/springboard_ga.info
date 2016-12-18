@@ -1,0 +1,13 @@
+name = "Springboard Google Analytics Tracking"
+description = "Provides advanced Google Analytics tracking capabilities to Springboard"
+package = "Jackson River Springboard - extras"
+
+core = 7.x
+version = 7.x-4.x-dev
+
+configure = admin/springboard/options/ga
+
+dependencies[] = googleanalytics
+dependencies[] = webform_confirmations
+
+files[] = tests/springboard_ga.test

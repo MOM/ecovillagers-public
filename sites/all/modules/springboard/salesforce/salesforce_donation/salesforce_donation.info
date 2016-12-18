@@ -1,0 +1,12 @@
+name = Salesforce Donation
+description = Map and push donations to Salesforce.
+package = Salesforce
+core = 7.x
+version = 7.x-4.x-dev
+dependencies[] = entity
+dependencies[] = salesforce
+dependencies[] = salesforce_genmap
+dependencies[] = fundraiser
+files[] = tests/salesforce_donation.test
+files[] = includes/salesforce_donation.map.inc
+files[] = includes/salesforce_donation.queue.inc

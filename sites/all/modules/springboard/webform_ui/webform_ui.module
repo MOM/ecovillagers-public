@@ -1,0 +1,478 @@
+<?php
+/**
+ * @file
+ *
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function webform_ui_menu() {
+  $items['admin/config/content/webform-ui'] = array(
+    'title' => 'Webform UI',
+    'description' => 'Settings for the Webform UI user interface enhancements',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('webform_ui_settings_form'),
+    'access arguments' => array('configure webform ui'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'webform_ui.admin.inc',
+  );
+  return $items;
+}
+
+
+/**
+ * Implements hook_permission().
+ */
+function webform_ui_permission() {
+  return array(
+    'configure webform ui' => array(
+      'title' => t('Configure  Webform UI user interface enhancements.'),
+      'description' => t('Manage Webform UI settings.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Add a field to allow custom submit text on the node add/edit page.
+ */
+function webform_ui_form_alter(&$form, &$form_state, $form_id) {
+  $exclude = array('sba_message_action', 'sba_social_action');
+  if (!empty($form['#node_edit_form']) && !empty($form['webform']) && !in_array($form['#node']->type, $exclude)) {
+    $body_weight = isset($form['body']['#weight']) ? $form['body']['#weight'] : 0;
+
+    if(variable_get('webform_ui_submit_on_edit', 'FALSE')) {
+      $submit_text = '';
+      if (isset($form['#node']->nid)) {
+        $submit_text = db_query("SELECT submit_text FROM {webform} WHERE nid = :nid", array(':nid' => $form['#node']->nid))->fetchField();
+      }
+      if ($submit_text == '') {
+        $submit_text = t('Submit');
+      }
+
+      $form['submit_button_text'] = array(
+        '#type' => 'textfield',
+        '#title' => t('Submit Button Text'),
+        '#default_value' => $submit_text,
+        '#weight' => $body_weight - .5 ,
+      );
+      $form['#validate'][] = 'webform_ui_node_form_validate';
+    }
+    if (variable_get('webform_ui_collapse_filter', 'FALSE') && isset($form['body'])) {
+      $body =& $form['body'];
+      $form['body_container'] = array(
+        '#type' => 'fieldset',
+        '#title' => t('Body text'),
+        '#collapsible' => TRUE,
+        '#collapsed' => FALSE,
+        '#weight' => $body_weight,
+        '#attributes' => array('class' => array('webform-ui-body-container'))
+      );
+      $form['body_container']['body'] = $body;
+      unset($form['body']);
+      $form['#attached']['css'][] = drupal_get_path('module', 'webform_ui') . '/css/webform_ui.css';
+    }
+  }
+
+
+}
+
+/**
+ * Saves webform submit text defined on the node add/edit page.
+ *
+ * @param $form
+ * @param $form_state
+ */
+function webform_ui_node_form_validate(&$form, &$form_state) {
+  drupal_array_set_nested_value($form_state['values'], array('webform', 'submit_text'), $form_state['values']['submit_button_text']);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Include the javascript that shows/hides webform fields of the type "hidden"
+ * on the components overview page.
+ *
+ * Fix a bug in webform that causes the "add new field" row to appear in the middle
+ * of the table after creating a new field.
+ *
+ */
+function webform_ui_form_webform_components_form_alter(&$form, &$form_state, $form_id) {
+  if (variable_get('webform_ui_hide_hidden', 'FALSE')) {
+    $form['#attached']['js'][] = array(
+      'weight' => 100,
+      'data' => drupal_get_path('module', 'webform_ui') . '/js/remove-tabledrag.js',
+    );
+    foreach ($form['components'] as $cid => $component) {
+      if ($form['#node']->webform['components'][$cid]['type'] == 'hidden') {
+//        $form['#node']->webform['components'][$cid]['weight'] = 998;
+//        $form['components'][$cid]['weight']['#default_value'] = 998;
+//        $form['components'][$cid]['weight']['#disabled'] = TRUE;
+      }
+    }
+    $form['add']['weight']['#default_value'] = 999;
+    $form['add']['weight']['#disabled'] = TRUE;
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter();
+ *
+ * Include the javascript that creates fieldsets on the webform config page.
+ * They're made with javascript instead of a form alter
+ * so the submission tree does not break.
+ * Also move some stuff around.
+ */
+function webform_ui_form_webform_configure_form_alter(&$form, &$form_state) {
+  if (variable_get('webform_ui_confirmation_page', FALSE)) {
+    $form['role_control']['#collapsed'] = TRUE;
+    $form['#after_build'][] = 'webform_ui_form_webform_configure_after_build';
+    $form['#attached']['js'][] = array(
+      'weight' => 100,
+      'data' => drupal_get_path('module', 'webform_ui') . '/js/confirm-settings.js',
+    );
+    $form['#attached']['css'][] = drupal_get_path('module', 'webform_ui') . '/css/webform_ui.css';
+  }
+
+}
+
+/**
+ * @param $form
+ * @param $form_state
+ * @return mixed
+ */
+function webform_ui_form_webform_configure_after_build($form, $form_state) {
+  $form['submission']['help']['#weight'] = 0;
+  return $form;
+}
+
+
+/**
+ * Implements hook_form_webform_client_form_alter().
+ *
+ * Make hidden fields on results page editable so salesforce syncs can
+ * be corrected.
+ */
+function webform_ui_form_webform_client_form_alter(&$form, &$form_state) {
+  if (arg(2) == 'submission' && variable_get('webform_ui_make_hidden_editable', FALSE) && user_access('edit all webform submissions')) {
+    foreach (element_children($form['submitted']) as $key) {
+      if ($form['submitted'][$key]['#type'] == 'hidden') {
+        $form['submitted'][$key]['#type'] = 'textfield';
+        // Prevent the core textfield formatter's default 128 limit.
+        $form['submitted'][$key]['#maxlength'] = NULL;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_menu_alter().
+ *
+ * Substitute our alternate submission results view if enabled.
+ * Deny access to a couple paths if settings are enabled.
+ */
+function webform_ui_menu_alter(&$items) {
+  if (variable_get('webform_ui_use_alternate_submission', FALSE)) {
+    $items['node/%webform_menu/webform-results']['page callback'] = 'webform_ui_submission_results';
+    $items['node/%webform_menu/webform-results']['page arguments'] = array(1);
+  }
+  if (variable_get('webform_ui_hide_clear_all', FALSE)) {
+    $items['node/%webform_menu/webform-results/clear']['access callback'] = 'webform_ui_submission_access';
+  }
+  if (variable_get('webform_ui_hide_table', FALSE)) {
+    $items['node/%webform_menu/webform-results/table']['access callback'] = 'webform_ui_submission_access';
+  }
+}
+
+/**
+ * This is a "constructor" to build out the submission results page view.
+ *
+ * Most importantly, it sets the argument and path for the view.
+ *
+ * @param $node
+ * @return bool|null|string
+ */
+function webform_ui_submission_results($node) {
+
+  $view = views_get_view('sbv_webform_submissions');
+
+  if (empty($view)) {
+    return t('The webform submissions view could not be found.');
+  }
+
+  if (isset($view->display['block_1'])) {
+    $view->set_display('block_1');
+  }
+  else {
+    return t('The webform submissions display block could not be found. You may need to revert the view to restore the deleted block.');
+  }
+
+  if (!empty($node->nid)) {
+    $view->set_arguments(array($node->nid));
+  }
+
+  $view->override_path = current_path();
+
+  $view->pre_execute();
+  $view->execute();
+
+  if ($view->access('block_1')) {
+    return $view->preview();
+  }
+  else {
+    return t("access denied");
+  }
+}
+
+function webform_ui_views_pre_build(&$view) {
+  if ($view->name == 'sbv_webform_submissions') {
+    $view->override_path = $_GET['q'];
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Add theme wrapper and after build to results page.
+ */
+function webform_ui_form_views_exposed_form_alter(&$form, &$form_state, $form_id) {
+  if (arg(2) == 'webform-results' && variable_get('webform_ui_use_alternate_submission', FALSE)) {
+    $form['#theme_wrappers'][] = 'webform_ui_exposed_form_wrapper';
+    $form['#after_build'][] = 'webform_ui_exposed_after';
+    if ($form['#id'] == 'views-exposed-form-sbv-webform-submissions-block-1') {
+      $format = 'n/j/Y';
+      $form['date_filter']['min']['#title'] = t('Submitted between');
+      $form['date_filter']['max']['#title'] = t('and');
+      $form['date_filter']['min']['#date_format'] = $format;
+      $form['date_filter']['max']['#date_format'] = $format;
+    }
+  }
+}
+
+/**
+ * Adds css and js for the collapsible fieldset we are wrapping the views
+ * exposed form with.
+ *
+ * @param $form
+ * @param $form_state
+ * @return mixed
+ */
+function webform_ui_exposed_after($form, $form_state) {
+  $form['#attached']['css'][] = drupal_get_path('module', 'webform_ui') . '/css/webform_ui.css';
+  $form['#attached']['library'][]
+    = array('system', 'drupal.collapse');
+  return $form;
+}
+
+/**
+ * Wraps views exposed form with a collapsed fieldset.
+ *
+ * @param $vars
+ * @return string
+ */
+function theme_webform_ui_exposed_form_wrapper($vars) {
+  $has_value = FALSE;
+  foreach (element_children($vars['element']) as $child) {
+    if (isset($vars['element'][$child]['#type']) && $vars['element'][$child]['#type'] == 'textfield' && !empty($vars['element'][$child]['#value'])) {
+     $has_value = TRUE;
+    }
+    if (isset($vars['element'][$child]['min']) && (!empty($vars['element'][$child]['min']['#value']) || !empty($vars['element'][$child]['mmax']['#value']))) {
+      $has_value = TRUE;
+    }
+  }
+
+  $collapse = $has_value ? '' : 'collapsed';
+
+  return '<fieldset class="container-inline collapsible ' . $collapse .' form-wrapper" id="webform-ui-exposed-search"><legend><span class="fieldset-legend">Search</span></legend><div class="fieldset-wrapper">' . $vars['element']['#children']  . '</div></fieldset>';
+}
+
+/**
+ * Implements hook_theme();
+ */
+function webform_ui_theme($existing, $type, $theme, $path) {
+  return array(
+    'webform_ui_exposed_form_wrapper' => array(
+      'render element'  => 'element',
+    ),
+  );
+}
+
+/**
+ * Used by hook_menu_alter to deny access to various paths.
+ *
+ * @param $node
+ * @return bool
+ */
+function webform_ui_submission_access($node) {
+  return FALSE;
+}
+
+/**
+ * Implements hook_action_info
+ */
+function webform_ui_action_info() {
+  return array(
+    'webform_ui_submission_delete' => array(
+      'type' => 'node',
+      'label' => t('Bulk Delete Webform submissions'),
+      'description' => t('Bulk Delete Webform submissions'),
+      'configurable' => FALSE,
+     // 'behavior' => array('deletes_property'),
+      'triggers' => array(
+        'any' => TRUE,
+      ),
+      // VBO specific settings
+      // Set to TRUE if you want to operate on an array of identifiers
+      // Set to FALSE if you want to operate on each separately as an object
+      'aggregate' => FALSE,
+      // Set this to true to receive $context['rows']  in your callback.
+      'pass rows' => TRUE,
+      'permissions' => array('delete all webform submissions'),
+    ),
+  );
+}
+
+/**
+ * Implementation of a Drupal action
+ *
+ * @param object $object
+ * @param array $context
+ */
+function webform_ui_submission_delete(&$node, $context = array()) {
+
+  if (is_array($context['rows'])) {
+    $sid = current($context['rows'])->sid;
+  }
+  else {
+    $sid = $context['rows']->sid;
+  }
+
+  $submission = webform_menu_submission_load($sid, $node->nid);
+  if ($submission) {
+    webform_submission_delete($node, $submission);
+  }
+}
+
+/**
+ * Perform alterations on the VBO form before it is rendered.
+ *
+ * @param $form
+ *  A step of the VBO form to be altered.
+ * @param $form_state
+ *  Form state. Contains the name of the current step in $form_state['step'].
+ * @param $vbo
+ *   The VBO views field. Contains a reference to the view in $vbo->view.
+ */
+function webform_ui_views_bulk_operations_form_alter(&$form, &$form_state, $vbo) {
+ if ($vbo->definition['handler'] == 'webform_ui_bulk_operations_handler_field_operations') {
+   $form['select']['#collapsible'] = TRUE;
+   $form['select']['#collapsed'] = TRUE;
+
+   if (!user_access('delete all webform submissions') && $vbo->view->name == 'sbv_webform_submissions') {
+     //$form['select']['#access'] = FALSE;;
+   }
+    if ($form_state['step'] == 'views_bulk_operations_confirm_form') {
+      $form['#attached']['css'][] = drupal_get_path('module', 'webform_ui') . '/css/webform-ui-fix-span.css';
+      $variables = array(
+        'items' => array(),
+      );
+      $form['warning']['#markup'] = t('Are you sure?');
+      $form['warning']['#prefix'] = '<h3>';
+      $form['warning']['#suffix'] = '</h3>';
+      $form['warning']['#weight'] = -10;
+
+      $form['warning_desc']['#markup'] = t('Deleting webform submissions will prevent resyncing any fundraiser transactions and salesforce records. Only delete the oldest submissions you do not need anymore.');
+      $form['warning_desc']['#weight'] = -9;
+      $form['warning_desc']['#prefix'] = '<p><strong>';
+      $form['warning_desc']['#suffix'] = '</strong></p>';
+      $form['toggle_me'] = array(
+        '#type' => 'checkbox',
+        '#title' => t('You must check this box to acknowledge you understand this. Then the confirm button and a list of the records you are deleting will appear.'),
+        '#weight' => -8,
+      );
+      module_load_include('inc', 'webform', 'includes/webform.submissions');
+      foreach ($form_state['values']['views_bulk_operations'] as $key => $status) {
+        if ($status) {
+          $submission = current(webform_get_submissions(array('sid' => $vbo->view->result[$key]->sid)));
+          $variables['items'][] = "{$submission->sid} : {$submission->name}";
+        }
+      }
+
+      $form['actions']['submit']['#states'] = array(
+        'visible' => array(
+          ':input[name="toggle_me"]' => array('checked' => TRUE),
+        ),
+      );
+
+      $form['description']['#type'] = 'item';
+      $form['description']['#markup'] = theme('item_list', $variables);
+      $form['description']['#states'] = array(
+        'visible' => array(
+          ':input[name="toggle_me"]' => array('checked' => TRUE),
+        ),
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function webform_ui_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'webform_ui') . '/views',
+  );
+}
+/**
+ * Implements hook_views_pre_render().
+ */
+function webform_ui_views_pre_render(&$view) {
+
+  if ($view->name == 'sbv_webform_submissions' && !user_access('delete all webform submissions') and isset($view->field['views_bulk_operations'])) {
+    unset($view->field['views_bulk_operations']);
+  }
+  if ($view->name == 'sbv_webform_submissions' && variable_get('webform_ui_use_bulk_delete', FALSE) == FALSE) {
+    unset($view->field['views_bulk_operations']);
+  }
+}
+
+/**
+ * Implements hook_element_info_alter().
+ */
+function webform_ui_element_info_alter(&$type) {
+  if(isset($type['text_format']) && variable_get('webform_ui_collapse_filter', 'FALSE')) {
+    $type['text_format']['#process'][] = 'webform_ui_element_process_text_format';
+  }
+}
+
+/**
+ * Process function for text_format element.
+ *
+ * @see webform_ui_element_info_alter().
+ * @see https://drupal.org/node/2104275
+ */
+function webform_ui_element_process_text_format($element) {
+  if ((isset($element['#entity_type']) && $element['#entity_type'] == 'node') && isset($element['#entity']->webform)) {
+    $exclude = array('sba_message_action', 'sba_social_action');
+    if (!empty($element['#entity']) && !in_array($element['#entity']->type, $exclude)) {
+      if (in_array('body', $element['#parents'])) {
+        $prefix = isset($element['format']['#prefix']) ? $element['format']['#prefix'] : '';
+        $element['format']['#prefix'] = $element['#description'] . $prefix;
+        unset($element['#description']);
+        $element['format']['#collapsible'] = TRUE;
+        $element['format']['#collapsed'] = TRUE;
+        $element['format']['#title'] = t('Text format');
+      }
+    }
+  }
+  return $element;
+}
+
+function webform_ui_date_views_extra_tables() {
+  return array(
+    'webform_submissions' => 'webform',
+  );
+}

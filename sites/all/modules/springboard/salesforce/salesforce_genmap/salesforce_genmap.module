@@ -1,0 +1,510 @@
+<?php
+
+/**
+ * @file
+ * Manages generic case Salesforce mappings.
+ */
+
+
+// Load extended modules include files.
+_salesforce_genmap_load_extended_modules();
+
+/**
+ * @name core_drupal_hooks
+ * @{
+ */
+
+/**
+ * Implements hook_entity_info().
+ */
+function salesforce_genmap_entity_info() {
+  return array(
+    // Maps Salesforce objects and fields to components of Drupal.
+    'salesforce_genmap_map' => array(
+      'label' => t('Salesforce Object Map'),
+      'entity class' => 'Entity',
+      'controller class' => 'EntityAPIControllerExportable',
+      'base table' => 'salesforce_genmap_map',
+      'entity keys' => array(
+        'id' => 'mid',
+      ),
+      'fieldable' => FALSE,
+      'exportable' => TRUE,
+      'module' => 'salesforce_genmap',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function salesforce_genmap_menu() {
+  $items = array();
+  $items['node/%node/salesforce'] = array(
+    'title' => 'Salesforce',
+    'page callback' => '_salesforce_map_redirect',
+    'page arguments' => array(1),
+    'access callback' => '_salesforce_map_redirect_access',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'includes/salesforce_genmap.map.inc',
+  );
+  return $items;
+}
+
+/**
+ * Menu redirect per node requirement.
+ */
+function _salesforce_map_redirect_access($node) {
+  // If the user has access.
+  $modules = salesforce_genmap_info();
+  $supported_modules = array();
+  foreach ($modules as $module => $info) {
+    if (in_array($node->type, $info['supported content types'])) {
+      $access_callback = isset($info['access callback']) ? $info['access callback'] : '';
+      if (isset($info['file'])) {
+        module_load_include('', $module, $info['file']);
+      }
+      if (function_exists($access_callback) && $access_callback($node, $module)) {
+        $supported_modules[$module] = $info;
+      }
+      // Override if you can map SF objects.
+      elseif (user_access('map salesforce objects')) {
+        $supported_modules[$module] = $info;
+      }
+    }
+  }
+  // If any of the available SF mapping modules support this type.
+  foreach ($supported_modules as $supported_module => $info) {
+    return TRUE;
+  }
+  // Else deny access, it's not supported at all.
+  return FALSE;
+}
+
+/**
+ * Menu placeholder page for situations where we don't have a sharable root.
+ *
+ * Since webform is not always a map we want to display, we need a central other
+ * root.
+ */
+function salesforce_help_page() {
+  $build = array();
+  $build['content'] = array(
+    'page_description' => array(
+      '#id' => 'salesforce-map-helptext-page',
+      '#type' => 'markup',
+      '#markup' => '<p>' . t('Map which values should be sent to your Salesforce organization.') . '</p>',
+      '#prefix' => '<div class="salesforce-map-helptext">',
+      '#suffix' => '</div>',
+    ),
+  );
+  $sfapi = salesforce_get_api();
+  if (!$sfapi->isAuthorized()) {
+    $build['content']['salesforce_genmap_connect'] = array(
+      'no_sfapi' => array(
+        '#markup' => '<p>' . t('Cannot connect to Salesforce, preventing the ability to map Salesforce objects.  !ConfigureSalesforce',
+                array('!ConfigureSalesforce' => l(t('Configure Salesforce'), 'admin/config/salesforce/authorize'))) . '</p>',
+        '#prefix' => '<div class="salesforce-map-error salesforce-map-error-salesforce">',
+        '#suffix' => '</div>',
+      ),
+    );
+  }
+  return $build;
+}
+
+/**
+ * Implements hook_admin_paths().
+ */
+function salesforce_genmap_admin_paths() {
+  if (variable_get('node_admin_theme')) {
+    return array(
+      'node/*/salesforce' => TRUE,
+      'node/*/salesforce/*' => TRUE,
+    );
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function salesforce_genmap_permission() {
+  $permissions = array(
+    'map salesforce objects' => array(
+      'title' => t('Map Salesforce objects'),
+      'description' => t('Configure the mapping of Salesforce objects.'),
+    ),
+  );
+
+  // Add the permission to configure a map to delete on sync only if this site
+  // is configured to allow this configuration setting at all.  Since deleting
+  // records is so risky, we would prefer to not have the ability at all.
+  // However, there can be a usecase for it.  Instead of custom coding a use
+  // case, we will allow the ability to enable that feature on a site-by-site
+  // basis.  Otherwise, the feature is 100% hidden.
+  if (variable_get('salesforce_genmap_allow_delete_sync', FALSE)) {
+    $modules = salesforce_genmap_info();
+    foreach ($modules as $module => $info) {
+      $perm = 'configure ' . $module . ' delete sync';
+      $permissions[$perm] = array(
+        'title' => t('Configure a !module map to sync deleted records',
+          array('!module' => $module)),
+        'description' => t('Allow the configuration for a map to automatically delete its associated record from Salesforce when it is deleted from Drupal.'),
+      );
+    }
+  }
+
+  // Allow the modules this module extends to declare their own permissions.
+  $extended_modules = _salesforce_genmap_get_extended_modules_list();
+  foreach ($extended_modules as $module) {
+    $module_perms = module_invoke($module, 'salesforce_genmap_permission');
+    if (!empty($module_perms) && is_array($module_perms)) {
+      $permissions += $module_perms;
+    }
+  }
+  return $permissions;
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function salesforce_genmap_node_delete($node) {
+  // Delete all salesforce_genmap_map entities.
+  salesforce_genmap_delete_map($node->nid);
+  $extended_modules = _salesforce_genmap_get_extended_modules_list();
+  foreach ($extended_modules as $module) {
+    salesforce_genmap_delete_map($node->nid, $module);
+  }
+}
+
+/**
+ * @} core_drupal_hooks
+ */
+
+/**
+ * Helper function to place object, given a node, oid, object with a map.
+ *
+ * @param string $module
+ *   Module calling this function, so we can map fields correctly.
+ * @param string $op
+ *   Type of operation.
+ * @param object $node
+ *   Associated node for map.
+ * @param int $oid
+ *   Object id to be mapped.
+ * @param object $drupal_object
+ *   Object to be mapped.
+ * @param string $delta
+ *   Optional.  Delta of the item to be queued.
+ */
+function salesforce_genmap_send_object_to_queue($module, $op, $node, $oid, $drupal_object, $delta = NULL) {
+  $sfapi = salesforce_get_api();
+  if (!$sfapi->isAuthorized()) {
+    // If there isn't a valid connection to Salesforce, lets not start queueing
+    // items.
+    return FALSE;
+  }
+
+  if (!variable_get('salesforce_genmap_allow_delete_sync', FALSE) && in_array($op, array('delete', 'DELETE'))) {
+    // Do not queue DELETE if site has disallowed delete trigger.  This is a
+    // failsafe in case someone had bypassed the configuration form's validation
+    // (such as manually constructing the configuration).  The goal is not to
+    // prevent any sort of deletion of records but rather to prevent the
+    // deletion of records on a triggered event.
+    return;
+  }
+  $map = salesforce_genmap_load_map($node->nid, $module);
+  if (!empty($map) && !empty($map->sync_options[$op])) {
+    $sobject = salesforce_genmap_map_object($module, $drupal_object, $map, $node, $op);
+    // Add to the queue.
+    $item = array(
+      'drupal_id' => $oid,
+      'module' => $module,
+      'delta' => (is_null($delta) ? $module : $delta),
+      'object_type' => $sobject->type,
+      'operation' => $op,
+      'dedupe_field' => $map->salesforce_dedupe_field,
+      'sobject' => $sobject,
+    );
+    drupal_alter('salesforce_genmap_map_item', $item, $drupal_object);
+    _salesforce_genmap_alter_operation($item);
+    $queue = salesforce_queue_load();
+    $result = $queue->createItem($item);
+    if (!$result) {
+      // salesforce_set_message() is a wrapper for drupal_set_message() that
+      // will restrict this message to appear only to those with the
+      // 'administer salesforce' permission.
+      salesforce_set_message(t('The submission was not sent to Salesforce.'), 'error');
+    }
+  }
+}
+
+/**
+ * Map the drupal object to a Salesforce object.
+ *
+ * @param string $module
+ *   Calling module for this map, makes sure fields are mapped by correct
+ *   handler
+ * @param object $object
+ *   A drupal object
+ * @param Entity $map
+ *   A Salesforce map
+ * @param object $node
+ *   Associated map node
+ *
+ * @return object
+ *   A Salesforce Object that has Salesforce fields with the object field values
+ */
+function salesforce_genmap_map_object($module, stdClass $object, Entity $map, $node, $op) {
+  // Gather the fields for this object from their handler modules.
+  $fields = array();
+  $fields = module_invoke($module, 'salesforce_genmap_map_fields', $object, $map, $node, $op);
+
+  $context = array(
+    'module' => $module,
+    'object' => $object,
+    'map' => $map,
+    'node' => $node,
+    'op' => $op,
+  );
+  // Give other modules a chance to alter the object's field values.
+  drupal_alter('salesforce_genmap_map_fields', $fields, $context);
+
+  // Create the Salesforce object.
+  $object_type = $map->salesforce_object_type;
+  $record_type = empty($map->salesforce_record_type) ? NULL : $map->salesforce_record_type;
+  $sobject = new SalesforceObject($object_type, $fields);
+  // The constructor for SalesforceObject expects $record_type to be a name. The genmap record
+  // now stores record type ids so let's set the record type explicity by passing it to setRecordTypeId
+  // after the object is constructed.
+  if (!empty($record_type)) {
+    $sobject->setRecordTypeId($record_type);
+  }
+
+  // Let other modules modify it.
+  drupal_alter('salesforce_genmap_map_object', $sobject);
+  return $sobject;
+}
+
+/**
+ * @defgroup salesforce_genmap_crud CRUD for mapping Drupal stuffs to Salesforce
+ * @{
+ */
+
+/**
+ * Creates and saves a Salesforce map.
+ *
+ * @param mixed $map
+ *   Can be an array of values or a salesforce_genmap_map entity object
+ * @param string $module
+ *   Handler module for the mapping object
+ *
+ * @return bool
+ *   SAVED_NEW or SAVED_UPDATED depending on the operation performed. Otherwise,
+ *   FALSE is returned if the map could not be saved.
+ */
+function salesforce_genmap_save_map($map, $module = 'salesforce_genmap') {
+  if (is_array($map)) {
+    $map['map_handler'] = $module;
+    // Allow sending an array and updating an existing entity with the values.
+    $entity = salesforce_genmap_load_map($map['nid'], $module);
+    if ($entity) {
+      foreach ($map as $key => $value) {
+        $entity->$key = $value;
+      }
+      $map = $entity;
+    }
+    else {
+      // Create a new entity object, but does not yet add to the database.
+      $map = entity_create('salesforce_genmap_map', $map);
+    }
+  }
+  if ($map->entityType() == 'salesforce_genmap_map') {
+    $map->map_handler = $module;
+    $map->updated = time();
+    // Adds the data to the database.
+    return entity_save('salesforce_genmap_map', $map);
+  }
+  return FALSE;
+}
+
+/**
+ * Retreives a Salesforce map.
+ *
+ * @param int $nid
+ *   The nid of the object of whose map we want to load.
+ * @param string $module
+ *   Handler module for the mapping object
+ *
+ * @return bool
+ *   The entity object you requested
+ */
+function salesforce_genmap_load_map($nid, $module = 'salesforce_genmap') {
+  $mid = _salesforce_genmap_get_map_id_by_nid_module($nid, $module);
+  if (!empty($mid)) {
+    $entities = entity_load('salesforce_genmap_map', array($mid));
+    if (isset($entities[$mid])) {
+      return $entities[$mid];
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Deletes a Salesforce map.
+ *
+ * @param int $nid
+ *   The nid of the object of whose map we're deleting.
+ * @param string $module
+ *   Handler module for the mapping object
+ *
+ * @return bool
+ *   TRUE if the delete performed as expected, FALSE if the delete could not
+ *   work as expected.
+ */
+function salesforce_genmap_delete_map($nid, $module = 'salesforce_genmap') {
+  $mid = _salesforce_genmap_get_map_id_by_nid_module($nid, $module);
+  if (!empty($mid)) {
+    $result = entity_delete('salesforce_genmap_map', $mid);
+    if ($result === FALSE) {
+      // entity_delete() only returns FALSE. Otherwise it has no return value.
+      return FALSE;
+    }
+
+    // Invokes hook_salesforce_genmap_delete_map().
+    module_invoke($module, 'salesforce_genmap_delete_map', $nid, $module);
+    return TRUE;
+  }
+}
+
+/**
+ * @} salesforce_genmap_crud
+ */
+
+
+/**
+ * Helper to return a list of handler modules, or information on a specific one.
+ */
+function salesforce_genmap_info($module = NULL) {
+  static $modules;
+  if (empty($modules)) {
+    // Gather modules that provide mapping support for generic objects.
+    $modules = module_invoke_all('salesforce_genmap_info');
+    drupal_alter('salesforce_genmap_info', $modules);
+  }
+  if ($module == NULL) {
+    return $modules;
+  }
+  return isset($modules[$module]) ? $modules[$module] : array();
+}
+
+/**
+ * DB function to return map id given node and module id.
+ */
+function _salesforce_genmap_get_map_id_by_nid_module($nid, $map_handler = 'salesforce_genmap') {
+  // @TODO: Find out if entity will handle two value primary keys, if so, use
+  // that instead.
+  return db_select('salesforce_genmap_map', 'm')
+    ->fields('m', array('mid'))
+    ->condition('nid', $nid)
+    ->condition('map_handler', $map_handler)
+    ->execute()
+    ->fetchField();
+}
+
+/**
+ * Helper to get list of modules being extended.
+ */
+function _salesforce_genmap_get_extended_modules_list() {
+  $modules = array();
+
+  // Drupal function file_scan_directory() uses the opendir() approach which
+  // does not work if the path contains symlinks.  Using scandir() to be more
+  // flexible.
+  $cache = cache_get('salesforce_genmap_extended_modules');
+  if (empty($cache)) {
+    $path = drupal_get_path('module', 'salesforce_genmap') . '/includes/modules';
+    if (is_dir($path)) {
+      $files = scandir($path);
+      foreach ($files as $file) {
+        if (!in_array($file, array('.', '..')) && substr($file, -4) == '.inc') {
+          $modules[] = substr($file, 0, -4);
+        }
+      }
+    }
+    cache_set('salesforce_genmap_extended_modules', $modules);
+  }
+  else {
+    $modules = $cache->data;
+  }
+  return $modules;
+}
+
+/**
+ * Helper to load the include files for the modules we extend.
+ */
+function _salesforce_genmap_load_extended_modules($module = '') {
+  if (empty($module)) {
+    $modules = _salesforce_genmap_get_extended_modules_list();
+  }
+  else {
+    $modules = array($module);
+  }
+  foreach ($modules as $module) {
+    module_load_include('inc', 'salesforce_genmap', 'includes/modules/' . $module);
+  }
+}
+
+/**
+ * Helper to figure out the appropriate operation when queuing.
+ */
+function _salesforce_genmap_alter_operation(&$item, $op = NULL) {
+  $op = is_null($op) ? (isset($item['operation']) ? strtoupper($item['operation']) : '') : strtoupper($op);
+
+  // Sometimes the name of the hook is sent to us, so lets support that.
+  if ($op == 'INSERT') {
+    $op = 'CREATE';
+  }
+
+  // If an item comes in as a CREATE operation, we should check to see if
+  // it's already been exported. If it has let's change the operation to
+  // UPDATE to prevent duplicates from being created in Salesforce.
+  if (($op == 'CREATE' && $record_map = salesforce_sync_load_map($item))) {
+    $op = 'UPDATE';
+    if (!isset($item['sobject']->Id)) {
+      $item['sobject']->Id = $record_map->sfid;
+    }
+  }
+
+  // Verify if we have a record map of this item yet.  Don't bother checking if
+  // it is an UPDATE that has an Id set because we can be confident that this
+  // item is correctly configured and doesn't need automated help.
+  if (($op == 'UPDATE' && !isset($item['sobject']->Id)) || $op == 'UPSERT') {
+    $record_map = salesforce_sync_load_map($item);
+    if ($record_map) {
+      // Since we already know which record this item should update in
+      // Salesforce, let us make sure this item will update that specific
+      // record.  This will override the UPSERT operation, which we want because
+      // the UPDATE operation is much cheaper.
+      $op = 'UPDATE';
+      if (!isset($item['sobject']->Id)) {
+        $item['sobject']->Id = $record_map->sfid;
+      }
+    }
+    else {
+      // Since we do not have a map of this item, this is actually a new item
+      // and cannot be updated.
+      $op = 'CREATE';
+    }
+  }
+
+  // Check to see if a dedupe field is available.  When it is, new items should
+  // be sent as UPSERT which will help avoid potential duplicate record
+  // conflicts.
+  if ($op == 'CREATE' && isset($item['dedupe_field']) && !empty($item['dedupe_field'])) {
+    $op = 'UPSERT';
+  }
+
+  $item['operation'] = $op;
+  return $op;
+}

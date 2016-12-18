@@ -1,0 +1,43 @@
+#sba-message-action-download-form--2 {
+    margin-bottom: 0 !important;
+}
+
+.failed-messages-container .span3 {
+    text-align:center;
+}
+
+.failed-messages-container .span4 {
+    text-align:center;
+}
+
+.failed-messages-container .text-info {
+    font-size:35px;
+}
+
+#sba-message-action-download-form--2 .control-group label, #sba-message-action-fail-messages-form .control-group label {
+    font-size:14px;
+    font-weight: normal;
+    cursor:default;
+}
+
+#sba-message-action-fail-messages-form .form-item-caution label {
+    font-weight: bold;
+    font-size: 13px;
+    margin-top: 20px;
+}
+
+#sba-message-action-fail-messages-form .form-item-footnote label {
+    font-weight: normal;
+    font-size: 13px;
+    font-style: italic;
+    margin-top: 20px;
+    max-width:950px;
+    line-height: 1.5em;
+    position: relative;
+}
+
+.messages-generated {
+    margin-top: -5px;
+    margin-bottom: 20px;
+    font-size: 12px;
+}

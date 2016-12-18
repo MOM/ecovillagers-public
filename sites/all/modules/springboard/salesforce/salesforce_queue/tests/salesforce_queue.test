@@ -1,0 +1,65 @@
+<?php
+
+/**
+ * @file
+ * Simpletests for salesforce_queue
+ */
+
+module_load_include('test', 'salesforce_sync', 'tests/salesforce_sync');
+
+/**
+ * Tests basic set up for queueing data for Salesforce and sending it.
+ */
+class SalesforceQueueTestCase extends SalesforceSyncTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'General API for Salesforce Queue Tests',
+      'description' => 'Ensure that the salesforce_queue module functions properly.',
+      'group' => 'Salesforce Queue',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'salesforce_queue',
+    ));
+    $permissions = array_merge($permissions, array(
+      'administer salesforce queue',
+    ));
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Creates a random bunch of items to send to the given queue.
+   *
+   * @param SalesforceQueue $queue
+   *   Queue to send items to
+   * @param int $num
+   *   Number of items to create
+   */
+  public function createQueueItems(SalesforceQueue $queue, $num = 5, $ops = array(), $exempt_objects = array()) {
+    $items = $this->createItems($num, $ops, $exempt_objects);
+    $data_items = array();
+    foreach ($items as $item) {
+      $data = (array) $item;
+      $result = $queue->createItem($data);
+      $this->assertTrue($result, 'Created a queue item.');
+      $data_items[] = $data;
+    }
+    return $data_items;
+  }
+}

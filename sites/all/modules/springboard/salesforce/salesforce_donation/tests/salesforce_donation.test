@@ -1,0 +1,56 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_donation
+ */
+
+module_load_include('test', 'salesforce_genmap', 'tests/salesforce_genmap');
+
+/**
+ * Sets up basic tools for testing Salesforce Donation.
+ */
+class SalesforceDonationTestCase extends SalesforceGenmapTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Salesforce Donation',
+      'description' => 'Sets up basic tools for testing Salesforce Donation',
+      'group' => 'Salesforce Donation',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'token',
+      'salesforce_soap',
+      'salesforce_sync',
+      'salesforce_queue',
+      'fundraiser',
+      'salesforce_donation',
+    ));
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Test installation of dependencies.
+   *
+   * Remove this test once tests are added for this module.
+   */
+  public function testInstall() {
+    $this->assertTrue(module_exists('salesforce_donation'), 'Module was not enabled correctly.');
+  }
+}

@@ -1,0 +1,7 @@
+name = Springboard P2P Rules
+description = Provides Rules events and Rules configuration for P2P
+core = 7.x
+package = Springboard P2P
+version = 7.x-1.0-dev
+dependencies[] = rules
+configure = admin/springboard/p2p/rules

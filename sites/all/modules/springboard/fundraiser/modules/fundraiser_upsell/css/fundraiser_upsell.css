@@ -1,0 +1,99 @@
+.close-modal-wrapper {
+  margin: 1em;
+  text-align: right;
+}
+
+.close-modal-wrapper.top-close {
+  background: rgba(0,0,0,.4);
+  margin: 0;
+  padding: .5em 1em;
+  position:absolute;
+  right: 0;
+  text-align: center;
+  top: 0;
+}
+
+.close-modal-wrapper.top-close a {
+  color: #fff;
+}
+
+.ctools-close-modal {
+  cursor: pointer;
+}
+
+#ctools-modal .modal-content,
+#ctools .modal-header {
+  margin: 0;
+  padding: 0;
+}
+
+#modalContent .modal-header {
+  background: transparent;
+  border: none;
+  color: #999;
+  padding: 0;
+  position: absolute;
+  top: 40%;
+  text-align: center;
+  width: 100%;
+}
+
+#modalContent .modal-header .modal-title {
+  color: #333;
+  font-family: Arial;
+}
+
+#modalContent #modal-throbber {
+  margin: 0 0 0 -20px;
+  position: absolute;
+  top: 50%;
+  width: 100%;
+}
+
+#modalContent #modal-throbber img {
+  margin-top: 0;
+}
+
+#ctools-modal h2, #ctools-modal h3 {
+  margin: 0;
+}
+
+#fundraiser-upsell-admin-settings-form .upsell_low,
+#fundraiser-upsell-admin-settings-form .upsell_high,
+#fundraiser-upsell-admin-settings-form .upsell_upsell {
+  float: left;
+  margin-right: 3em;
+}
+
+#fundraiser-upsell-admin-settings-form .upsell_value {
+  float: left;
+}
+
+#fundraiser-upsell-admin-settings-form .upsell_low {
+  clear: left;
+}
+
+#fundraiser-upsell-admin-settings-form .add_more_button_wrapper {
+  float: left;
+  clear: both;
+  padding-top: 1em;
+}
+
+/* Move the prefix currency symbol inline with the input field */
+#fundraiser-upsell-donation-form .control-group .field-prefix {
+  float: left;
+  padding-right: 5px;
+  padding-top: 5px;
+  display: inline-block;
+}
+
+/* Adding some space between the form main text and the donation elements */
+#fundraiser-upsell-donation-form .control-group {
+  margin-top: 20px;
+}
+
+/* Override some basic bootstrap theming that is applied to the control group in the modal*/
+#fundraiser-upsell-donation-form .form-actions {
+  background: none;
+  border: none;
+}

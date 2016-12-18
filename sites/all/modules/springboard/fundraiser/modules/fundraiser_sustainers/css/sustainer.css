@@ -1,0 +1,58 @@
+/* Layout sustainer mgmt pages */
+
+#payment-info,
+#donation-billing-form,
+#billing-info,
+#donation-amount-form,
+#payment-schedule,
+#donation-cancel-form,
+#donation-date-form {
+  background-color:#f4f4f4;
+  padding:10px;
+  margin-bottom:10px;
+}
+
+#donation-amount-form #edit-fee-amount-wrapper label {
+  display:inline;
+}
+
+#donation-amount-form #edit-fee-amount-wrapper .description #current,
+#donation-amount-form #edit-fee-amount-wrapper .description #minimum {
+  display:block;
+}
+
+#center #donation-amount-form form,
+#center #donation-cancel-form form {
+  margin-bottom:0;
+}
+
+#center #donation-amount-form form .form-submit,
+#center #donation-cancel-form form .form-submit {
+  margin-top:0;
+}
+
+#payment-info dl {
+  margin:0;padding:0;
+  padding-top:10px;
+  padding-bottom:10px;
+}
+
+#payment-info dl dd {
+  display:block;
+  margin:0;
+}
+
+#payment-info dl dt {
+  width:210px;
+  float:left;
+}
+
+#orders .recurring-order td a {
+ display:block;
+padding-left:4px;
+}
+
+#orders .recurring-order td a:hover {
+  background-color:#d3e7f4;
+  text-decoration:none;
+}

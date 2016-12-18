@@ -1,0 +1,23 @@
+name = Fundraiser Tickets
+description = Provides methods for selling tickets to events.
+core = 7.x
+package = Jackson River Springboard
+dependencies[] = fundraiser
+dependencies[] = commerce
+dependencies[] = commerce_order
+dependencies[] = commerce_payment
+dependencies[] = commerce_customer
+dependencies[] = commerce_product_ui
+dependencies[] = entityreference
+dependencies[] = date
+dependencies[] = date_popup
+dependencies[] = springboard_api
+dependencies[] = views
+version = 7.x-4.x-dev
+
+;Testing files
+files[] = tests/fundraiser_tickets.test
+
+;Views
+files[] = views/fundraiser_tickets.views_default.inc
+files[] = views/fundraiser_tickets.views.inc

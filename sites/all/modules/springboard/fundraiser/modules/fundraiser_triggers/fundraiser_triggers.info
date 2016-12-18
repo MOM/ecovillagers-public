@@ -1,0 +1,7 @@
+name = Fundraiser Triggers
+description = Implement triggers for Fundraiser.
+core = 7.x
+package = Jackson River Springboard
+dependencies[] = fundraiser
+dependencies[] = trigger
+version = 7.x-4.x-dev

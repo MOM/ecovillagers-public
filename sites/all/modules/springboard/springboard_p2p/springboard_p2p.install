@@ -1,0 +1,699 @@
+<?php
+/**
+ * @file
+ * Install, update, and uninstall functions for the springboard_p2p module.
+ */
+
+/**
+ * Implements hook_install().
+ *
+ * Creates the p2p donation form content type, an example p2p donation form,
+ * and sets the default form for the p2p settings.
+ *
+ * Also, set default Pathauto aliases for P2P node types.
+ */
+function springboard_p2p_install() {
+  springboard_p2p_add_donation_form_content_type();
+  $node = springboard_p2p_add_example_donation_form();
+
+  $default_items = array(
+    'p2p_donation_form' => array(
+      'enabled' => 1,
+      'nid' => $node->nid,
+    ),
+  );
+
+  variable_set('springboard_p2p_fundraiser_items', $default_items);
+
+  $default_reg_fields = array(
+    'mail' => array(
+      'enabled' => 1,
+      'required' => 1,
+      'weight' => -18,
+    ),
+    'sbp_first_name' => array(
+      'enabled' => 1,
+      'required' => 1,
+      'weight' => -20,
+    ),
+    'sbp_last_name' => array(
+      'enabled' => 1,
+      'required' => 1,
+      'weight' => -19,
+    ),
+  );
+
+  variable_set('springboard_p2p_registration_fields', $default_reg_fields);
+
+  springboard_p2p_set_existing_user_message_default();
+
+  variable_set('user_register', 1);
+  variable_set('user_email_verification', 0);
+  drupal_set_message('Users can now register for this site without administrator approval. New users are not required to verify their email. These changes streamline the P2P registration process.');
+
+  // Set Pathauto aliases for all P2P node types.
+  if (module_exists('pathauto')) {
+    springboard_p2p_set_pathauto_default_aliases(NULL, FALSE);
+  }
+}
+
+/**
+ * Implements hook_enable().
+ *
+ * Upon enabling this module, set default Pathauto aliases
+ * for all P2P node types that aren't already set.
+ */
+function springboard_p2p_enable() {
+  if (module_exists('pathauto')) {
+    springboard_p2p_set_pathauto_default_aliases(NULL, FALSE);
+  }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function springboard_p2p_uninstall() {
+  variable_del('springboard_p2p_base_path');
+  variable_del('springboard_p2p_fundraiser_items');
+  variable_del('springboard_p2p_registration_fields');
+  variable_del('springboard_p2p_webform_user_items');
+  variable_del('springboard_p2p_existing_user_message_area');
+}
+
+/**
+ * Sets a default message for the existing user trying to log in.
+ */
+function springboard_p2p_set_existing_user_message_default() {
+  $existing_user_message = 'The e-mail address %email is already registered. <a href="@password">Send me a password reset email.</a>';
+  variable_set('springboard_p2p_existing_user_message_area', $existing_user_message);
+}
+
+/**
+ * Implements hook_schema().
+ */
+function springboard_p2p_schema() {
+  $schema = array();
+
+  $schema['springboard_p2p_private_campaign_approval'] = array(
+    'description' => 'Stores approval status for private campaigns.',
+    'fields' => array(
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {users}.uid.',
+        'default' => 0,
+      ),
+      'nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the private campaign.',
+        'default' => 0,
+      ),
+      'status' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'description' => 'The state of the user\'s approval request.',
+        'default' => 'requested',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => "Timestamp of when approval was requested.",
+      ),
+    ),
+    'indexes' => array(
+      'status' => array('status'),
+    ),
+    'primary key' => array('uid', 'nid'),
+    'foreign keys' => array(
+      'node_nid' => array(
+        'table' => 'node',
+        'columns' => array('nid' => 'nid'),
+      ),
+      'users_uid' => array(
+        'table' => 'users',
+        'columns' => array('uid' => 'uid'),
+      ),
+    ),
+  );
+
+  $schema['springboard_p2p_personal_campaign_action'] = array(
+    'description' => 'Stores data about a user completing a form for a personal campaign.',
+    'fields' => array(
+      'category_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the p2p category.',
+        'default' => 0,
+      ),
+      'campaign_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the p2p campaign.',
+        'default' => 0,
+      ),
+      'personal_campaign_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the private campaign.',
+        'default' => 0,
+      ),
+      'personal_campaign_uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {users}.uid of the campaigner.',
+        'default' => 0,
+      ),
+      'form_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the webform user or fundraiser node.',
+        'default' => 0,
+      ),
+      'sid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The submission id of the action.',
+        'default' => 0,
+      ),
+      'action_type' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'description' => 'The type of the action. Either donation or submission.',
+        'default' => 'requested',
+      ),
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {users}.uid of the submitter.',
+        'default' => 0,
+      ),
+      'show_name' => array(
+        'description' => 'Boolean indicating whether show the submitter\'s name.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'size' => 'tiny',
+        'default' => 0,
+      ),
+      'comment' => array(
+        'description' => 'The comment.',
+        'type' => 'text',
+        'not null' => TRUE,
+        'size' => 'big',
+      ),
+      'amount' => array(
+        'description' => 'The donation amount if this is a donation.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when this action was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'status' => array(
+        'description' => 'Boolean indicating whether the action is visible.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'donor_name' => array(
+        'description' => 'The name to show for the submission.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,  
+      ),
+    ),
+    'indexes' => array(
+      'personal_campaign_nid' => array('personal_campaign_nid'),
+    ),
+    'primary key' => array('sid'),
+    'foreign keys' => array(
+      'category_nid' => array(
+        'table' => 'node',
+        'columns' => array('category_nid' => 'nid'),
+      ),
+      'campaign_nid' => array(
+        'table' => 'node',
+        'columns' => array('campaign_nid' => 'nid'),
+      ),
+      'personal_campaign_nid' => array(
+        'table' => 'node',
+        'columns' => array('personal_campaign_nid' => 'nid'),
+      ),
+      'personal_campaign_uid' => array(
+        'table' => 'users',
+        'columns' => array('personal_campaign_uid' => 'uid'),
+      ),
+      'form_nid' => array(
+        'table' => 'node',
+        'columns' => array('form_nid' => 'nid'),
+      ),
+      'uid_uid' => array(
+        'table' => 'users',
+        'columns' => array('uid' => 'uid'),
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Create the p2p_donation_form content type.
+ */
+function springboard_p2p_add_donation_form_content_type() {
+  $type = node_type_set_defaults();
+  $type->name = t('Peer to Peer Donation Form');
+  $type->type = 'p2p_donation_form';
+  $type->description = t('Springboard provided P2P donation form type.');
+  $type->title_label = t('Title');
+  $type->has_title = ($type->title_label != '');
+  $type->base = 'node_content';
+  $type->custom = TRUE;
+  $type->modified = TRUE;
+  $type->module = 'springboard_p2p';
+  // Save or reset persistent variable values.
+  $variables = array(
+    'node_submitted' => 0,
+    'fundraiser' => 1,
+    'webform_user' => 1,
+    'webform_user_default_fields' => array(
+      'webform_user_all_profile_fields' => 'webform_user_all_profile_fields',
+    ),
+  );
+  foreach ($variables as $key => $value) {
+    $variable_new = $key . '_' . $type->type;
+    if (is_array($value)) {
+      $value = array_keys(array_filter($value));
+    }
+    variable_set($variable_new, $value);
+  }
+  node_type_save($type);
+  node_types_rebuild();
+  node_add_body_field($type);
+  // Add as a webform.
+  $webform_node_types = variable_get('webform_node_types', array('webform'));
+  $webform_node_types_primary = variable_get('webform_node_types_primary', array('webform'));
+  $webform_node_types = array_merge($webform_node_types, array('p2p_donation_form'));
+  $webform_node_types_primary = array_merge($webform_node_types_primary, array('p2p_donation_form'));
+  variable_set('webform_node_types', array_unique($webform_node_types));
+  variable_set('webform_node_types_primary', array_unique($webform_node_types_primary));
+  // Done.
+  drupal_set_message(t('The content type <em>p2p_donation_form</em> has been added.'));
+  watchdog('springboard_p2p', 'Added content type p2p_donation_form.');
+}
+
+/**
+ * Create an example p2p donation form.
+ */
+function springboard_p2p_add_example_donation_form() {
+  // Refresh field information defs. So that what was picked up if anything
+  // earlier during module activation, is now configured right.
+  // Avoid static cache issues.
+  _fundraiser_field_info(TRUE);
+  // Create the node.
+  $node = new stdClass();
+  $node->is_new = 1;
+  $node->type = 'p2p_donation_form';
+  $node->language = LANGUAGE_NONE;
+  $node->uid = 1;
+  $node->title = 'P2P Test Donation Form';
+  $node->field_fundraiser_internal_name = array($node->language => array(0 => array('value' => 'P2P Test Donation Form')));
+  $node->status = 1;
+  $node->promote = 1;
+  $node->body[$node->language][0]['value'] = 'Donec placerat. Nullam nibh dolor, blandit sed, fermentum id, ' .
+    'imperdiet sit amet, neque. Nam mollis ultrices justo. Sed tempor. Sed vitae tellus. Etiam sem arcu, eleifend ' .
+    'sit amet, gravida eget, porta at, wisi. Nam non lacus vitae ipsum viverra pretium. Phasellus massa. Fusce ' .
+    'magna sem, gravida in, feugiat ac, molestie eget, wisi. Fusce consectetuer luctus ipsum. Vestibulum nunc. ' .
+    'Suspendisse dignissim adipiscing libero. Integer leo. Sed pharetra ligula a dui. Quisque ipsum nibh, ullamcorper ' .
+    'eget, pulvinar sed, posuere vitae, nulla. Sed varius nibh ut lacus. Curabitur fringilla. Nunc est ipsum, ' .
+    'pretium quis, dapibus sed, varius non, lectus. Proin a quam. Praesent lacinia, eros quis aliquam porttitor, ' .
+    'urna lacus volutpat urna, ut fermentum neque mi egestas dolor.';
+  $node->body[$node->language][0]['summary'] = 'Donec placerat. Nullam nibh dolor, blandit sed, fermentum id, imperdiet ' .
+    'sit amet, neque. Nam mollis ultrices justo. Sed tempor. Sed vitae tellus. Etiam sem arcu, eleifend sit amet, ' .
+    'gravida eget, porta at, wisi. Nam non lacus vitae ipsum viverra pretium. Phasellus massa. Fusce magna sem, gravida ' .
+    'in, feugiat ac, molestie eget, wisi.';
+  $node->body[$node->language][0]['format'] = 'filtered_html';
+  $node->webform = array(
+    'confirmation' =>
+      'Thank you [donation:first_name] [donation:last_name] for your donation of [donation:currency:symbol][donation:amount].' . "\n\n" .
+      'The email address we have for you is: [donation:mail]' . "\n\n" .
+      'The address we have on record for you is:' . "\n" .
+      '[donation:address] [donation:address_line_2]' . "\n" .
+      '[donation:city], [donation:state] [donation:zip]' . "\n" .
+      '[donation:country]' . "\n\n" .
+      'Your card ending in [donation:card_number], expires [donation:card_expiration_month] / [donation:card_expiration_year]',
+    'confirmation_format' => 'filtered_html',
+    'redirect_url' => '<confirmation>',
+    'teaser' => 0,
+    'block' => 0,
+    'allow_draft' => 0,
+    'auto_save' => 0,
+    'submit_notice' => 1,
+    'submit_text' => t('Donate'),
+    'submit_limit' => -1,
+    'submit_interval' => -1,
+    'total_submit_limit' => -1,
+    'total_submit_interval' => -1,
+    'status' => 1,
+    'record_exists' => '',
+    'roles' => array(
+      '0' => 1,
+      '1' => 2,
+    ),
+    'emails' => array(),
+    'components' => array(),
+  );
+
+  $node->gateways = array(
+    'credit' => array(
+      'status' => 1,
+      'method' => 'credit',
+      'id' => 'commerce_payment_example|commerce_payment_commerce_payment_example',
+    ),
+  );
+  $node->amount_wrapper = array(
+    'donation_amounts' => array(
+      '0' => array(
+        'amount' => 10,
+        'label' => '$10',
+        'weight' => 0,
+      ),
+      '1' => array(
+        'amount' => 20,
+        'label' => '$20',
+        'weight' => 1,
+      ),
+      '2' => array(
+        'amount' => 50,
+        'label' => '$50',
+        'weight' => 2,
+      ),
+      '3' => array(
+        'amount' => 100,
+        'label' => '$100',
+        'weight' => 3,
+      ),
+    ),
+    'show_other_amount' => 1,
+    'ask_for_quantity' => 0,
+    'minimum_donation_amount' => 10,
+  );
+  $node->recurring_setting = 'never';
+  $node->is_webform_user = 1;
+  $node->send_new_user_email = 0;
+  node_save($node);
+  $node = node_load($node->nid);
+  // Save confirmation details.
+  $confirmation['nid'] = $node->nid;
+  $confirmation['confirmation_page_title'] = 'Thank you for your donation!';
+  _webform_confirmations_update($confirmation);
+
+  // One last save.
+  node_save($node);
+  // Make sure the donation maps are moved over to be ready
+  // when/if SF is authenticated.
+  if (module_exists('salesforce_genmap')) {
+    // Add default map for donation.
+    $map = salesforce_genmap_load_map(-1, 'salesforce_donation');
+    if (!empty($map)) {
+      // Copy the map to the node.
+      unset($map->mid);
+      $map->nid = $node->nid;
+      salesforce_genmap_save_map($map, 'salesforce_donation');
+    }
+    // Add default map for sustainers.
+    $map = salesforce_genmap_load_map(-1, 'fundraiser_sustainers');
+    if (!empty($map)) {
+      // Copy the map to the node.
+      unset($map->mid);
+      $map->nid = $node->nid;
+      salesforce_genmap_save_map($map, 'fundraiser_sustainers');
+    }
+  }
+  drupal_set_message(t('An example P2P donation form has been created.'));
+  return $node;
+}
+
+/**
+ * Adds the springboard_p2p_personal_campaign_action table.
+ */
+function springboard_p2p_update_7001() {
+  $table = array(
+    'description' => 'Stores data about a user completing a form for a personal campaign.',
+    'fields' => array(
+      'category_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the p2p category.',
+        'default' => 0,
+      ),
+      'campaign_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the p2p campaign.',
+        'default' => 0,
+      ),
+      'personal_campaign_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the private campaign.',
+        'default' => 0,
+      ),
+      'personal_campaign_uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {users}.uid of the campaigner.',
+        'default' => 0,
+      ),
+      'form_nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {node}.nid of the webform user or fundraiser node.',
+        'default' => 0,
+      ),
+      'sid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The submission id of the action.',
+        'default' => 0,
+      ),
+      'action_type' => array(
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'description' => 'The type of the action. Either donation or submission.',
+        'default' => 'requested',
+      ),
+      'uid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'The {users}.uid of the submitter.',
+        'default' => 0,
+      ),
+      'show_name' => array(
+        'description' => 'Boolean indicating whether show the submitter\'s name.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'size' => 'tiny',
+        'default' => 0,
+      ),
+      'comment' => array(
+        'description' => 'The comment.',
+        'type' => 'text',
+        'not null' => TRUE,
+        'size' => 'big',
+      ),
+      'amount' => array(
+        'description' => 'The donation amount if this is a donation.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when this action was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'personal_campaign_nid' => array('personal_campaign_nid'),
+    ),
+    'primary key' => array('sid'),
+    'foreign keys' => array(
+      'category_nid' => array(
+        'table' => 'node',
+        'columns' => array('category_nid' => 'nid'),
+      ),
+      'campaign_nid' => array(
+        'table' => 'node',
+        'columns' => array('campaign_nid' => 'nid'),
+      ),
+      'personal_campaign_nid' => array(
+        'table' => 'node',
+        'columns' => array('personal_campaign_nid' => 'nid'),
+      ),
+      'personal_campaign_uid' => array(
+        'table' => 'users',
+        'columns' => array('personal_campaign_uid' => 'uid'),
+      ),
+      'form_nid' => array(
+        'table' => 'node',
+        'columns' => array('form_nid' => 'nid'),
+      ),
+      'uid_uid' => array(
+        'table' => 'users',
+        'columns' => array('uid' => 'uid'),
+      ),
+    ),
+  );
+  db_create_table('springboard_p2p_personal_campaign_action', $table);
+}
+
+/**
+ * Adds sid to the springboard_p2p_personal_campaign_action table.
+ */
+function springboard_p2p_update_7002() {
+  $field = array(
+    'type' => 'int',
+    'unsigned' => TRUE,
+    'not null' => TRUE,
+    'description' => 'The submission id of the action.',
+    'default' => 0,
+  );
+  db_add_field('springboard_p2p_personal_campaign_action', 'sid', $field);
+}
+
+/**
+ * Adds the default p2p_donation_form content type.
+ */
+function springboard_p2p_update_7003() {
+  springboard_p2p_add_donation_form_content_type();
+}
+
+/**
+ * Adds the example p2p donation form.
+ */
+function springboard_p2p_update_7004() {
+  springboard_p2p_add_example_donation_form();
+}
+
+/**
+ * Changes the primary key in the personal_campaign_action table.
+ */
+function springboard_p2p_update_7005() {
+  db_drop_primary_key('springboard_p2p_personal_campaign_action');
+  db_add_primary_key('springboard_p2p_personal_campaign_action', array('sid'));
+}
+
+/**
+ * Adds the default existing user message when registering.
+ */
+function springboard_p2p_update_7006() {
+  springboard_p2p_set_existing_user_message_default();
+}
+
+/**
+ * Remove the springboard_p2p_base_path variable.
+ */
+function springboard_p2p_update_7007() {
+  variable_del('springboard_p2p_base_path');
+}
+
+/**
+ * Adds the status field to personal campaign actions.
+ */
+function springboard_p2p_update_7008() {
+  $status = array(
+    'description' => 'Boolean indicating whether the action is visible.',
+    'type' => 'int',
+    'not null' => TRUE,
+    'default' => 0,
+    'initial' => 1,
+  );
+
+  db_add_field('springboard_p2p_personal_campaign_action', 'status', $status);
+}
+
+/**
+ * Adds donor_name field to personal campaign actions.
+ */
+function springboard_p2p_update_7009() {
+  if (!db_field_exists('springboard_p2p_personal_campaign_action', 'donor_name')) {
+    $donor_name = array(
+      'description' => 'The name to show for the submission.',
+      'type' => 'varchar',
+      'length' => 255,
+      'not null' => FALSE,
+      'default' => NULL,   
+    );
+    db_add_field('springboard_p2p_personal_campaign_action', 'donor_name', $donor_name);
+  }
+}
+
+/**
+ * Populates donor_name field in springboard_p2p_personal_campaign_action for existing users.
+ */
+function springboard_p2p_update_7010(&$sandbox) {
+  $batch = 50;
+  $query = "SELECT sid, form_nid,uid FROM {springboard_p2p_personal_campaign_action}
+    WHERE status = 1 AND show_name = 1
+    AND action_type = 'fundraiser'
+    ORDER BY sid ASC
+   ";
+  if (!isset($sandbox['max'])) {
+    $sandbox['progress'] = 0;
+    $sandbox['current_sid'] = 0;
+    $sandbox['max'] = db_query($query)->rowCount();
+  }
+  
+  $update_query = "UPDATE {springboard_p2p_personal_campaign_action} set donor_name = :donor_name WHERE uid = :uid AND sid = :sid";
+
+  $result = db_query_range($query, $sandbox['progress'], $batch);
+  while ($record = $result->fetchAssoc()) {
+    // If the user no longer exists, we won't have a name, but we will get php notices from entity.inc.
+    $exists = db_query("select 1 from {users} where uid = :uid", array(':uid' => $record['uid']))->fetchField();
+    if ($exists) {
+      // Load the account to get the value for donor_name.
+      $account = user_load($record['uid']);
+      $donor_name = springboard_p2p_format_user_full_name($account);
+      if (!empty($donor_name)) {
+        db_query($update_query, array(':donor_name' => $donor_name, ':uid' => $record['uid'], ':sid' => $record['sid']));
+      }
+    }
+    $sandbox['progress']++;
+    $sandbox['current_sid'] = $record['sid'];
+  }
+  
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+
+  if ($sandbox['#finished'] >= 1) {
+    return t('springboard_p2p_personal_campaign_action table donor_names updated.');
+  }
+}

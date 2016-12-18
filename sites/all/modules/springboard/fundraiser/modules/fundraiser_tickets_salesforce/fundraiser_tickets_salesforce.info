@@ -1,0 +1,6 @@
+name = Fundraiser Tickets Salesforce Sync
+description = Extends Fundraiser Tickets by adding Salesforce sync functionality.
+core = 7.x
+package = Jackson River Springboard
+dependencies[] = fundraiser_tickets
+version = 7.x-4.x-dev

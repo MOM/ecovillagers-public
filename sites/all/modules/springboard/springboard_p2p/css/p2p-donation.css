@@ -1,0 +1,549 @@
+
+.form-item.error {
+  background: none;
+}
+
+.form-item.error label {
+  color: #8c2e0b;
+}
+
+.form-item label.error.valid {
+  text-align: left;
+  text-indent: -9999px;
+}
+
+#edit-submitted-donation-amount .form-item {
+  display: inline-block;
+  margin-right: 3%;
+  width: inherit;
+}
+
+#webform-component-donation--other-amount {
+  position: relative;
+}
+
+#webform-component-donation--other-amount .field-prefix {
+  position: absolute;
+  top: 38px;
+  left: 10px;
+  font-size: 18px;
+}
+
+#other-wrapper {
+  display: none;
+}
+
+.ie8 #other-wrapper {
+  display: inline-block !important;
+}
+
+.form-textarea-wrapper textarea,
+textarea,
+input[type="text"],
+input[type="datetime"],
+input[type="datetime-local"],
+input[type="date"],
+input[type="month"],
+input[type="time"],
+input[type="week"],
+input[type="number"],
+input[type="email"],
+input[type="url"],
+input[type="search"],
+input[type="tel"],
+input[type="color"],
+input[type="password"],
+.uneditable-input {
+  padding: 0 0 0 4px;
+  width: 75%;
+  height: 32px;
+  border: 1px solid #cfcfcf;
+  -webkit-border-radius: 0;
+  -moz-border-radius: 0;
+  border-radius: 0;
+  color: #828385;
+  font-size: 20px;
+}
+
+input[type='*']:focus,
+input[type='email']:focus {
+  outline: 0;
+  border-color: #66afe9;
+}
+
+.p2p-donation-form #uniform-edit-submitted-billing-information-country .ajax-progress .throbber {
+  position: relative;
+  top: -35px;
+  left: 250px;
+  z-index: 300;
+  display: inline-block;
+  float: none;
+  margin: 2px;
+  width: 37px;
+  height: 37px;
+  background: transparent url('../images/spinner.gif') no-repeat;
+}
+
+div#uniform-edit-submitted-billing-information-country {
+  width: 290px !important;
+}
+
+.form-textarea-wrapper textarea,
+textarea {
+  width: 100%;
+  height: inherit;
+  -webkit-border-radius: 0;
+  -moz-border-radius: 0;
+  border-radius: 0;
+  color: #828385;
+  font-size: 20px;
+}
+
+input#edit-submitted-payment-information-payment-fields-credit-card-cvv {
+  margin-right: 10px;
+  width: 78px;
+}
+
+.control-group .checkbox-input,
+.control-group .radio-button-input,
+.form-item .checkbox-input,
+.form-item .radio-button-input {
+  display: none;
+}
+
+.ie8 .control-group .checkbox-input,
+.ie8 .control-group .radio-button-input,
+.ie8 .form-item .checkbox-input,
+.ie8 .form-item .radio-button-input {
+  display: inline-block;
+}
+
+.control-group.success .checkbox,
+.control-group.success .radio,
+.control-group.success input,
+.control-group.success select,
+.control-group.success textarea,
+.control-group.error .checkbox,
+.control-group.error .radio,
+.control-group.error input,
+.control-group.error select,
+.control-group.error textarea,
+.control-group select,
+.control-group input,
+.form-item select,
+.form-item input {
+  color: #828385;
+}
+
+.edit-submitted-payment-information-payment-method .control-group,
+.edit-submitted-payment-information-payment-method .form-item {
+  display: inherit;
+  width: inherit;
+}
+
+.control-group.success select,
+.control-group.success input,
+.form-item.success select,
+.form-item.success input {
+  float: left;
+  clear: left;
+}
+
+.control-group.error .error,
+.form-item.error .error {
+  margin: 0;
+}
+
+.control-group.success .error.valid,
+.form-item.success .error.valid {
+  display: inline-block;
+}
+
+#zone-select-wrapper .form-item.success:after,
+#zone-select-wrapper .control-group.success:after {
+  left: 4px;
+}
+
+.form-item.success:after {
+  left: 4px;
+}
+
+.control-group.success .error.valid,
+.form-item.success .error.valid {
+  background: none;
+}
+
+.webform-client-form label,
+.field-prefix {
+  margin: 0 0 10px 0;
+  color: #7e7e7e;
+  font-weight: normal;
+  font-size: 14px;
+}
+
+.webform-client-form label.error {
+  color: #8c2e0b;
+}
+
+.checkbox-label:before,
+.radio-label:before {
+  position: relative;
+  top: 4px;
+  display: inline-block;
+  padding-right: 7px;
+  width: 21px;
+  height: 19px;
+  background: url('../images/sprite_p2p.png') no-repeat 3px -3px;
+  content: ' ';
+  cursor: pointer;
+  zoom: 1;
+}
+
+.radio-label:before {
+  background: url('../images/sprite_p2p.png') no-repeat -72px -3px;
+}
+
+.radio-label.radio-checked:before {
+  background: url('../images/sprite_p2p.png') no-repeat -109px -3px;
+}
+
+.checkbox-label:before {
+  background: url('../images/sprite_p2p.png') no-repeat -0 -4px;
+}
+
+.checkbox-label.checked:before {
+  background: url('../images/sprite_p2p.png') no-repeat -38px -4px;
+}
+
+.ie8 .checkbox-label:before,
+.ie8 .radio-label:before {
+  background: none;
+}
+
+h2,
+span.fieldset-legend {
+  position: relative;
+  display: block;
+  padding: 0 0 12px 0;
+  color: #888;
+  font-weight: normal;
+  font-size: 36px;
+}
+
+span.fieldset-legend:after {
+  position: relative;
+  top: -4px;
+  right: -7px;
+  padding: 0px 0 0 10px;
+  color: #888;
+  content: "\f040";
+  text-decoration: inherit;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 22px;
+  font-family: FontAwesome;
+}
+
+.webform-component-fieldset {
+  margin-top: 12px;
+}
+
+legend {
+  width: 84%;
+  border-bottom: 1px dashed #acacac;
+}
+
+.form-actions {
+  position: relative;
+  margin: 10px 0;
+  padding: 0;
+  border-top: none;
+  background-color: #fff;
+}
+
+input#edit-submitted-donation-other-amount {
+  width: 100%;
+  text-indent: 20px;
+}
+
+label[for="edit-submitted-donation-other-amount"] {
+  font-weight: bold;
+}
+
+input#edit-submit {
+  padding: 20px;
+  width: 100%;
+  font-size: 28px;
+}
+
+.user-form-vertical-right input#edit-submit,
+.user-form-vertical-left input#edit-submit{
+  font-size: 20px;
+}
+
+@media (min-width: 1200px) {
+  .user-form-vertical-right input#edit-submit,
+  .user-form-vertical-left input#edit-submit{
+    font-size: 22px;
+  }
+}
+
+#edit-actions:after {
+  position: absolute;
+  top: 28px;
+  right: 10px;
+  padding: 0px 0 0 10px;
+  color: #fffe00;
+  content: "\f061";
+  text-decoration: inherit;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 33px;
+  font-family: FontAwesome;
+  pointer-events: none;
+}
+
+.fundraiser_submit_message {
+  margin: 10px 0 10px 0;
+  padding: 20px 0 10px 0;
+  border-top: 1px dashed #acacac;
+}
+
+/* comments area */
+
+#comment-wrapper {
+  float: none;
+  clear: both;
+}
+
+#comment-wrapper .control-group,
+#comment-wrapper .form-item {
+  display: block;
+  width: 100%;
+}
+
+#comment-wrapper textarea {
+  min-height: 106px;
+  width: 99%;
+}
+
+.panel-display.panel-2col-bricks {
+  margin-bottom: 30px;
+}
+
+.fundraiser_submit_message:before {
+  position: relative;
+  top: 3px;
+  left: 0;
+  margin-right: 11px;
+  color: #7eae48;
+  content: "\f023";
+  text-decoration: inherit;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 21px;
+  font-family: FontAwesome;
+}
+
+.p2p-donation-form .ajax-progress .throbber {
+  position: absolute;
+  top: 32px;
+  right: 10%;
+  z-index: 300;
+  display: inline-block;
+  float: none;
+  margin: 2px;
+  width: 37px;
+  height: 37px;
+  background: transparent url('../images/spinner.gif') no-repeat;
+}
+
+.pane-body p {
+  margin: 0 2% 10px 0;
+  font-size: 15px;
+  line-height: 1.4em;
+}
+
+.pane-top-banner {
+  margin-bottom: 20px;
+}
+
+.pane-sidebar h2 {
+  margin: 0;
+}
+
+.fa-calendar.amount-icon {
+  position: absolute;
+  top: 8px;
+  right: 7px;
+  display: block;
+  width: 50px;
+  height: 50px;
+  color: #859596;
+  text-align: right;
+  font-size: 19px;
+}
+
+div.donation-processing-wrapper,
+.webform-user-wrapper {
+  position: relative;
+  float: none;
+  clear: none;
+  padding: 5px 20px;
+  width: inherit;
+  border: 0;
+  -webkit-border-radius: 0;
+  -moz-border-radius: 0;
+  border-radius: 0;
+  background: #2980b9;
+  color: #fff;
+  vertical-align: top;
+  text-align: center;
+  text-align: center;
+  text-shadow: none;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.donation-processing-wrapper p,
+.webform-user-wrapper p {
+  margin: 18px 0 0 0;
+  font-size: 26px;
+}
+
+.webform-user-wrapper {
+  padding: 5px 0 22px 20px;
+}
+
+/* Override P2P styling for quicksign form */
+#edit-submitted-sba-quicksign-children-submit + .webform-user-wrapper,
+#edit-submitted-sba-quicksign-children-submit + .webform-user-wrapper p {
+  padding: 0;
+  margin: 0;
+  font-size: 16px;
+  clear: both;
+}
+
+/* confirmation page */
+
+.pane-p2p-confirmation table tr td.first {
+  width: 36%;
+}
+
+.p2p-confirmation h1,
+.p2p-confirmation h2 {
+  text-align: center;
+}
+
+.p2p-social-pane ul {
+  text-align: center;
+}
+
+.p2p-social-pane li {
+  display: inline-block;
+  height: 42px;
+  list-style: none;
+}
+
+.p2p-social-pane {
+  margin: 0 0 20px 0;
+  padding: 0 0 20px 0;
+}
+
+.pane-signup {
+  margin: 0 0 20px 0;
+  padding: 0 0 20px 0;
+  border-bottom: 1px dashed #acacac;
+  text-align: center;
+}
+
+.pane-signup a,
+.webform-conf-pane .links a {
+  position: relative;
+  display: block;
+  margin: 10px auto 0 auto;
+  padding: 5px 30px 5px 10px;
+  width: 400px;
+  background: #859596;
+  color: #fff;
+  vertical-align: top;
+  text-align: center;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.webform-conf-pane .links a {
+  padding: 5px 10px;
+  width: 200px;
+}
+
+.pane-signup a:after {
+  position: relative;
+  top: 1px;
+  padding: 0px 0 0 10px;
+  color: #fffe00;
+  content: "\f061";
+  text-decoration: inherit;
+  font-weight: normal;
+  font-style: normal;
+  font-family: FontAwesome;
+}
+
+.pane-signup a:hover,
+.webform-conf-pane .links a:hover {
+  outline: none;
+  background: #2980b9;
+  text-decoration: none;
+}
+
+.pane-content .webform-confirmation {
+  padding: 10px;
+  border: 1px solid #ccc;
+  text-align: center;
+  font-weight: bold;
+}
+
+.addthis_toolbox.addthis_16x16_style {
+  display: inline-block;
+  padding-top: 10px;
+}
+
+div.donation-processing-spinner {
+  bottom: -33px;
+  position: relative;
+  width: 100%;
+}
+
+/* media queries */
+
+@media (max-width: 768px) {
+
+  .fieldset-wrapper .control-group,
+  .fieldset-wrapper .form-item,
+  #zone-select-wrapper,
+  .expiration-date-wrapper,
+  .fundraiser-payment-fields.form-wrapper select,
+  #other-wrapper {
+    display: inline-block;
+    float: none;
+    clear: both;
+    width: 99%;
+    vertical-align: top;
+  }
+
+  .form-textarea-wrapper textarea,
+  input[type='text'],
+  input[type='email'] {
+    font-size: 16px;
+  }
+
+  select {
+    width: 90%;
+  }
+
+  .control-group .spacer,
+  .form-item .spacer {
+    margin-left: 0;
+  }
+
+}

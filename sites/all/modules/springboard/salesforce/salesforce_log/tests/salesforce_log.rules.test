@@ -1,0 +1,190 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_log
+ */
+
+module_load_include('test', 'salesforce_log', 'tests/salesforce_log');
+
+/**
+ * Tests basic set up for triggering events on Salesforce watchdog logs.
+ */
+class SalesforceLogRulesTestCase extends SalesforceLogTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Salesforce Alerts',
+      'description' => 'Ensure that alerts on watchdog events functions properly.',
+      'group' => 'Salesforce Log',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'rules',
+    ));
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Test the salesforce_log_map entity.
+   */
+  public function testWatchdogEvents() {
+    // Having not add queue items, the processor will first fail for having not
+    // found any items.
+    // log-00: Any log message about Salesforce.
+    // sync-10: SalesforceAPI is unauthorized.
+    // sync-11: SalesforceSoapPartner is unusable.
+    // queue-07: QueueProcessor found no items.
+    $log_00 = $this->createRule('log-00');
+    $sync_10 = $this->createRule('sync-10');
+    $sync_11 = $this->createRule('sync-11');
+    $queue_07 = $this->createRule('queue-07');
+    salesforce_queue_process_queue();
+    $this->assertRuleExecuted($log_00);
+    $this->assertRuleExecuted($sync_10);
+    $this->assertRuleExecuted($sync_11);
+    $this->assertRuleExecuted($queue_07);
+
+    // Create queue items.
+    $queue = salesforce_queue_load();
+    $this->createQueueItems($queue, 3, array('CREATE', 'UPSERT'), array('Opportunity'));
+
+    // Going to lock the queue by another process and have it fail from a locked
+    // queue.
+    // queue-02: Claim items failed, queue is leased.
+    // queue-06: QueueProcessor claimed no items: Queue is leased.
+    $queue_02 = $this->createRule('queue-02');
+    $queue_06 = $this->createRule('queue-06');
+    $queue->claimBatch();
+    salesforce_queue_process_queue();
+    $this->assertRuleExecuted($queue_02);
+    $this->assertRuleExecuted($queue_06);
+
+    // Release the claim and try again.
+    // Since we haven't connected to Salesforce, processing will fail.
+    // queue-03: QueueProcessor failed: Salesforce not authorized.
+    $queue_03 = $this->createRule('queue-03');
+    $queue->releaseBatch('', TRUE);
+    watchdog('salesforce', 'NOTE (1) "queue-03" error to follow.', NULL, WATCHDOG_WARNING);
+    salesforce_queue_process_queue();
+    $this->assertRuleExecuted($queue_03);
+
+    // Connect to Salesforce improperly and send a bad item to delete.
+    // sync-03: Batch failed to sync.
+    // sync-02: Item failed to delete.
+    $item = new SalesforceSyncItem('Opportunity', 'DELETE');
+    $item->item_id = '472';
+    $item->drupal_id = '123';
+    $item->module = 'node';
+    $item->delta = 'article';
+    $item->sobject->Id = '003d0000018kPV3AAM';
+    $item->queue = 'new';
+    $item->retries = 0;
+    $bad_sync = new SalesforceSync();
+    $sync_02 = $this->createRule('sync-02');
+    $sync_03 = $this->createRule('sync-03');
+    watchdog('salesforce', 'NOTE (1) "sync-03" error to follow.', NULL, WATCHDOG_WARNING);
+    $bad_sync->sendItem($item);
+    $this->assertRuleExecuted($sync_02);
+    $this->assertRuleExecuted($sync_03);
+
+    // Connect to Salesforce and process queue.
+    $this->salesforceConnect();
+    $processor = salesforce_queue_load_processor();
+    $processor->process();
+
+    // Send invalid items to queue to get failed to sync error.
+    // sync-01: Item failed to sync.
+    // queue-05: QueueProcessor found only invalid items.
+    foreach ($processor->getNewSfRecords() as $item) {
+      $data = array(
+        'drupal_id' => $item->drupal_id,
+        'module' => $item->module,
+        'delta' => $item->delta,
+        'object_type' => $item->object_type,
+        'operation' => 'CREATE',
+        'dedupe_field' => $item->dedupe_field,
+        'sobject' => $item->sobject,
+      );
+      $queue->createItem($data);
+    }
+    $sync_01 = $this->createRule('sync-01');
+    $queue_05 = $this->createRule('queue-05');
+    watchdog('salesforce', 'NOTE (3) "Item failed validation" warnings to follow.', NULL, WATCHDOG_WARNING);
+    $processor->process();
+    $this->assertRuleExecuted($sync_01);
+    $this->assertRuleExecuted($queue_05);
+
+    // Cleanup items from Salesforce.
+    $processor->deleteNewSfRecords();
+
+    // Create an item that is incompatible with the schema.
+    // queue-01: Item failed to be added to queue.
+    $queue_01 = $this->createRule('queue-01');
+    $data = array(
+      'module' => array($item->module),
+      'delta' => $item->delta,
+      'object_type' => $item->object_type,
+      'operation' => 'CREATE',
+      'dedupe_field' => $item->dedupe_field,
+      'sobject' => $item->sobject,
+    );
+    watchdog('salesforce', 'NOTE (1) "queue-01" error to follow.', NULL, WATCHDOG_WARNING);
+    $queue->createItem($data);
+    $this->assertRuleExecuted($queue_01);
+
+    // Clean up queue.
+    $queue->deleteQueue();
+
+    // Set up ability to create a long rediculous query to Salesforce.
+    $ids = array();
+    $fields = array();
+    $count = 20;
+    while ($count > 0) {
+      $fields[] = $ids[] = $this->randomName();
+      $count--;
+    }
+
+    // First let this rediculous query go forth.
+    // sync-06: Salesforce query failed.
+    $sync = new SalesforceSync();
+    $sync_06 = $this->createRule('sync-06');
+    $sync->fetchByField('Contact', $fields, 'Id', $ids);
+    $this->assertRuleExecuted($sync_06);
+
+
+    // Then bind the max query length.
+    // sync-08: Query cannot be shortened under max length.
+    variable_set('salesforce_sync_max_query_length', 25);
+    $sync = new SalesforceSync();
+    $sync_08 = $this->createRule('sync-08');
+    watchdog('salesforce', 'NOTE (1) "sync-08" error to follow.', NULL, WATCHDOG_WARNING);
+    $sync->fetchByField('Contact', $fields, 'Id', $ids);
+    $this->assertRuleExecuted($sync_08);
+
+    // After many attempts, I have come to the conclusion that the following
+    // errors are neigh impossible to reach.  If some lucky person is in fact
+    // able to reach them, I would absolutely love to know how they got there.
+    //
+    //   - sync-05: Fetch records by Id returned bad results.
+    //   - sync-04: Fetch records by Id failed.
+    //   - sync-07: Salesforce query could not fetch all.
+    //   - queue-04: QueueProcessor Failed: SalesforceSoapPartner unusable.
+    //   - queue-08: QueueProcessor claimed no items: Reason unknown.
+  }
+}

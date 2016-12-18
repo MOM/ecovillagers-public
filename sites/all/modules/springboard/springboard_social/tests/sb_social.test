@@ -1,0 +1,169 @@
+<?php
+
+
+/**
+ * @file
+ * Fundraiser module web tests, test creating and submitting a form.
+ */
+
+// Include the setup test class.
+module_load_include('test', 'fundraiser', 'tests/fundraiser.setup');
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+class SpringboardSocialFunctionalTest extends FundraiserSetup {
+
+  /**
+   * Implements getInfo(). Declares this test class to fundraiser testing.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Springboard Social functional tests',
+      'description' => 'Tests Springboard Social integration features.',
+      'group' => 'Springboard',
+    );
+  }
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp($addtional_modules = array()) {
+    // hijack mail system
+    variable_set('mail_system', array('default-system' => 'TestingMailSystem'));
+
+    // Call the parent to set all of the base modules up.
+    $additional_modules = array(
+      'sb_social',
+      'shorten', // shorten urls.
+      'ctools',
+      'market_source',
+      'clone',
+      'webform',
+      'webform_confirmations',
+    );
+    parent::setUp($additional_modules);
+  }
+
+  // tests
+  public function testSpringboardSocial() {
+    $permissions = array(
+      'administer site configuration',
+      'administer fundraiser',
+      'create webform content',
+      'edit any webform content',
+      'edit own webform content',
+      'access all webform results',
+      'create donation_form content',
+      'edit any donation_form content',
+      'edit own donation_form content',
+      'configure webform settings',
+      'configure webform emails',
+      'administer springboard social',
+      'edit any share content', // need to create separate unprivileged user and user with "edit own"
+      'administer market source',
+    );
+    $this->checkPermissions(array('create donation_form content', 'edit any donation_form content'), TRUE);
+    $this->privileged_user = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->privileged_user);
+    // Enable services
+    variable_set('springboard_social_services', array('facebook' => 'facebook', 'twitter' => 'twitter', 'email' => 'email'));
+
+    // set up donation form
+
+    $node_stub = new stdClass();
+    $node_stub->default_amount = 20; // Set a different default than normal.
+    $created_node = $this->createDonationForm($node_stub);
+    $node = node_load($created_node->nid);
+    $this->assertTrue($node->type == 'donation_form', t('Donation form node type correct'));
+    variable_set('springboard_social_enabled_content_types', array('donation_form' => ''));
+    $this->drupalGet('node/' . $node->nid);
+
+    // add custom MS fields
+    $this->drupalGet('admin/config/search/market-source');
+    $settings = array(
+      'market_source_global_fields[custom_fields_wrapper][0][name]' => 'UTM Medium',
+      'market_source_global_fields[custom_fields_wrapper][0][key]' => 'utm_medium',
+      'market_source_global_fields[custom_fields_wrapper][0][default]' => 'utm default',
+    );
+    $this->drupalPost('admin/config/search/market-source', $settings, 'Save settings');
+    $social_referer_transaction = FALSE;
+    $social_referer_network = FALSE;
+    $social_referer_contact = FALSE;
+
+    // confirm programmatic MS components are created during node creation
+    $results = db_query('SELECT * FROM {webform_component} WHERE nid = :nid', array(':nid' => $node->nid));
+    while ($field = $results->fetchAssoc()) {
+      switch ($field['form_key']) {
+        case 'social_referer_transaction':
+          $social_referer_transaction = TRUE;
+          break;
+        case 'social_referer_network':
+          $social_referer_network = TRUE;
+          break;
+        case 'social_referer_contact':
+          $social_referer_contact = TRUE;
+          break;
+        default:
+          break;
+      }
+    }
+    $this->assertTrue($social_referer_transaction, t('Market Source component added: social referer transaction'), 'Market Source');
+    $this->assertTrue($social_referer_network, t('Market Source component added: social referer network'), 'Market Source');
+    $this->assertTrue($social_referer_contact, t('Market Source component added: social referer contact'), 'Market Source');
+
+    // confirm hidden form elements on page render (tests for webform 3.18 style gotcha)
+    $this->drupalGet('node/' . $node->nid);
+    $this->assertRaw('<input type="hidden" name="submitted[social_referer_transaction]" value="" />', t('Social referer transaction rendered as hidden form field'), 'Market Source');
+    $this->assertRaw('<input type="hidden" name="submitted[social_referer_network]" value="" />', t('Social referer network rendered as hidden form field'), 'Market Source');
+    $this->assertRaw('<input type="hidden" name="submitted[social_referer_contact]" value="" />', t('Social referer contact rendered as hidden form field'), 'Market Source');
+
+    // confirm global defaults populated correctly
+    $this->drupalGet('node/' . $node->nid . '/share_settings');
+    $this->assertFieldByName('fb_title', '%title', t('Facebook Title field present with correct default'));
+    $this->assertFieldByName('fb_description', '%teaser', t('Facebook Description field present with correct default'));
+    $this->assertFieldByName('twitter_message', '%title', t('Twitter message field present with correct default'));
+
+    // Confirm form elements present for all expected MS fields
+    $this->assertFieldByName('ms', '', t('Default Market Source ms field available'));
+    $this->assertFieldByName('cid', '', t('Default Market Source cid field available'));
+    $this->assertFieldByName('utm_medium', '', t('Custom Market Source utm field available'));
+
+    // set up confirmation page
+    $confirmation = 'Thank you for your donation [donation:name]!';
+    $confirmation .= 'Share links: [sb_social:share_links]';
+    $confirmation .= 'Facebook tokens, facebook_title::[sb_social:facebook_title] facebook_description::[sb_social:facebook_description]';
+    $confirmation .= 'Twitter tokens, twitter_message::[sb_social:twitter_message]';
+    $confirmation .= 'Email tokens, email_suject::[sb_social:email_subject]';
+    $confirmation .= 'Email tokens, email_message::[sb_social:email_message]';
+
+    // $this->drupalGet('node/' . $node->nid . '/webform');
+
+    $settings = array(
+      'confirmation[confirmation_page_title]' => 'Thank you for your donation',
+      'confirmation[value]' => $confirmation,
+    );
+
+    // save confirmation page settings
+    $path = 'node/' . $node->nid . '/webform/configure';
+    $this->drupalPost($path, $settings, t('Save configuration'));
+
+    // confirm token replacements
+    $donation_settings = array(
+      'submitted[donor_information][first_name]' => 'Keyser',
+      'submitted[donor_information][last_name]' => 'Soze',
+      'submitted[donor_information][mail]' => 'example@example.com',
+      'submitted[billing_information][address]' => '12345 test dr',
+      'submitted[billing_information][address_line_2]' => $this->randomName(5),
+      'submitted[billing_information][city]' => 'Greensboro',
+    );
+    $this->submitDonation($node->nid, $donation_settings);
+
+    // node tokens
+
+    // token module tokens
+
+    // confirm share urls contain expected values for internal and generic MS fields
+
+  }
+}

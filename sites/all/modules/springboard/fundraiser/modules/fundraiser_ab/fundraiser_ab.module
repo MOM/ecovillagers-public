@@ -1,0 +1,209 @@
+<?php
+/**
+ * @file
+ * Fundraiser A/B Test
+ *
+ * Adds special functionality to the Multivariate Testing module for use with
+ * Fundraising forms.
+ */
+
+/**
+ * Implements hook_node_load().
+ */
+function fundraiser_ab_node_load($nodes, $types) {
+  // We can use $types to figure out if we need to process any of these nodes.
+  if (!in_array('webform_ab', $types)) {
+    return;
+  }
+
+  // Create an array of nids for the db query, and add an empty wrapper value
+  foreach ($nodes as $node) {
+    if ($node->type == 'webform_ab') {
+      $nids[] = $node->nid;
+    }
+  }
+
+  // Ensure we have nids to work with
+  if (!isset($nids) || !count($nids)) {
+    return;
+  }
+
+  $result = db_query('SELECT * FROM {fundraiser_ab_stats} WHERE test_nid IN(:nids)', array(':nids' => $nids))->fetchAll(PDO::FETCH_ASSOC);
+  if (!empty($result)) {
+    foreach ($result as $record) {
+      // Add the stats to the node object
+      if (isset($node->included_webforms[$record['webform_nid']])) {
+        $node->included_webforms[$record['webform_nid']]['fundraiser'] = $record;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_webform_ab_get_webform_types().
+ */
+function fundraiser_ab_webform_ab_get_webform_types() {
+  return array('fundraiser' => 'Fundraiser');
+}
+
+/**
+ * Implements hook_webform_ab_validate_conversion().
+ * Only returns TRUE if the webform type is fundraiser and the donation payment
+ * was successful. This way, failed credit card payments are not counted as
+ * conversions
+ */
+function fundraiser_ab_webform_ab_validate_conversion($webform_types, $test_node, $form_state) {
+  // Only act on successful donations
+  if (($webform_types == 'fundraiser') && (empty($form_state['#donation']) || ($form_state['#donation']->status === 'failed'))) {
+    return FALSE;
+  }
+  elseif ($webform_types == 'fundraiser') {
+    return TRUE;
+  }
+}
+
+/**
+ * Implements hook_webform_ab_valid_webforms().
+ * Return an array of donation forms that may be included in an A/B Test.
+ */
+function fundraiser_ab_webform_ab_valid_webforms($webform_types) {
+  if ($webform_types == 'fundraiser') {
+    $types = array();
+    foreach (fundraiser_get_donation_types() as $type => $active) {
+      if ($active) {
+        $types[] = $type;
+      }
+    }
+
+    $result = db_select('node', 'n')
+      ->fields('n', array('nid', 'title'))
+      ->condition('status', 1)
+      ->condition('type', $types, 'IN')
+      ->orderBy('title')->execute();
+
+    $forms = array();
+    while ($row = $result->fetchObject()) {
+      $forms[] = $row;
+    }
+
+    return $forms;
+  }
+}
+
+/**
+ * Implements hook_webform_ab_valid_webforms_alter().
+ * For non-Fundraiser Multivariate Testing tests, do NOT include donation forms
+ */
+function fundraiser_ab_webform_ab_valid_webforms_alter(&$forms, $webform_type) {
+  // Only remove if it's a non-Fundraiser A/B test
+  if ($webform_type != 'fundraiser') {
+    // Get the fundraiser forms
+    $fundraiser_forms = fundraiser_ab_webform_ab_valid_webforms('fundraiser');
+    // Remove them each from the array of forms
+    foreach ($fundraiser_forms as $f) {
+      unset($forms[$f->nid]);
+    }
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_directory().
+ * Tell ctools where this module's plugins live
+ */
+function fundraiser_ab_ctools_plugin_directory($owner, $plugin_type) {
+  if ($owner == 'webform_ab') {
+    return 'plugins/' . $plugin_type;
+  }
+}
+
+/**
+ * Implementation of hook_webform_ab_conversion().
+ * Save updated stats for this donation form/test node combo.
+ */
+function fundraiser_ab_webform_ab_conversion($test_node, $form_state_values) {
+  if ($webform_node = node_load($form_state_values['webform_nid'])) {
+    // Only update on donation form submissions
+    if (fundraiser_is_donation_type($webform_node->type)) {
+      // Flatten the submitted values, for convenience
+      $submission_fields = _fundraiser_webform_submission_flatten($form_state_values['webform_nid'], $form_state_values['submitted_tree']);
+
+      // Determine if this submission is recurring
+      $recurs = FALSE;
+      if (!isset($submission_fields['recurs_monthly'])) { // In case the recurs_monthly field doesn't exist.
+        $submission_fields['recurs_monthly'] = FALSE;
+      }
+      if (is_bool($submission_fields['recurs_monthly'])) {
+        $recurs = $submission_fields['recurs_monthly'];
+      }
+      elseif (is_array($submission_fields['recurs_monthly']) && isset($submission_fields['recurs_monthly'][0])) {
+        $recurs = ($submission_fields['recurs_monthly'][0] == 'recurs') ? TRUE : FALSE;
+      }
+      else {
+        $recurs = ($submission_fields['recurs_monthly'] == 'recurs') ? TRUE : FALSE;
+      }
+
+      // Check if Other amount field was used
+      $donation_amount = $submission_fields['amount'];
+      if ($donation_amount == "other") {
+        $donation_amount = $submission_fields['other_amount'];
+      }
+
+      // Check if the stat record already exists
+      $exist = db_query('SELECT test_nid FROM {fundraiser_ab_stats} WHERE test_nid = :test_nid AND webform_nid = :webform_nid', array(':test_nid' => $test_node->nid, ':webform_nid' => $webform_node->nid))->fetchfield();
+
+      if ($exist) {
+        // Prep placeholders for query
+        $placeholders = array();
+        $placeholders[':donation_amount'] = $donation_amount;
+
+        // Start query
+        $sql = 'UPDATE {fundraiser_ab_stats} SET donation_count = donation_count + 1, total_donations = total_donations + :donation_amount';
+
+        // If it's a sustainer, increase those values too
+        if ($recurs) {
+          $sql .= ', sustainer_count = sustainer_count + 1, total_sustainer_donations = total_sustainer_donations + :donation_amount';
+        }
+
+        // Make sure the right row is updated
+        $sql .= ' WHERE test_nid = :test_nid AND webform_nid = :webform_nid';
+
+        // And add the placeholder values used for the where clause
+        $placeholders[':test_nid'] = $test_node->nid;
+        $placeholders[':webform_nid'] = $webform_node->nid;
+
+        db_query($sql, $placeholders);
+
+      }
+      else {
+        // Create a new stat record
+        $row = array(
+          'test_nid' => $test_node->nid,
+          'webform_nid' => $webform_node->nid,
+          'total_donations' => $donation_amount,
+          'donation_count' => 1,
+          'total_sustainer_donations' => ($recurs) ? $donation_amount : 0,
+          'sustainer_count' => ($recurs) ? 1 : 0,
+        );
+
+        drupal_write_record('fundraiser_ab_stats', $row);
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_webform_ab_remove_form().
+ * Removes donation counts when a donation form is removed from an A/B test.
+ */
+function fundraiser_ab_webform_ab_remove_form($test_nid, $webform_nid) {
+  // Stop if this isn't a donation form:
+  $webform_node = node_load($webform_nid);
+  if (!fundraiser_is_donation_type($webform_node->type)) {
+    return;
+  }
+
+  db_delete('fundraiser_ab_stats')
+    ->condition('webform_nid', $webform_nid)
+    ->condition('test_nid', $test_nid)
+    ->execute();
+}

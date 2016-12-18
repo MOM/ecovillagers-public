@@ -1,0 +1,186 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for webform_dupe_cop
+ */
+
+/**
+ * Sets up basic tools for testing Webform Dupe Cop.
+ */
+class WebformDupeCopTestCase extends DrupalWebTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Webform Dupe Cop',
+      'description' => 'Sets up basic tools for testing Webform Dupe Cop',
+      'group' => 'Webform Dupe Cop',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'webform',
+      'webform_dupe_cop',
+    ));
+    parent::setUp($modules);
+
+    // Set timespan to 0 to catch dupes immediately.
+    variable_set('webform_dupe_cop_timespan', '0');
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Tests that dupe cop logs duplicate submissions when the intercept toggle
+   * is set to false.
+   */
+  public function testDupeCopLogDupe() {
+    // Set dupe cop to log dupes.
+    variable_set('webform_dupe_cop_toggle', FALSE);
+
+    $this->webformDupeCopCreateForm();
+    $this->drupalGet('node/1');
+
+    $edit = array(
+      'submitted[name]' => 'John Doe',
+      'submitted[mail]' => 'john.doe@example.com',
+    );
+
+    $this->drupalPost('node/1', $edit, 'Submit');
+
+    $this->assertText('Thanks for submitting this form.', 'Confirmation page is diplayed.');
+
+    // Submit again with same information.
+    $this->drupalGet('node/1');
+    $this->drupalPost('node/1', $edit, 'Submit');
+
+    // Assert we're on the confirmation page.
+    $this->assertText('Thanks for submitting this form.', 'Confirmation page is diplayed.');
+
+    // Check the database log and make sure the dupe cop entry is there.
+    $messages = db_query('SELECT message FROM {watchdog} WHERE type = :type', array(':type' => 'webform_dupe_cop'));
+
+    foreach ($messages as $message) {
+      $this->assertTrue(strstr($message->message, 'Dupe detected at %webform_id by %user_id matches a submission submitted at %prev_date %prev_time.'), 'Duplicate submission logged.');
+    }
+  }
+
+  /**
+   * Tests that dupe cop prevents duplicate submissions when the intercept toggle
+   * is set to true.
+   */
+  public function testDupeCopInterceptDupe() {
+    // Set dupe cop to intercept dupes.
+    variable_set('webform_dupe_cop_toggle', TRUE);
+
+    $this->webformDupeCopCreateForm();
+    $this->drupalGet('node/1');
+
+    $edit = array(
+      'submitted[name]' => 'John Doe',
+      'submitted[mail]' => 'john.doe@example.com',
+    );
+
+    $this->drupalPost('node/1', $edit, 'Submit');
+
+    $this->assertText('Thanks for submitting this form.', 'Confirmation page is diplayed.');
+
+    // Submit again with same information.
+    $this->drupalGet('node/1');
+    $this->drupalPost('node/1', $edit, 'Submit');
+
+    // Assert the dupe was intercepted.
+    $this->assertText('Dupe detected', 'Duplicate submission intercepted.');
+  }
+
+  /**
+   * Method to create a test webform.
+   */
+  private function webformDupeCopCreateForm() {
+    $node = new stdClass();
+    $node->is_new = 1;
+    $node->type = 'webform';
+    $node->language = LANGUAGE_NONE;
+    $node->uid = 1;
+    $node->title = 'Webform Dupe Cop Test Form';
+    $node->status = 1;
+    $node->promote = 1;
+    $node->comments = 0;
+    $node->webform = array(
+      'confirmation' => 'Thanks for submitting this form.',
+      'confirmation_format' => 'filtered_html',
+      'redirect_url' => '<confirmation>',
+      'teaser' => 0,
+      'block' => 0,
+      'allow_draft' => 0,
+      'auto_save' => 0,
+      'submit_notice' => 1,
+      'submit_text' => t('Submit'),
+      'submit_limit' => -1,
+      'submit_interval' => -1,
+      'total_submit_limit' => -1,
+      'total_submit_interval' => -1,
+      'status' => 1,
+      'record_exists' => '',
+      'roles' => array(
+        '0' => 1,
+        '1' => 2,
+      ),
+      'emails' => array(),
+      'components' => array(),
+    );
+
+    node_save($node);
+    $this->webformDupeCopCreateComponents();
+  }
+
+  /**
+   * Method to create some test components on a webform.
+   */
+  private function webformDupeCopCreateComponents() {
+    // Add some webform components
+    $component = array(
+      'nid' => 1,
+      'cid' => 1,
+      'pid' => 0,
+      'form_key' => 'name',
+      'name' => 'Name',
+      'type' => 'textfield',
+      'value' => '',
+      'extra' => serialize(array(
+        'description' => '',
+        'private' => '',
+      )),
+      'mandatory' => '',
+    );
+    drupal_write_record('webform_component', $component);
+
+    $component = array(
+      'nid' => 1,
+      'cid' => 2,
+      'pid' => 0,
+      'form_key' => 'mail',
+      'name' => 'E-mail Address',
+      'type' => 'email',
+      'value' => '',
+      'extra' => serialize(array(
+        'description' => '',
+        'private' => '',
+      )),
+      'mandatory' => '',
+    );
+    drupal_write_record('webform_component', $component);
+  }
+}

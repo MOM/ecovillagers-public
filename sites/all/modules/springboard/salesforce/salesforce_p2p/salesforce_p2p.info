@@ -1,0 +1,11 @@
+name = Salesforce Peer to Peer
+description = Salesforce integration support for peer to peer functionality.
+package = Salesforce
+core = 7.x
+version = 7.x-4.x-dev
+
+dependencies[] = libraries
+dependencies[] = salesforce
+dependencies[] = salesforce_soap
+dependencies[] = salesforce_sync
+dependencies[] = springboard_p2p

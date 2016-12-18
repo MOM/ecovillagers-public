@@ -1,0 +1,100 @@
+<?php
+/**
+ * @file
+ * Provides the admin menu path for configuring P2P Rules.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function springboard_p2p_rules_permission() {
+  return array(
+    'administer springboard p2p rules' => array(
+      'title' => t('Administer Springboard Peer to Peer Rules.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_p2p_rules_menu() {
+  // P2P Rules administration page.
+  $items['admin/springboard/p2p/rules'] = array(
+    'title' => 'Rules',
+    'type' => MENU_LOCAL_TASK,
+    'description' => 'Enable and configure P2P rule configurations.',
+    'page callback' => 'springboard_p2p_rules_admin_page',
+    'access arguments' => array('administer springboard p2p rules'),
+    'file' => 'springboard_p2p_rules.admin.inc',
+  );
+
+  // Add the menu items for the various Rules forms.
+  $controller = new RulesUIController();
+  $items += $controller->config_menu('admin/springboard/p2p/rules');
+
+  $items['admin/springboard/p2p/rules/add'] = array(
+    'title' => 'Add a P2P rule',
+    'description' => 'Adds an additional P2P rule configuration.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_p2p_rules_add_rule_form', 'admin/springboard/p2p/rules'),
+    'access arguments' => array('administer springboard p2p rules'),
+    'file path' => drupal_get_path('module', 'rules_admin'),
+    'file' => 'rules_admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter().
+ */
+function springboard_p2p_rules_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  // Add action link 'admin/springboard/p2p/rules/add' on
+  // 'admin/springboard/p2p/rules'.
+  if ($root_path == 'admin/springboard/p2p/rules') {
+    $item = menu_get_item('admin/springboard/p2p/rules/add');
+    if ($item['access']) {
+      $data['actions']['output'][] = array(
+        '#theme' => 'menu_local_action',
+        '#link' => $item,
+      );
+    }
+  }
+}
+
+/**
+ * Implements hook_forms().
+ *
+ * For the add rules form, call the rules admin form.
+ *
+ * @see commerce_payment_ui_forms()
+ */
+function springboard_p2p_rules_forms($form_id, $args) {
+  $forms = array();
+
+  $forms['springboard_p2p_rules_add_rule_form'] = array(
+    'callback' => 'rules_admin_add_reaction_rule',
+  );
+
+  return $forms;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * @see commerce_payment_ui_form_commerce_payment_ui_add_payment_rule_form_alter()
+ * @see commerce_payment_ui_add_payment_rule_form_submit()
+ * @see rules_admin_add_reaction_rule()
+ */
+function springboard_p2p_rules_form_springboard_p2p_rules_add_rule_form_alter(&$form, &$form_state) {
+  unset($form['settings']['help']);
+
+  // Only show P2P events.
+  $form['settings']['event']['#options'] = $form['settings']['event']['#options']['Springboard P2P'];
+
+  // Add a default tag.
+  $form['settings']['tags']['#default_value'] = 'Springboard P2P';
+  // Add a cancel link w/class that goes back to the main page.
+  $form['submit']['#suffix'] =  l(t('Cancel'), 'admin/springboard/p2p/rules', array('attributes' => array('id' => array('edit-actions-cancel'))));
+}

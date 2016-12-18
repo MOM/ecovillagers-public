@@ -1,0 +1,146 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the fundraiser module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function fundraiser_webform_schema() {
+  $schema['fundraiser_webform_messages'] = array(
+    'description' => 'Stores the description text for submit buttons.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Fundraiser node.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'message' => array(
+        'description' => 'The description for this button.',
+        'type' => 'text',
+        'not null' => TRUE,
+        'size' => 'big',
+      ),
+      'sitewide_submit' => array(
+        'description' => 'Bool to use sitewide or webform submit button text.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'size' => 'tiny',
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function fundraiser_webform_install() {
+  // Clean up from older versions of fundraiser.
+  if (db_table_exists('fundraiser_webform_order')) {
+    // Rename webform components for email key to mail key. (Part of the compatibility for webform_user.)
+    db_query('UPDATE {webform_component} w ' .
+      'INNER JOIN {fundraiser} f ON w.nid = f.nid ' .
+      'SET w.form_key = \'mail\' ' .
+      'WHERE w.form_key = \'email\' AND w.nid = f.nid ');
+    // The table doesn't go away yet, because we may still need it for fundraiser.
+    // But if fundraiser has flagged that it's done porting data, we can drop it.
+    if (variable_get('fundraiser_port_webform_done', FALSE)) {
+      db_drop_table('fundraiser_webform_order');
+      variable_del('fundraiser_port_webform_done');
+    }
+  }
+  // Set to a lower weight to allow fundraiser_webform to function properly with other modules.
+  db_query("UPDATE {system} SET weight = 10 WHERE name = 'fundraiser_webform' and type = 'module'");
+}
+
+/**
+ * Implements hook_enable().
+ */
+function fundraiser_webform_enable() {
+  /**
+   *  Add the donation_form node type to the array of node types handled
+   * by the webform module.
+   *
+   * The default value is array('webform') because this variable starts
+   * off empty, until an admin chooses webform node types at
+   * admin/settings/webform. If you save the webform_node_types as an
+   * array with ONLY donation_form, then webform nodes will not be
+   * handled as webforms.
+   */
+  $result = variable_get('webform_node_types', array('webform'));
+  $result = array_merge($result, fundraiser_get_donation_types());
+  variable_set('webform_node_types', $result);
+
+  // New for webform 3.9.
+  // 3Let webform know the primary purpose of this node type is for webforms
+  $result = variable_get('webform_node_types_primary', array('webform'));
+  $result = array_merge($result, fundraiser_get_donation_types());
+  variable_set('webform_node_types_primary', $result);
+}
+
+/**
+ * Implements hook_disable().
+ */
+function fundraiser_webform_disable() {
+  // Remove donation_form from the list of webform_node_types.
+  // Not really necessary, but still good to clean up after ourselves
+  $result = variable_get('webform_node_types', array('webform'));
+  if (is_array($result)) {
+    $fundraiser_types = fundraiser_get_donation_types();
+    foreach ($result as $index => $type) {
+      if (!in_array($type, $fundraiser_types)) {
+        unset($result[$index]);
+        variable_set('webform_node_types', $result);
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * Add table to store custom descriptions for submit buttons.
+ */
+function fundraiser_webform_update_7001() {
+  $schema_name = 'fundraiser_webform_messages';
+  $schema['fundraiser_webform_messages'] = array(
+    'description' => 'Stores the description text for submit buttons.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Fundraiser node.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'message' => array(
+        'description' => 'The description for this button.',
+        'type' => 'text',
+        'not null' => TRUE,
+        'size' => 'big',
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  db_create_table($schema_name, $schema[$schema_name]);
+}
+
+/**
+ * Add field to fundraiser_webform_messages table to store additional settings for submit buttons.
+ */
+function fundraiser_webform_update_7002() {
+  $table = 'fundraiser_webform_messages';
+  $field = 'sitewide_submit';
+  $schema = array(
+    'description' => 'Bool to use sitewide or webform submit button text.',
+    'type' => 'int',
+    'not null' => TRUE,
+    'size' => 'tiny',
+    'default' => 0,
+    'description' => 'Stores the description text for submit buttons.',
+  );
+  db_add_field($table, $field, $schema);
+}

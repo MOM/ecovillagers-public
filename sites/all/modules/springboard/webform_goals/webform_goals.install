@@ -1,0 +1,307 @@
+<?php
+/**
+ * @file
+ * install/uninstall hooks and schema declaration for webform goals.
+ */
+
+/**
+ * Implements hook_requirements().
+ *
+ * Checks that the webform_goals directory is writeable and that the loader
+ * file ahs been created and copied.
+ */
+function webform_goals_requirements($phase) {
+  $requirements = array();
+
+  if ($phase == 'runtime') {
+    $t = get_t();
+    $path = drupal_realpath(file_default_scheme() . '://') . '/webform_goals';
+    $directory_exists = file_prepare_directory($path, FILE_CREATE_DIRECTORY) ? TRUE : FALSE;
+    $js_exists = file_exists($path . '/webform_goals.loader.js');
+
+    $requirements['webform_goals_subdir'] = array(
+      'title' => $t('Webform Goals subdirectory'),
+      'value' => $t('The webform_goals subdirectory has been created and is writeable.'),
+      'description' => $t('Webform Goals subdirectory exists'),
+      'severity' => REQUIREMENT_OK,
+    );
+
+    if (!$directory_exists) {
+      $requirements['webform_goals_subdir']['value'] = $t('The webform_goals subdirectory is misconfigured or does not exist.');
+      $requirements['webform_goals_subdir']['severity'] = REQUIREMENT_ERROR;
+    }
+
+    $requirements['webform_goals_loader_copied'] = array(
+      'title' => $t('Webform Goals loader'),
+      'value' => $t('The external loader javascript has been copied to files/webform_goals'),
+      'description' => $t('Widget loader copied.'),
+      'severity' => REQUIREMENT_OK,
+    );
+
+    if (!$js_exists) {
+      $requirements['webform_goals_loader_copied']['value'] = $t('The external loader javascript has not been copied to files/webform_goals.');
+      $requirements['webform_goals_loader_copied']['severity'] = REQUIREMENT_ERROR;
+    }
+
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_install().
+ */
+function webform_goals_install() {
+
+  // Add the goals paths to the paths to use improved multi select on.
+  if (module_exists('improved_multi_select')) {
+    $paths = variable_get('improved_multi_select:url', '');
+    if ($paths) {
+      $paths .= "\n";
+    }
+    $paths .= 'admin/config/content/webform_goals/*';
+    variable_set('improved_multi_select:url', $paths);
+  }
+
+  variable_set('webform_goals_loader_file_created', FALSE);
+  if (empty($_SERVER['SERVER_NAME'])) {
+    // Running from somewhere that doesn't set the server name.
+    // Set a variable to create the loader file later inside a page callback
+    // when we have a server name.
+    return;
+  }
+
+  // create subdir in files
+  $path = 'public://webform_goals';
+  if (file_prepare_directory($path, FILE_CREATE_DIRECTORY)) {
+
+    // set up the loader script in subdirectory of files.
+    // this approach is required because multi-site installations require individual copies of this file.
+    $original_path = getcwd();
+
+    // load a copy of the external loader js file
+    $module_path = drupal_get_path('module', 'webform_goals');
+    chdir($module_path);
+    $loader = file_get_contents('webform_goals.loader.js');
+
+    // Tweak the jsonp endpoint url and save
+    chdir($original_path);
+    $loader = str_replace('http://DOMAIN', $GLOBALS['base_url'], $loader);
+    file_unmanaged_save_data($loader, 'public://webform_goals/webform_goals.loader.js', FILE_EXISTS_REPLACE);
+    variable_set('webform_goals_loader_file_created', TRUE);
+  }
+
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function webform_goals_uninstall() {
+  $path = drupal_realpath(file_default_scheme() . '://') . '/webform_goals';
+  file_unmanaged_delete_recursive($path);
+  variable_del('webform_goals_widget_update_limit');
+  variable_del('webform_goals_loader_file_created');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function webform_goals_schema() {
+  $schema['webform_goals'] = array(
+    'description' => 'Stores goal configuration data.',
+    'fields' => array(
+      'gid' => array(
+        'description' => 'Goal id.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'name' => array(
+        'description' => 'Human-readable goal name',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'context' => array(
+        'description' => 'selected goal context',
+        'type' => 'varchar',
+        'length' => 65,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'metric' => array(
+        'description' => 'selected goal context',
+        'type' => 'varchar',
+        'length' => 65,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'seed' => array(
+        'description' => '# applied to goal progress',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'target_value' => array(
+        'description' => 'Goal target',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'display_threshold' => array(
+        'description' => 'minimum metric required for progress visibility',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'starter_message' => array(
+        'description' => 'content to display if display threshold has not been reached',
+        'type' => 'text',
+      ),
+      'starter_message_format' => array(
+        'description' => 'input filter selected for the starter message',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'start_date' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'end_date' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'auto_expire' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'progress_bar' => array(
+        'type' => 'varchar',
+        'length' => '40',
+      ),
+      'template' => array(
+        'description' => 'goal template markup',
+        'type' => 'text',
+      ),
+      'template_format' => array(
+        'description' => 'input filter selected for the goal template',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'extra' => array(
+        'description' => 'optional configuration data',
+        'type' => 'text',
+      ),
+      'update_on_cron' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('gid'),
+    'indexes' => array(
+      'update_on_cron' => array('update_on_cron'),
+    ),
+  );
+  $schema['webform_goals_widget'] = array(
+    'description' => 'Stores goal configuration data.',
+    'fields' => array(
+      'gid' => array(
+        'description' => 'Goal id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'widget' => array(
+        'description' => 'rendered values to return when widget is called',
+        'type' => 'text',
+      ),
+    ),
+    'primary key' => array('gid'),
+  );
+  $schema['webform_goals_node'] = array(
+    'description' => 'node id lookup table by group',
+    'fields' => array(
+      'gid' => array(
+        'description' => 'Goal id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'nid' => array(
+        'description' => 'node id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('gid', 'nid'),
+    'indexes' => array(
+      'gid' => array('gid'),
+      'nid' => array('nid'),
+    ),
+  );
+  $schema['webform_goals_quick'] = array(
+    'description' => 'node id lookup table by group',
+    'fields' => array(
+      'gid' => array(
+        'description' => 'Goal id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'nid' => array(
+        'description' => 'node id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('gid', 'nid'),
+    'indexes' => array(
+      'gid' => array('gid'),
+      'nid' => array('nid'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Add indexes to tables.
+ */
+function webform_goals_update_7001() {
+  db_add_index('webform_goals', 'update_on_cron', array('update_on_cron'));
+  db_add_index('webform_goals_node', 'gid', array('gid'));
+  db_add_index('webform_goals_node', 'nid', array('nid'));
+
+  return t('Added indexes to {webform_goals} and {webform_goals_node} tables.');
+}
+
+function webform_goals_update_7002() {
+  $schema = module_invoke('webform_goals', 'schema');
+  if(db_table_exists('webform_goals_quick') == FALSE) {
+    db_create_table('webform_goals_quick', $schema['webform_goals_quick']);
+  }
+}

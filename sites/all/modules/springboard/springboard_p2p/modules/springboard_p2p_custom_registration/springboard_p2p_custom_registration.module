@@ -1,0 +1,88 @@
+<?php
+
+/**
+ * @file
+ * Core hooks & helper functions.
+ */
+
+/**
+ * Implements hook_form_alter().
+ */
+function springboard_p2p_custom_registration_form_alter(&$form, $form_state, $form_id) {
+  // Make sure we're dealing with a webform user enabled form here.
+  if (strstr($form_id, 'webform_client_form') !== FALSE) {
+    $node = isset($form['#node']) ? $form['#node'] : FALSE;
+    if ($node && !empty($node->is_webform_user)) {
+      $campaign = (isset($_GET['p2p_cid']) && is_numeric($_GET['p2p_cid'])) ? $_GET['p2p_cid'] : FALSE;
+
+      // Stash the peer to peer campaign id for later use in the submission and validation handlers.
+      $form['get_p2p_campaign'] = array(
+        '#type' => 'value',
+        '#value' => $campaign,
+      );
+      $form['#validate'][] = 'springboard_p2p_custom_registration_form_validate';
+      $form['#submit'][] = 'springboard_p2p_custom_registration_form_submit';
+    }
+  }
+}
+
+/**
+ * Validation callback for altered webform_client_form().
+ */
+function springboard_p2p_custom_registration_form_validate($form, &$form_state) {
+  if (!empty($form_state['values']['get_p2p_campaign'])) {
+    $campaign_node = node_load($form_state['values']['get_p2p_campaign']);
+    if (!isset($campaign_node->type) || $campaign_node->type != 'p2p_campaign') {
+      // Bogus value passed via the query string, knock it out before the value
+      // is inserted into the db.
+      unset($form_state['values']['get_p2p_campaign']);
+    }
+  }
+}
+
+/**
+ * Submit callback for altered webform_client_form().
+ *
+ * Conditionally add an approval request to the private campaign approvale queue
+ * if the registration form was submitted with a valid campaign id.
+ */
+function springboard_p2p_custom_registration_form_submit($form, $form_state) {
+  if (!empty($form_state['values']['get_p2p_campaign'])) {
+    $sid = $form_state['values']['details']['sid'];
+    $nid = $form_state['values']['get_p2p_campaign'];
+    if ($sid && $nid) {
+      module_load_include('inc', 'webform', 'includes/webform.submissions');
+      $submission = webform_get_submission($nid, $sid);
+      $uid = $submission->uid;
+      if (!_springboard_p2p_custom_registration_record_exists($nid, $uid)) {
+        $record = array(
+          'uid' => $submission->uid,
+          'nid' => $nid,
+          'created' => time(),
+        );
+        drupal_write_record('springboard_p2p_private_campaign_approval', $record);
+      }
+    }
+  }
+}
+
+/**
+ * Check for an existing record in {springboard_p2p_private_campaign_approval}.
+ *
+ * @param int $nid
+ *   campaign node id.
+ *
+ * @param int $uid
+ *   user id.
+ *
+ * @return bool
+ *   TRUE if record exists, FALSE otherwise.
+ */
+function _springboard_p2p_custom_registration_record_exists($nid, $uid) {
+  $args = array(
+    ':nid' => $nid,
+    ':uid' => $uid,
+  );
+  $results = db_query('SELECT created FROM {springboard_p2p_private_campaign_approval} WHERE nid = :nid AND uid = :uid', $args);
+  return $results->fetchField() ? TRUE : FALSE;
+}

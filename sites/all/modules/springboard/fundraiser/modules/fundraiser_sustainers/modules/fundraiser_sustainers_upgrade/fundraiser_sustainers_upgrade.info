@@ -1,0 +1,10 @@
+name = Fundraiser Sustainer Upgrade
+description = Allows users to increase their sustaining donation amount without logging in.
+package = Jackson River Springboard
+core = 7.x
+version = 7.x-4.x-dev
+
+dependencies[] = fundraiser_sustainers
+dependencies[] = springboard_hmac
+dependencies[] = fundraiser_webform
+dependencies[] = email_wrappers

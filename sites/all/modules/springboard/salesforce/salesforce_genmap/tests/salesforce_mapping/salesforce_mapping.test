@@ -1,0 +1,271 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_mapping
+ */
+
+module_load_include('test', 'salesforce_mapping', 'tests/salesforce_mapping');
+
+/**
+ * Tests basic set up for mapping salesforce objects.
+ */
+class SalesforceMappingAlterTestCase extends SalesforceMappingTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'SalesforceMappingAlter API',
+      'description' => 'Ensure the modifications to salesforce_mapping function correctly.',
+      'group' => 'Salesforce Mapping',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'salesforce_sync',
+      'salesforce_genmap',
+    ));
+    parent::setUp($modules, $permissions);
+
+    // Enable the 'append' sync rule so the tests can test its functionality.
+    variable_set('salesforce_genmap_disable_sync_rule_append', FALSE);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    variable_del('salesforce_genmap_disable_sync_rule_append');
+    parent::tearDown();
+  }
+
+  /**
+   * Submits a salesforce mapping form of your configuration or a default one.
+   *
+   * @param string $label
+   *   Desired lable for the mapping.
+   * @param string $machine_name
+   *   Desired machine name of the mapping.  If none is provided, one will be
+   *   automatically generated from the label.
+   * @param array $config
+   *   Desired mapping configuration.  If none is provided, a default mapping
+   *   configuration will be generated.
+   */
+  protected function createSalesforceMapping($label, $machine_name = NULL, $config = array()) {
+    // Give a default configuration if one is not provided for us.
+    if (empty($config)) {
+      $config = array(
+        'drupal_entity_type' => 'user',
+        'drupal_bundle' => 'user',
+        'salesforce_object_type' => 'Contact',
+        'key' => 'mail',
+        'mapping' => array(
+          'uid' => array(
+            'salesforce_field' => 'Drupal_User_ID__c',
+            'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+            'sf_drupal' => SALESFORCE_SYNC_RULE_NEVER,
+          ),
+          'name' => array(
+            'salesforce_field' => 'LastName',
+            'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+            'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+          ),
+          'mail' => array(
+            'salesforce_field' => 'Email',
+            'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+            'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+          ),
+          'created' => array(
+            'salesforce_field' => 'Birthdate',
+            'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+            'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+          ),
+        ),
+        'sync_triggers' => array(
+          '1' => TRUE,
+          '2' => TRUE,
+          '8' => TRUE,
+          '16' => TRUE,
+        ),
+      );
+    }
+
+    $edit = array();
+    $machine_name = is_null($machine_name) ? str_replace(' ', '_', strtolower($label)) : $machine_name;
+    $this->drupalGet($this->addMapPath);
+    $this->assertNoText('You are not authorized to access this page.', 'Able to access the create map page.');
+
+    // Get all of the AJAX behaviors out of the way.
+    $edit['drupal_entity_type'] = $config['drupal_entity_type'];
+    $this->drupalPostAjax(NULL, $edit, 'drupal_entity_type');
+    unset($config['drupal_entity_type']);
+    $edit['drupal_bundle'] = $config['drupal_bundle'];
+    $this->drupalPostAjax(NULL, $edit, 'drupal_bundle');
+    unset($config['drupal_bundle']);
+    $edit['salesforce_object_type'] = $config['salesforce_object_type'];
+    $this->drupalPostAjax(NULL, $edit, 'salesforce_object_type');
+    unset($config['salesforce_object_type']);
+    foreach ($config['mapping'] as $delta => $map) {
+      $sf_field_name = 'salesforce_field_mappings[' . $delta . '][salesforce_field]';
+      $edit[$sf_field_name] = $map['salesforce_field'];
+      $this->drupalPostAjax(NULL, $edit, $sf_field_name);
+      unset($config['mapping'][$delta]['salesforce_field']);
+    }
+
+    // Fill out the rest of the form.
+    $edit['label'] = $label;
+    $edit['name'] = $machine_name;
+    foreach ($config as $key => $data) {
+      switch ($key) {
+        case 'mapping':
+          foreach ($data as $delta => $fields) {
+            foreach ($fields as $field => $value) {
+              $edit['salesforce_field_mappings[' . $delta . '][' . $field . ']'] = $value;
+            }
+          }
+          break;
+
+        case 'sync_triggers':
+          foreach ($data as $value => $flag) {
+            $edit['sync_triggers[' . $value . ']'] = $flag;
+          }
+          break;
+
+        default:
+          $edit[$key] = $data;
+      }
+    }
+
+    // Submit form.
+    $this->drupalPost(NULL, $edit, 'Save mapping');
+    $this->assertText('Salesforce field mapping saved.', 'Form posted as expected.');
+    $this->assertRaw('id="salesforce-mapping-overview-form"', 'Redirected to the mappings overview table.');
+    $this->assertRaw('(Machine name: ' . $machine_name . ')', 'New map successfully appears on overview page.');
+    $this->assertLink($label, 0, 'Link to edit new map appears.');
+  }
+
+  /**
+   * Create salesforce mapping based on a node entity with various field types.
+   */
+  public function createEntityFieldTypeSalesforceMapping() {
+    $content_type = $this->drupalCreateContentType(array('type' => 'testtype'));
+
+    module_load_include('inc', 'salesforce_genmap', 'tests/salesforce_mapping/salesforce_mapping.test_fields');
+    _salesforce_mapping_generate_test_fields($content_type->type);
+
+    // Map the testtype fields to various Contact fields.
+    $config = array(
+      'drupal_entity_type' => 'node',
+      'drupal_bundle' => 'testtype',
+      'salesforce_object_type' => 'Contact',
+      'key' => 'title',
+      'mapping' => array(
+        'title' => array(
+          'salesforce_field' => 'Email',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'body:value' => array(
+          'salesforce_field' => 'Description',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'body:summary' => array(
+          'salesforce_field' => 'npe01__Home_Address__c',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_checkbox' => array(
+          'salesforce_field' => 'npe01__Private__c',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_decimal' => array(
+          'salesforce_field' => 'npo02__AverageAmount__c',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_float' => array(
+          'salesforce_field' => 'npo02__Best_Gift_Year_Total__c',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_integer' => array(
+          'salesforce_field' => 'npo02__LastOppAmount__c',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_list_float' => array(
+          'salesforce_field' => 'npo02__LastMembershipAmount__c',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_list_integer' => array(
+          'salesforce_field' => 'npe01__Lifetime_Giving_History_Amount__c',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_list_text' => array(
+          'salesforce_field' => 'Department',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_long_text' => array(
+          'salesforce_field' => 'npe01__Work_Address__c',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+        'field_text_field' => array(
+          'salesforce_field' => 'Name',
+          'drupal_sf' => SALESFORCE_SYNC_RULE_ALWAYS,
+          'sf_drupal' => SALESFORCE_SYNC_RULE_ALWAYS,
+        ),
+      ),
+      'sync_triggers' => array(
+        '1' => TRUE,
+        '2' => TRUE,
+        '8' => TRUE,
+        '16' => TRUE,
+      ),
+    );
+    $this->salesforceConnect();
+    // The createSalesforceMapping method automatically tests that filling out
+    // the form worked correctly.
+    $this->createSalesforceMapping('bar', 'barbang', $config);
+  }
+
+  /**
+   * Helper to enable the ability to delete during a sync trigger.
+   *
+   * @param string $module
+   *   Name of the module to enable syncing for.
+   *
+   * @return int
+   *   Id of the role that has the permission to configure delete syncing.
+   */
+  public function enableDeleteSync($module) {
+    variable_set('salesforce_genmap_allow_delete_sync', TRUE);
+    drupal_static_reset();
+    cache_clear_all();
+    $rid = $this->drupalCreateRole(array('configure ' . $module . ' delete sync'));
+    $roles = $this->admin_user->roles;
+    $roles[$rid] = $rid;
+    user_save($this->admin_user, array('roles' => $roles));
+    return $rid;
+  }
+
+  /**
+   * Helper to disable the ability to delete during a sync trigger.
+   */
+  public function disableDeleteSync() {
+    variable_set('salesforce_genmap_allow_delete_sync', FALSE);
+    drupal_static_reset();
+    cache_clear_all();
+  }
+}

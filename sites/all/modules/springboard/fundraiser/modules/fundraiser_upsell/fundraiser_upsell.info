@@ -1,0 +1,12 @@
+name = Fundraiser Sustainer Upsell
+description = Upsell modal for converting a donation to a recurring donation. Requires the payment gateway to have card on file enabled.
+core = 7.x
+package = Jackson River Springboard - extras
+dependencies[] = fundraiser
+dependencies[] = fundraiser_commerce
+dependencies[] = fundraiser_sustainers
+dependencies[] = email_wrappers
+dependencies[] = ctools
+version = 7.x-4.x-dev
+
+configure = admin/springboard/options/fundraiser/fundraiser_upsell

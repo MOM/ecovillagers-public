@@ -1,0 +1,124 @@
+<?php
+
+/**
+ * @file
+ * Fundraiser commerce credit card encryption and serialization tests.
+ */
+
+class FundraiserCommerceEncryptTest extends FundraiserSetup {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser commerce encryption and serialization',
+      'description' => 'Test fundraiser commerce encryption and serialization functionality',
+      'group' => 'Fundraiser',
+    );
+  }
+
+  /**
+   * Setup the test.
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'encrypt',
+    ));
+    parent::setUp($modules);
+
+    $permissions = array_merge($permissions, array(
+      'administer site configuration',
+      'administer encrypt',
+    ));
+
+    // Get the temp files dir path used during the test.
+    $file_path = variable_get('file_public_path', conf_path() . '/files');
+
+    // Login a user that is permissioned to configure the encrypt module.
+    $this->privileged_user = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->privileged_user);
+  }
+
+  /**
+   * Tests the encryption, decryption and serialization of payment gateway
+   * responses.
+   */
+  public function testGateResponseEncryptionAndSerialization() {
+    // Get an array of responses from supported gateways.
+    $responses = $this->getTestResponses();
+
+    foreach ($responses as $gateway => $response) {
+      // Prepare the response for order storage.
+      $prepared = _fundraiser_commerce_order_data_prepare($response);
+      // Retrieve the response for usage.
+      $retrieved = _fundraiser_commerce_order_data_retrieve($prepared);
+      // Assert that the original response matches the decrypted response.
+      $this->assertEqual($response, $retrieved, t('Gateway response from !gateway and payment fields encypted and decrypted correctly.', array('!gateway' => $gateway)));
+    }
+  }
+
+  /**
+   * Helper function to create the respone data structure for
+   * each supported payment gateway.
+   */
+  private function getTestResponses() {
+    return $responses = array(
+      'authorize' => array(
+        'payment_method' => 'credit',
+        'payment_fields' => array(
+          'credit' => array(
+            'card_number' => 1111,
+            'card_cvv' => '',
+            'card_expiration_month' => 10,
+            'card_expiration_year' => 2013,
+            'card_type' => 'Visa',
+          ),
+        ),
+        'message' => "Authorization and capture
+ACCEPTED: This transaction has been approved.
+AVS response: Address (Street) and five digit ZIP match",
+        'txn_id' => 2195512539,
+        'remote_id' => 2195512539,
+        'transaction_id' => 1087876711,
+        'status' => 'success',
+        'remote_status' => 'auth_capture',
+      ),
+      'litle' => array(
+        'payment_method' => 'credit',
+        'payment_fields' => array(
+          'credit' => array(
+            'card_number' => '0003',
+            'card_cvv' => '',
+            'card_expiration_month' => '7',
+            'card_expiration_year' => '2014',
+            'card_type' => 'MasterCard',
+          ),
+        ),
+        'message' => '<b>ACCEPTED:</b> Approved',
+        'txn_id' => '862543133843985003',
+        'remote_id' => '862543133843985003',
+        'transaction_id' => '106695',
+        'status' => 'success',
+        'remote_status' => 'auth_capture',
+      ),
+      'psi' => array(
+        'payment_method' => 'credit',
+        'payment_fields' => array(
+          'credit' => array(
+            'card_number' => '0003',
+            'card_cvv' => '',
+            'card_expiration_month' => '7',
+            'card_expiration_year' => '2014',
+            'card_type' => 'MasterCard',
+          ),
+        ),
+        'message' => '!status: !response_message Response code: !response_code; Reason code: !reason_code; Authorization code: !auth_code',
+        'txn_id' => '100003510',
+        'remote_id' => '100003510',
+        'transaction_id' => '106707',
+        'status' => 'success',
+        'remote_status' => '1',
+      ),
+    );
+
+    // TODO: Add other gateway responses for accept and declines.
+  }
+}

@@ -1,0 +1,77 @@
+
+.panel-2col-bricks {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.panel-2col-bricks .panel-col-top,
+.panel-2col-bricks .panel-col-middle,
+.panel-2col-bricks .panel-col-bottom {
+  clear: both;
+  width: 99.9%;
+}
+
+.panel-2col-bricks .panel-col-top .inside,
+.panel-2col-bricks .panel-col-middle .inside {
+  margin-bottom: .5em;
+}
+
+.panel-2col-bricks .panel-col-first {
+  display: inline-block;
+  width: 71.1%;
+  vertical-align: top;
+}
+
+* html .panel-2col-bricks .panel-col-first {
+  width: 70.9%;
+}
+
+.panel-2col-bricks .panel-col-first .inside {
+  margin: 0 .5em .5em 0;
+}
+
+.page-admin .panel-2col-bricks .panel-col-last {
+  display: inline-block;
+  width: 28.5%;
+  vertical-align: top;
+}
+
+.panel-2col-bricks .panel-col-last,
+.p2p-panelizer-campaign-landing .panel-2col-bricks .panel-col-last {
+  display: inline-block;
+  width: 28%;
+  vertical-align: top;
+}
+
+.panel-2col-bricks .panel-col-last .inside {
+  margin: 0 0 .5em .5em;
+}
+
+.panel-2col-bricks .panel-separator {
+  margin: 0 0 1em 0;
+}
+
+/* Media queries */
+
+@media (max-width: 768px) {
+
+  html .p2p-panelizer-campaign-landing .panel-2col-bricks .panel-panel,
+  .p2p-campaign-page .panel-2col-bricks .panel-panel {
+    width: 99.8%;
+  }
+
+}
+
+@media (max-width: 980px) {
+
+  .p2p-donation-form .panel-2col-bricks .panel-col-first,
+  .p2p-donation-form .panel-2col-bricks .panel-col-last {
+    width: 99%;
+  }
+
+  .p2p-donation-form .panel-2col-bricks .panel-col-last .inside {
+    margin: 0 0 .5em 0;
+  }
+
+}
+

@@ -1,0 +1,51 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_npsp
+ */
+
+module_load_include('test', 'salesforce_sync', 'tests/salesforce_sync');
+
+/**
+ * Sets up basic tools for testing Salesforce NPSP.
+ */
+class SalesforceNpspTestCase extends SalesforceSyncTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Salesforce NPSP',
+      'description' => 'Sets up basic tools for testing Salesforce NPSP',
+      'group' => 'Salesforce NPSP',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'salesforce_npsp',
+    ));
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Test installation of dependencies.
+   *
+   * Remove this test once tests are added for this module.
+   */
+  public function testInstall() {
+    $this->assertTrue(module_exists('salesforce_npsp'), 'Module was not enabled correctly.');
+  }
+}

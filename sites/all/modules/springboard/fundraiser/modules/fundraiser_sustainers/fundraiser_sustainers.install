@@ -1,0 +1,1108 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the fundraiser module.
+ */
+
+/**
+ * Implements hook_requirements().
+ */
+function fundraiser_sustainers_requirements($phase) {
+  $requirements = array();
+  if ($phase == 'runtime') {
+    // Check for the key existing.
+    $key_exists = fundraiser_sustainers_sustainer_key_file_exists();
+
+    // Array of text vars for the message.
+    $exists_vars = array(
+      '@exists' => $key_exists ? 'exists' : 'does not exist',
+    );
+
+    $requirements['fundraiser_sustainers_key_exists'] = array(
+      'title' => t('Fundraiser sustainer key'),
+      'description' => t('The key file @exists in the correct place in the file system.', $exists_vars),
+      'value' => $key_exists ? t('File exists') : t('File does not exist'),
+      'severity' => $key_exists ? REQUIREMENT_OK : REQUIREMENT_WARNING,
+      'weight' => '-1000',
+    );
+
+    // Check for the site and key values matching
+    $key_value = fundraiser_sustainers_get_sustainer_key_value();
+    if (!$key_value) {
+      $key_value = t('NO VALUE SET');
+    }
+
+    $key_match_for_environment = fundraiser_sustainers_processor_key_match();
+
+    // Array of text vars for the message
+    $configured_vars = array(
+      '@match' => $key_match_for_environment ? 'matches' : 'does not match',
+      '@key_value' => $key_value,
+      '@site' => $_SERVER['HTTP_HOST'] . rtrim(base_path(), '/'),
+    );
+
+    $requirements['fundraiser_sustainers_key_configured'] = array(
+      'title' => t('Fundraiser sustainer key match'),
+      'description' => t("The key file's value (@key_value) @match the current site's hostname and path (@site)", $configured_vars),
+      'value' => $key_match_for_environment ? t('Yes') : ('No'),
+      'severity' => $key_match_for_environment ? REQUIREMENT_OK : REQUIREMENT_WARNING,
+      'weight' => '-999',
+    );
+  }
+  return $requirements;
+}
+
+/**
+ * Implements hook_update_dependencies().
+ */
+function fundraiser_sustainers_update_dependencies() {
+  // We need the NPSP module to create the series table.
+  $dependencies['fundraiser_sustainers'][7013] = array(
+    'salesforce_npsp' => 7001,
+  );
+
+  // We need the fundraiser module to have a "default_amount" column.
+  $dependencies['fundraiser_sustainers'][7015] = array(
+    'fundraiser' => 7009,
+  );
+
+  return $dependencies;
+}
+
+/**
+ * Implements hook_schema().
+ */
+function fundraiser_sustainers_schema() {
+  $schema['fundraiser_sustainers_nodes'] = array(
+    'description' => 'Stores additional sustainer information per fundraising node.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Fundraiser node.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'recurring_setting' => array(
+        'description' => 'The recurring display setting for this node.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => 'user_choice', // user_choice, always, never
+      ),
+      'recurring_donation_amounts' => array(
+        'description' => 'A comma delimited string of ask amounts to be displayed on the donation form.',
+        'type' => 'varchar',
+        'length' => '1024',
+        'not null' => FALSE,
+      ),
+      'show_other_amount' => array(
+        'description' => 'Flag to toggle the other amount field on and off.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'minimum_donation_amount' => array(
+        'description' => 'The minimum donation amount the donation form will accept.',
+        'type' => 'numeric',
+        'not null' => FALSE,
+        'precision' => '15',
+        'scale' => '3',
+      ),
+      'default_amount' => array(
+        'description' => 'Ask amount for the donation form to default to.',
+        'type' => 'numeric',
+        'not null' => FALSE,
+        'precision' => '15',
+        'scale' => '3',
+      ),
+      'dual_ask_amounts' => array(
+        'description' => 'Flag to toggle dual ask amounts on and off.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'donation_type_component' => array(
+        'description' => 'The type of component to present on user-choice forms to select the donation type.',
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => FALSE,
+      ),
+      'donation_type_options' => array(
+        'description' => 'The onetime/recurring option names, labels, and order.',
+        'type' => 'varchar',
+        'length' => '1024',
+        'not null' => FALSE,
+      ),
+      'default_donation_type' => array(
+        'description' => 'The type of donation and ask amounts to default to.',
+        'type' => 'varchar',
+        'length' => 16,
+        'not null' => FALSE,
+      ),
+      'donation_type_help_text' => array(
+        'description' => 'Help text to show under the onetime/recurring buttons on dual-ask forms.',
+        'type' => 'text',
+        'length' => 1024,
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  $schema['fundraiser_sustainers'] = array(
+    'description' => 'Stores information about recurring orders.',
+    'fields' => array(
+      'master_did' => array(
+        'description' => 'Master donation id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'did' => array(
+        'description' => 'This specific recurring donation id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'next_charge' => array(
+        'description' => 'When to charge the donation next.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      // TODO strongly consider moving these to another table.
+      'sf_opportunity_id' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '40',
+        'not null' => FALSE,
+      ),
+      'sf_recurring_id' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'sf_stagename' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'sf_sync_status' => array(
+        'description' => 'TODO: please describe this field!',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      // SF fields should not be here.
+      'gateway_resp' => array(
+        'description' => 'Gateway response to the charge.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'attempts' => array(
+        'description' => 'Number of attempts made to charge.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'cancellation_reason' => array(
+        'description' => 'If cancelled, reason why.',
+        'type' => 'varchar',
+        'length' => '500',
+        'not null' => FALSE,
+      ),
+      'sustainer_key' => array(
+        'description' => 'Value of the sustainer key at the time of record creation.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'lock_id' => array(
+        'description' => t('Lock id for recurring batches to prevent requeue.'),
+        'type' => 'varchar',
+        'length' => '55',
+        'not null' => FALSE,
+        'default' => '0',
+      ),
+    ),
+    'primary key' => array('did'),
+    'indexes' => array(
+      'master_did' => array('master_did'),
+      'attempts_gateway_lock_next' => array('attempts', 'gateway_resp', 'lock_id', 'next_charge'),
+      'did_gateway_master' => array('did', 'gateway_resp', 'master_did'),
+      'did_lock_next' => array('did', 'lock_id', 'next_charge'),
+      'did_master' => array('did', 'master_did'),
+      'gateway_master' => array('gateway_resp', 'master_did'),
+      'lock_next' => array('lock_id', 'next_charge'),
+      'master_next_charge' => array('master_did', 'next_charge'),
+    ),
+  );
+
+  $schema['fundraiser_sustainers_log'] = array(
+    'description' => 'Stores the result of sustainer processing.',
+    'fields' => array(
+      'lid' => array(
+        'description' => 'Unqiue id of the log entry.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'did' => array(
+        'description' => 'The id of the donation being processed.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'timestamp' => array(
+        'description' => 'The time that the activity occurred.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'lock_id' => array(
+        'description' => 'The id of the lock that was put on the records during processing.',
+        'type' => 'varchar',
+        'length' => '55',
+        'not null' => FALSE,
+        'default' => '0',
+      ),
+      'next_charge' => array(
+        'description' => 'Unix timestamp of when to make the next charge.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'old_state' => array(
+        'description' => 'Initial state.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'new_state' => array(
+        'description' => 'New state.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'attempts' => array(
+        'description' => 'Number of attempts made to charge.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'cancellation_reason' => array(
+        'description' => 'If cancelled, reason why.',
+        'type' => 'varchar',
+        'length' => '500',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('lid'),
+    'indexes' => array(
+      'fundraiser_sustainers_log_timestamp' => array('timestamp'),
+      'fundraiser_sustainers_log_next_charge' => array('next_charge'),
+      'fundraiser_sustainers_log_old_state' => array('old_state'),
+      'fundraiser_sustainers_log_new_state' => array('new_state'),
+    ),
+  );
+
+  $schema['fundraiser_sustainers_charge_date'] = array(
+    'description' => 'Stores information about admin-changed donation dates.',
+    'fields' => array(
+      'master_did' => array(
+        'description' => 'Master donation id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'day' => array(
+        'description' => 'The numeric day of month.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('master_did'),
+  );
+
+  $schema['fundraiser_sustainers_series'] = array(
+    'description' => 'Stores the initial record in a series of recurring donations.',
+    'fields' => array(
+      'did' => array(
+        'description' => 'The ID of the initial donation in the series.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The ID of the user making the donation.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'amount' => array(
+        'description' => 'The donation amount.',
+        'type' => 'float',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'installments' => array(
+        'description' => 'The number of donation payments to make.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'The timestamp when this donation series was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'updated' => array(
+        'description' => 'The timestamp when this donation series was last updated.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('did'),
+    'indexes' => array(
+      'fundraiser_sustainers_series_uid' => array('uid'),
+      'fundraiser_sustainers_series_created' => array('created'),
+      'fundraiser_sustainers_series_updated' => array('updated'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function fundraiser_sustainers_install() {
+  // First we need to checkif old data from old tables is still around.
+  // If we've never pulled any of this data before, we need to move it over.
+  if (db_table_exists('fundraiser_recurring')) {
+    // Copy all data over from the old fundraiser_recurring table to the new table in the correct location.
+    db_query('INSERT INTO {fundraiser_sustainers} ' .
+      '(master_did, did, next_charge, sf_opportunity_id, sf_recurring_id, sf_stagename, sf_sync_status, ' .
+        'gateway_resp, attempts, cancellation_reason) ' .
+      'SELECT master_order_id, order_id, next_charge, sf_opportunity_id, sf_recurring_id, sf_stagename, sf_sync_status, ' .
+        'gateway_resp, attempts, cancellation_reason ' .
+      'FROM {fundraiser_recurring}');
+
+    // The table doesn't go away yet, because we may still need it for fundraiser.
+    // But if fundraiser has flagged that it's done porting data, we can drop it.
+    if (variable_get('fundraiser_port_recurring_done', FALSE)) {
+      db_drop_table('fundraiser_recurring');
+      variable_del('fundraiser_port_recurring_done');
+    }
+  }
+
+  // Set up default Salesforce mappings.
+  _fundraiser_sustainers_create_sustainers_series_mapping();
+}
+
+/**
+ * Implements hook_enable()
+ */
+function fundraiser_sustainers_enable() {
+  // Create default Salesforce mapping.
+  _fundraiser_sustainers_create_sustainers_series_mapping();
+}
+
+/**
+ * Creates a mapping between the fundraiser sustainers series entity and the
+ * Opportunity object in Salesforce.
+ */
+function _fundraiser_sustainers_create_sustainers_series_mapping() {
+  $default_map_sustainers_series = '{
+  "type" : "salesforce_mapping",
+  "name" : "fundraiser_sustainers_series",
+  "label" : "Fundraiser Sustainers Series",
+  "sync_triggers" : "3",
+  "salesforce_object_type" : "Opportunity",
+  "salesforce_record_type" : "",
+  "drupal_entity_type" : "fundraiser_sustainers_series",
+  "drupal_bundle" : "fundraiser_sustainers_series",
+  "field_mappings" : [
+    {
+      "drupal_field" : { "fieldmap_type" : "property", "fieldmap_value" : "amount" },
+      "salesforce_field" : {
+        "autoNumber" : false,
+        "byteLength" : 0,
+        "calculated" : false,
+        "calculatedFormula" : null,
+        "cascadeDelete" : false,
+        "caseSensitive" : false,
+        "controllerName" : null,
+        "createable" : true,
+        "custom" : false,
+        "defaultValue" : null,
+        "defaultValueFormula" : null,
+        "defaultedOnCreate" : false,
+        "dependentPicklist" : false,
+        "deprecatedAndHidden" : false,
+        "digits" : 0,
+        "displayLocationInDecimal" : false,
+        "externalId" : false,
+        "filterable" : true,
+        "groupable" : false,
+        "htmlFormatted" : false,
+        "idLookup" : false,
+        "inlineHelpText" : null,
+        "label" : "Amount",
+        "length" : 0,
+        "name" : "Amount",
+        "nameField" : false,
+        "namePointing" : false,
+        "nillable" : true,
+        "permissionable" : true,
+        "picklistValues" : [],
+        "precision" : 18,
+        "referenceTo" : [],
+        "relationshipName" : null,
+        "relationshipOrder" : null,
+        "restrictedDelete" : false,
+        "restrictedPicklist" : false,
+        "scale" : 2,
+        "soapType" : "xsd:double",
+        "sortable" : true,
+        "type" : "currency",
+        "unique" : false,
+        "updateable" : true,
+        "writeRequiresMasterRead" : false
+      },
+      "key" : false,
+      "direction" : "drupal_sf",
+      "drupal_sf" : "always",
+      "sf_drupal" : "always"
+    },
+    {
+      "drupal_field" : { "fieldmap_type" : "property", "fieldmap_value" : "amount" },
+      "salesforce_field" : {
+        "autoNumber" : false,
+        "byteLength" : 0,
+        "calculated" : false,
+        "calculatedFormula" : null,
+        "cascadeDelete" : false,
+        "caseSensitive" : false,
+        "controllerName" : null,
+        "createable" : true,
+        "custom" : false,
+        "defaultValue" : null,
+        "defaultValueFormula" : null,
+        "defaultedOnCreate" : false,
+        "dependentPicklist" : false,
+        "deprecatedAndHidden" : false,
+        "digits" : 0,
+        "displayLocationInDecimal" : false,
+        "externalId" : false,
+        "filterable" : true,
+        "groupable" : false,
+        "htmlFormatted" : false,
+        "idLookup" : false,
+        "inlineHelpText" : null,
+        "label" : "Amount",
+        "length" : 0,
+        "name" : "Amount",
+        "nameField" : false,
+        "namePointing" : false,
+        "nillable" : true,
+        "permissionable" : true,
+        "picklistValues" : [],
+        "precision" : 18,
+        "referenceTo" : [],
+        "relationshipName" : null,
+        "relationshipOrder" : null,
+        "restrictedDelete" : false,
+        "restrictedPicklist" : false,
+        "scale" : 2,
+        "soapType" : "xsd:double",
+        "sortable" : true,
+        "type" : "currency",
+        "unique" : false,
+        "updateable" : true,
+        "writeRequiresMasterRead" : false
+      },
+      "key" : false,
+      "direction" : "sf_drupal",
+      "drupal_sf" : "always",
+      "sf_drupal" : "always"
+    }
+  ],
+  "push_async" : "0",
+  "push_batch" : "0",
+  "created" : "1436462781",
+  "updated" : "1436462781",
+  "weight" : "0",
+  "locked" : "0",
+  "rdf_mapping" : []
+  }';
+
+  $sustainers_mapping = salesforce_mapping_load('fundraiser_sustainers_series');
+  if (empty($sustainers_mapping)) {
+    $mapping = entity_import('salesforce_mapping', $default_map_sustainers_series);
+    entity_save('salesforce_mapping', $mapping);
+  }
+}
+
+/**
+ * Update 7001.
+ *
+ * Adds an additional field to fundraiser_sustainers that will store the
+ * value of the sustainer key at the time of donation. This key is then
+ * checked before the sustainer is actually charged to ensure the charge
+ * is taking place in the original environment.
+ */
+function fundraiser_sustainers_update_7001(&$sandbox) {
+  // Add the new column.
+  $sustainer_key = array(
+    'description' => t('Value of the sustainer key at the time of record creation.'),
+    'type' => 'varchar',
+    'length' => '255',
+    'not null' => FALSE,
+    'default' => '',
+  );
+  db_add_field('fundraiser_sustainers', 'sustainer_key', $sustainer_key);
+  // Read key and update existing sustainer records.
+  $key = fundraiser_sustainers_get_sustainer_key_value();
+  $sustainers_updated = db_update('fundraiser_sustainers')
+  ->fields(array(
+    'sustainer_key' => $key,
+  ))
+  ->execute();
+  return array();
+}
+
+/**
+ * Update 7002.
+ *
+ * Adds an additional field to fundraiser_sustainers that will store the
+ * value of the lock key at the time of processing recurring donations.
+ * This is to prevent concurrent runs picking up the same donations and re-running them.
+ */
+function fundraiser_sustainers_update_7002(&$sandbox) {
+  $field = array(
+    'lock_id' => array(
+      'description' => t('Lock id for recurring batches to prevent requeue.'),
+      'type' => 'varchar',
+      'length' => '55',
+      'not null' => FALSE,
+      'default' => '0',
+    ),
+  );
+  db_add_field('fundraiser_sustainers', 'lock_id', $field['lock_id']);
+  return array();
+}
+
+/**
+ * Update 7003.
+ *
+ * Adds an additional table to fundraiser_sustainers that will store the
+ * valueof the recurring option display configuration per node.
+ */
+function fundraiser_sustainers_update_7004(&$sandbox) {
+  $schema['fundraiser_sustainers_nodes'] = array(
+    'description' => 'Stores additional sustainer information per fundraising node.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Fundraiser node.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'recurring_setting' => array(
+        'description' => 'The recurring display setting for this node.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => 'user_choice', // user_choice, always, never
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  db_create_table('fundraiser_sustainers_nodes', $schema['fundraiser_sustainers_nodes']);
+  return array();
+}
+
+/**
+ * Add indexes to tables.
+ */
+function fundraiser_sustainers_update_7005() {
+  db_add_index('fundraiser_sustainers', 'master_did', array('master_did'));
+  db_add_index('fundraiser_sustainers', 'attempts_gateway_lock_next', array('attempts', 'gateway_resp', 'lock_id', 'next_charge'));
+  db_add_index('fundraiser_sustainers', 'did_gateway_master', array('did', 'gateway_resp', 'master_did'));
+  db_add_index('fundraiser_sustainers', 'did_lock_next', array('did', 'lock_id', 'next_charge'));
+  db_add_index('fundraiser_sustainers', 'did_master', array('did', 'master_did'));
+  db_add_index('fundraiser_sustainers', 'gateway_master', array('gateway_resp', 'master_did'));
+  db_add_index('fundraiser_sustainers', 'lock_next', array('lock_id', 'next_charge'));
+  db_add_index('fundraiser_sustainers', 'master_next_charge', array('master_did', 'next_charge'));
+
+  return t('Added indexes to {fundraiser_sustainers} table.');
+}
+
+/**
+ * Adds an additional table to log the results of sustainer processing.
+ */
+function fundraiser_sustainers_update_7006(&$sandbox) {
+  $schema['fundraiser_sustainers_log'] = array(
+    'description' => 'Stores the result of sustainer processing.',
+    'fields' => array(
+      'lid' => array(
+        'description' => 'Unqiue id of the log entry.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'did' => array(
+        'description' => 'The id of the donation being processed.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'gateway' => array(
+        'description' => 'The gateway that was used to process the charge.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'date_processed' => array(
+        'description' => 'The date the charge was processed.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'success' => array(
+        'description' => 'Flag to indicate whether the charge was successful or not.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'lock_id' => array(
+        'description' => 'The if of the lock that was put on the records during processing.',
+        'type' => 'varchar',
+        'length' => '55',
+        'not null' => FALSE,
+        'default' => '0',
+      ),
+    ),
+    'primary key' => array('lid'),
+  );
+  db_create_table('fundraiser_sustainers_log', $schema['fundraiser_sustainers_log']);
+}
+
+/**
+ * Adds an additional table to store changed charge dates.
+ */
+function fundraiser_sustainers_update_7007() {
+  if (!db_table_exists('fundraiser_sustainers_charge_date')) {
+    $schema = drupal_get_schema('fundraiser_sustainers_charge_date', TRUE);
+    db_create_table('fundraiser_sustainers_charge_date', $schema);
+  }
+}
+
+/**
+ * Rebuilds the registry to find the new Health Checks class.
+ */
+function fundraiser_sustainers_update_7008() {
+  registry_rebuild();
+}
+
+/**
+ * Update failing donations to the retry status.
+ */
+function fundraiser_sustainers_update_7009() {
+  db_update('fundraiser_sustainers')
+    ->fields(array('gateway_resp' => 'retry'))
+    ->condition('gateway_resp', 'failed')
+    ->condition('attempts', 3, '<')
+    ->condition('lock_id', 0)
+    ->execute();
+
+}
+
+/**
+ * Create new sustainers log table.
+ */
+function fundraiser_sustainers_update_7010() {
+  registry_rebuild();
+
+  /**
+   * Rename the old log table to leave previous records alone.
+   *
+   * These records aren't used anymore but we leave them for historical purposes.
+   */
+  db_rename_table('fundraiser_sustainers_log', 'fundraiser_sustainers_log_pre_insights');
+
+  // Create the new table.
+  $fundraiser_sustainers_log_schema = array(
+    'description' => 'Stores the result of sustainer processing.',
+    'fields' => array(
+      'lid' => array(
+        'description' => 'Unqiue id of the log entry.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'did' => array(
+        'description' => 'The id of the donation being processed.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'timestamp' => array(
+        'description' => 'The time that the activity occurred.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'lock_id' => array(
+        'description' => 'The id of the lock that was put on the records during processing.',
+        'type' => 'varchar',
+        'length' => '55',
+        'not null' => FALSE,
+        'default' => '0',
+      ),
+      'next_charge' => array(
+        'description' => 'Unix timestamp of when to make the next charge.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'old_state' => array(
+        'description' => 'Initial state.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'new_state' => array(
+        'description' => 'New state.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'attempts' => array(
+        'description' => 'Number of attempts made to charge.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'cancellation_reason' => array(
+        'description' => 'If cancelled, reason why.',
+        'type' => 'varchar',
+        'length' => '500',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('lid'),
+  );
+
+  db_create_table('fundraiser_sustainers_log', $fundraiser_sustainers_log_schema);
+}
+
+/**
+ * Adds indexes to the sustainers log table.
+ */
+function fundraiser_sustainers_update_7011() {
+  db_add_index('fundraiser_sustainers_log', 'fundraiser_sustainers_log_timestamp', array('timestamp'));
+  db_add_index('fundraiser_sustainers_log', 'fundraiser_sustainers_log_next_charge', array('next_charge'));
+  db_add_index('fundraiser_sustainers_log', 'fundraiser_sustainers_log_old_state', array('old_state'));
+  db_add_index('fundraiser_sustainers_log', 'fundraiser_sustainers_log_new_state', array('new_state'));
+}
+
+/*
+ * Creates new sustainers series table.
+ */
+function fundraiser_sustainers_update_7012() {
+  $fundraiser_sustainers_series_schema = array(
+    'description' => 'Stores the initial record in a series of recurring donations.',
+    'fields' => array(
+      'did' => array(
+        'description' => 'The ID of the initial donation in the series.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The ID of the user making the donation.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'amount' => array(
+        'description' => 'The donation amount.',
+        'type' => 'float',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'installments' => array(
+        'description' => 'The number of donation payments to make.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'created' => array(
+        'description' => 'The timestamp when this donation series was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'updated' => array(
+        'description' => 'The timestamp when this donation series was last updated.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('did'),
+    'indexes' => array(
+      'fundraiser_sustainers_series_uid' => array('uid'),
+      'fundraiser_sustainers_series_created' => array('created'),
+      'fundraiser_sustainers_series_updated' => array('updated'),
+    ),
+  );
+
+  db_create_table('fundraiser_sustainers_series', $fundraiser_sustainers_series_schema);
+
+  _fundraiser_sustainers_create_sustainers_series_mapping();
+
+  cache_clear_all('schema', 'cache', TRUE);
+}
+
+/**
+ * Migrates recurring donations to fundraiser sustainer series entities.
+ */
+function fundraiser_sustainers_update_7013(&$sandbox) {
+  if (!isset($sandbox['progress'])) {
+    // Force schema cache refresh for fundraiser_sustainers_series table.
+    drupal_get_schema('fundraiser_sustainers_series', TRUE);
+
+    $sandbox['progress'] = 0;
+    $sandbox['current_did'] = 0;
+    $sandbox['max'] = db_query('SELECT COUNT(did) FROM {fundraiser_sustainers} WHERE `master_did` = `did`')->fetchField();
+  }
+
+  // Get fundraiser sustainers records that have matching master donation ID
+  // and donation ID fields.
+  $results = db_query('SELECT `master_did` FROM {fundraiser_sustainers} WHERE `master_did` = `did` AND `master_did` > :current_did ORDER BY `master_did` ASC LIMIT 0, 100',
+      array(
+        ':current_did' => $sandbox['current_did'],
+      ))->fetchAll();
+
+  foreach ($results as $row) {
+    // Get the donation user ID and amount.
+    $donation = db_query('SELECT `did`, `uid`, `amount` FROM {fundraiser_donation} WHERE `did` = :master_did',
+        array(
+          ':master_did' => $row->master_did,
+        ))->fetchAssoc();
+
+    $installments = db_query('SELECT COUNT(did) FROM {fundraiser_sustainers} WHERE `master_did` != `did` AND `master_did` = :master_did',
+        array(
+          ':master_did' => $row->master_did,
+          ))->fetchField();
+
+    // Create a new fundraiser sustainers series entity.
+    $time = time();
+    $fundraiser_sustainers_series_data = array(
+      'did' => $donation['did'],
+      'uid' => $donation['uid'],
+      'amount' => $donation['amount'],
+      'installments' => $installments,
+      'created' => $time,
+      'updated' => $time,
+      );
+
+    db_insert('fundraiser_sustainers_series')
+       ->fields($fundraiser_sustainers_series_data)
+       ->execute();
+
+    $sandbox['progress']++;
+    $sandbox['current_did'] = $row->master_did;
+  }
+
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+
+  if ($sandbox['#finished'] >= 1) {
+    return t('Fundraiser sustainers donations have been migrated to fundraiser sustainers series entities.');
+  }
+}
+
+/**
+ * Adds {fundraiser_sustainers_nodes} fields for recurring ask amounts.
+ */
+function fundraiser_sustainers_update_7014(&$sandbox) {
+  $fields = array(
+    'recurring_donation_amounts' => array(
+      'description' => 'A comma delimited string of ask amounts to be displayed on the donation form.',
+      'type' => 'varchar',
+      'length' => '1024',
+      'not null' => FALSE,
+    ),
+    'show_other_amount' => array(
+      'description' => 'Flag to toggle the other amount field on and off.',
+      'type' => 'int',
+      'size' => 'tiny',
+      'not null' => FALSE,
+      'default' => 0,
+    ),
+    'minimum_donation_amount' => array(
+      'description' => 'The minimum donation amount the donation form will accept.',
+      'type' => 'numeric',
+      'not null' => FALSE,
+      'precision' => '15',
+      'scale' => '3',
+    ),
+    'default_amount' => array(
+      'description' => 'Ask amount for the donation form to default to.',
+      'type' => 'numeric',
+      'not null' => FALSE,
+      'precision' => '15',
+      'scale' => '3',
+    ),
+  );
+  db_add_field('fundraiser_sustainers_nodes', 'recurring_donation_amounts', $fields['recurring_donation_amounts']);
+  db_add_field('fundraiser_sustainers_nodes', 'show_other_amount', $fields['show_other_amount']);
+  db_add_field('fundraiser_sustainers_nodes', 'minimum_donation_amount', $fields['minimum_donation_amount']);
+  db_add_field('fundraiser_sustainers_nodes', 'default_amount', $fields['default_amount']);
+}
+
+/**
+ * Copies {fundraiser} values to corresponding {fundraiser_sustainers_nodes} records
+ * for recurring ask amounts.
+ */
+function fundraiser_sustainers_update_7015(&$sandbox) {
+  db_query(
+    "UPDATE {fundraiser_sustainers_nodes} fsn, {fundraiser} f
+      SET fsn.recurring_donation_amounts=f.donation_amounts,
+        fsn.show_other_amount=f.show_other_amount,
+        fsn.minimum_donation_amount=f.minimum_donation_amount,
+        fsn.default_amount=f.default_amount
+      WHERE fsn.nid=f.nid;"
+  );
+}
+
+/**
+ * Adds {fundraiser_sustainers_nodes} column to toggle dual ask amounts.
+ */
+function fundraiser_sustainers_update_7016(&$sandbox) {
+  $fields = array(
+    'dual_ask_amounts' => array(
+      'description' => 'Flag to toggle dual ask amounts on and off.',
+      'type' => 'int',
+      'size' => 'tiny',
+      'not null' => FALSE,
+      'default' => 0,
+    ),
+  );
+  db_add_field('fundraiser_sustainers_nodes', 'dual_ask_amounts', $fields['dual_ask_amounts']);
+}
+
+/**
+ * Adds {fundraiser_sustainers_nodes} columns to make one-time/recurring donation type options configurable.
+ */
+function fundraiser_sustainers_update_7017(&$sandbox) {
+  $fields = array(
+    'donation_type_component' => array(
+      'description' => 'The type of component to present on user-choice forms to select the donation type.',
+      'type' => 'varchar',
+      'length' => 16,
+      'not null' => FALSE,
+    ),
+    'donation_type_options' => array(
+      'description' => 'The onetime/recurring option names, labels, and order.',
+      'type' => 'varchar',
+      'length' => '1024',
+      'not null' => FALSE,
+    ),
+    'default_donation_type' => array(
+      'description' => 'The type of donation and ask amounts to default to.',
+      'type' => 'varchar',
+      'length' => 16,
+      'not null' => FALSE,
+    ),
+    'donation_type_help_text' => array(
+      'description' => 'Help text to show under the onetime/recurring buttons on dual-ask forms.',
+      'type' => 'text',
+      'length' => 1024,
+      'not null' => FALSE,
+    ),
+  );
+  db_add_field('fundraiser_sustainers_nodes', 'donation_type_component', $fields['donation_type_component']);
+  db_add_field('fundraiser_sustainers_nodes', 'donation_type_options', $fields['donation_type_options']);
+  db_add_field('fundraiser_sustainers_nodes', 'default_donation_type', $fields['default_donation_type']);
+  db_add_field('fundraiser_sustainers_nodes', 'donation_type_help_text', $fields['donation_type_help_text']);
+}
+
+/**
+ * Batch update add card_id and sid fields for unprocessed recurring donations.
+ */
+/** Commented out because this update takes too long
+    to run in a site with a lot of donations. We'll
+    examine a real-time approach in the next release.
+function fundraiser_sustainers_update_7018(&$sandbox) {
+  $ret = array();
+  $cards = &drupal_static(__FUNCTION__);
+
+  if (!isset($sandbox['progress'])) {
+    // The count of donations visited so far.
+    $sandbox['progress'] = 0;
+    // Total donations that must be visited. Select donations that have a status
+    // of "payment_received" but no card_id.
+    $sandbox['max'] = db_query('SELECT COUNT(DISTINCT master_did) FROM {fundraiser_sustainers}', array(
+      ':status' => 'payment_received',
+    ))->fetchField();
+    // A place to store messages during the run.
+    $sandbox['messages'] = array();
+    // Last donation read via the query.
+    $sandbox['current_donation'] = -1;
+  }
+
+  // Process donations by groups of 25 (arbitrary value).
+  $limit = 25;
+
+  // Retrieve the next group of donations to update.
+  $query = db_select('fundraiser_sustainers', 'fs')
+    ->distinct()
+    ->fields('fs', array('master_did'))
+    ->condition('fs.master_did', $sandbox['current_donation'], '>')
+    ->orderBy('fs.master_did', 'ASC')
+    ->range(0, $limit)
+    ->execute()
+    ->fetchAll();
+
+  $rows = &drupal_static(__FUNCTION__);
+
+  foreach ($query as $record) {
+    $master_did = $record->master_did;
+    $sandbox['progress']++;
+    // Update our progress information.
+    $sandbox['current_donation'] = $master_did;
+
+    if (empty($rows[$master_did])) {
+      $rows[$master_did] = db_select('fundraiser_donation', 'fd')
+        ->fields('fd', array('did', 'uid', 'created', 'sid', 'card_id'))
+        ->condition('fd.did', $master_did, '=')
+        ->execute()
+        ->fetch();
+    }
+
+    $row = $rows[$master_did];
+
+    db_update('fundraiser_donation')
+      ->fields(array(
+        'card_id' => $row->card_id,
+        'sid' => $row->sid,
+      ))
+      ->condition('created', $row->created, '=')
+      ->condition('uid', $row->uid, '=')
+      ->execute();
+  }
+
+  // Set the "finished" status, to tell batch engine whether this function
+  // needs to run again. If you set a float, this will indicate the progress
+  // of the batch so the progress bar will update.
+  $sandbox['#finished'] = ($sandbox['progress'] >= $sandbox['max']) ? TRUE : ($sandbox['progress'] / $sandbox['max']);
+
+  if ($sandbox['#finished']) {
+    return t("Recurring donations have been updated with their master's card_id and sid values.");
+  }
+}
+*/

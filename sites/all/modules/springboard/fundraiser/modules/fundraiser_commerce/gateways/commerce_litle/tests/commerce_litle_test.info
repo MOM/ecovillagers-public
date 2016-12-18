@@ -1,0 +1,7 @@
+name = Commerce Litle dummy provider
+description = "Litle provider used for testing."
+package = Testing
+version = VERSION
+core = 7.x
+dependencies[] = commerce_litle
+hidden = TRUE

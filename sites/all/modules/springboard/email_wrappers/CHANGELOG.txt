@@ -1,0 +1,3 @@
+2012-10-14  Allen Freeman <allen.freeman@jacksonriver.com>
+
+    * email_confirmation.module (email_wrappers_load_defaults_from_template) - replaced buggy field value lookup code with field_get_items().

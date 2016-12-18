@@ -1,0 +1,97 @@
+<?php
+/**
+ * @file
+ * Creates a CKEditor plugin for inserting webform component tokens.
+ */
+
+/**
+ * Implementation of hook_menu().
+ */
+function webform_token_selector_menu() {
+  $items['webform/confirmation-token-list/%'] = array(
+    'title' => 'Confirmation token list',
+    'page callback' => 'webform_token_selector_token_list',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+
+
+/**
+ * Implementation of hook_theme().
+ */
+function webform_token_selector_theme() {
+  return array(
+    'confirmation_token_list' => array(
+      'arguments' => array('tokens' => NULL),
+      'template' => 'templates/confirmation-token-list',
+    ),
+  );
+}
+
+
+/**
+ * Implementation of hook_wysiwyg_plugin().
+ *
+ * Add a WYSIWYG plugin for webform confirmation tokens.
+ */
+function webform_token_selector_wysiwyg_plugin($editor, $version) {
+  switch ($editor) {
+    case 'ckeditor':
+      return array(
+        'webform-tokens' => array(
+          'path' => drupal_get_path('module', 'webform_token_selector') . '/ckeditor',
+          'buttons' => array(
+            'webform-tokens' => t('Confirmation page tokens'),
+          ),
+          'load' => TRUE,
+        ),
+      );
+      break;
+  }
+}
+
+/**
+ * Generates all possible fundraiser tokens and passes them to theme function.
+ *
+ * @param: $nid
+ *   The id of the donation form node.
+ */
+function webform_token_selector_token_list($nid) {
+  $node = node_load($nid);
+  $webform_tokens = array();
+
+  // make sure we have a node
+  if (isset($node->type)) {
+    $all_tokens['webform'] = array();
+
+    // 3rd party modules (like Fundraiser) use webform components to track sensitive data like
+    // credit card details that should not be surfaced lightly. In cases like this it is
+    // desirable to remove these components from the list of available components.
+    $token_blacklist = array();
+    drupal_alter('webform_token_selector_blacklist', $token_blacklist);
+
+    foreach ($node->webform['components'] as $component) {
+
+      if ($component['type'] != 'hidden' && $component['type'] != 'fieldset' && !in_array($component['form_key'], $token_blacklist)) {
+        $parents = webform_component_parent_keys($node, $component);
+        // TODO: trigger this on form key since the name can change.
+        if ($component['name'] == 'Please select your tax-deductible gift amount below') {
+          $component['name'] = t('Donation amount');
+        }
+        $webform_tokens['webform']['%value[' . implode('][', $parents) . ']'] = $component['name'];
+      }
+    }
+    // allow other modules to add more tokens
+    $module_tokens = module_invoke_all('confirmation_page_tokens', $node->type);
+    $tokens = array_merge($webform_tokens, $module_tokens);
+    // theme the output
+    $output = theme('confirmation_token_list', array('tokens' => $tokens));
+    print $output;
+    drupal_exit();
+  }
+}

@@ -1,0 +1,152 @@
+<?php
+
+/**
+ * @file
+ * Installation file for Webform User module.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function webform_user_uninstall() {
+  variable_del('webform_user_node_types');
+  variable_del('webform_user_session_store');
+}
+
+/**
+ * Implements hook_enable().
+ */
+function webform_user_enable() {
+  // Inform queue_processor about this change if it exists.
+  if (module_exists('queue_processor')) {
+    queue_processor_add_type('webform_user');
+  }
+}
+
+/**
+ * Implements hook_disable().
+ */
+function webform_user_disable() {
+  // Inform queue_processor about this change if it exists.
+  if (module_exists('queue_processor')) {
+    queue_processor_remove_type('webform_user');
+  }
+}
+
+/**
+ * Implements hook_schema().
+ */
+function webform_user_schema() {
+  $schema['webform_user'] = array(
+    'description' => 'Track nodes that are enabled as webform user nodes.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'is_webform_user' => array(
+        'description' => 'Boolean, if this is a webform user',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'authenticate_submitters' => array(
+        'description' => 'Boolean, if we log users in',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'send_new_user_email' => array(
+        'description' => 'Boolean, if we send new users email',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'email_field' => array(
+        'description' => 'Which field is used for email',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  $schema['webform_user_component_map'] = array(
+    'description' => 'The map of fields on a node to user profile fields',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'cid' => array(
+        'description' => 'The webform component',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'map_id' => array(
+        'description' => 'The profile field to map to',
+        'type' => 'varchar',
+        'length' => '100',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('nid', 'cid'),
+    'indexes' => array(
+      'cid' => array('cid'),
+      'map_id' => array('map_id'),
+      'nid' => array('nid'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_update_N().
+ */
+function webform_user_update_7000(&$sandbox) {
+  $current_webform_user_types = variable_get('webform_user_node_types', array('webform'));
+  // For each type set at the time of update, create a new
+  // variable under the new format for vars. Each should already be
+  // activated for webform.
+  foreach ($current_webform_user_types as $type) {
+    variable_get('webform_user_' . $type, FALSE);
+  }
+  // Clean up after ourselves.
+  variable_del('webform_user_node_types');
+  return array();
+}
+
+/**
+ * Add indexes to tables.
+ */
+function webform_user_update_7001() {
+  db_add_index('webform_user_component_map', 'cid', array('cid'));
+  db_add_index('webform_user_component_map', 'map_id', array('map_id'));
+  db_add_index('webform_user_component_map', 'nid', array('nid'));
+
+  return t('Added indexes to {webform_user_component_map} table.');
+}
+
+/**
+ * Adds internal name field to existing webform_user node types.
+ */
+function webform_user_update_7002() {
+  // Add the internal name content field to all fundraiser node types.
+  $types = node_type_get_types();
+  foreach ($types as $type => $type_info) {
+    if (_webform_user_is_webform_user_node_type($type) && !fundraiser_is_donation_type($type)) {
+      module_load_include('inc', 'webform_user', 'includes/webform_user.fields');
+      _webform_user_add_default_fields($type);
+    }
+  }
+}

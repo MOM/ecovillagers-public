@@ -1,0 +1,1419 @@
+<?php
+/**
+ * @file
+ * fundraiser_tickets.module
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function fundraiser_tickets_menu() {
+  $items = array();
+
+  $items['node/%node/tickets'] = array(
+    'title' => 'Tickets',
+    'description' => 'Ticket settings',
+    'page callback' => 'fundraiser_tickets_edit_settings',
+    'page arguments' => array(1),
+    'access callback' => 'fundraiser_tickets_manage_access',
+    'access arguments' => array(1),
+    'weight' => 2,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE | MENU_CONTEXT_INLINE,
+  );
+
+  $items['node/%/tickets/%/delete'] = array(
+    'title' => 'Ticket Deletion',
+    'description' => 'Ticket deletion',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fundraiser_tickets_delete_ticket_form', 1, 3),
+    'access arguments' => array('allow node-specific ticket deletion'),
+    'type' => MENU_CALLBACK,
+    'file' => 'fundraiser_tickets.forms.inc',
+    'weight' => 1,
+  );
+
+  $items['node/%node/tickets/settings'] = array(
+    'title' => 'Settings',
+    'description' => 'Ticket settings',
+    'page callback' => 'fundraiser_tickets_edit_settings',
+    'page arguments' => array(1),
+    'access callback' => 'fundraiser_tickets_manage_access',
+    'access arguments' => array(1),
+    'weight' => 3,
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+  );
+
+  $items['node/%node/tickets/tickets'] = array(
+    'title' => 'Tickets',
+    'description' => 'Tickets',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('fundraiser_tickets_order_ticket_types_form',1),
+    'access callback' => 'fundraiser_tickets_manage_access',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'fundraiser_tickets.forms.inc',
+    'weight' => 4,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function fundraiser_tickets_permission() {
+  return array(
+    'allow node-specific ticket deletion' => array(
+      'title' => t('Delete any ticket'),
+      'description' => t('Delete tickets from any fundraiser ticket form.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function fundraiser_tickets_views_api() {
+  return array(
+    "version" => "3.0",
+    "path" => drupal_get_path("module", "fundraiser_tickets") . "/views"
+  );
+}
+
+/**
+ * Menu access callback. Ensure node has ticketing enabled and user has node
+ * 'update' permission.
+ */
+function fundraiser_tickets_manage_access($node, $account = NULL) {
+  global $user;
+  $account = isset($account) ? $account : $user;
+  $ticket_types = fundraiser_tickets_get_ticket_types();
+
+  return node_access('update', $node, $account) && $ticket_types[$node->type] == true;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function fundraiser_tickets_theme($existing, $type, $theme, $path) {
+  return array(
+    'fundraiser_tickets_theme_order_ticket_types_form' => array(
+      'render element' => 'element'
+    ),
+    'fundraiser_tickets_webform_table' => array(
+      'render element' => 'element',
+    ),
+    'fundraiser_tickets_warning_indicator' => array(
+      'variables' => array('warning_message' => NULL),
+    ),
+    'fundraiser_tickets_closed_message' => array(
+      'variables' => array('message' => NULL),
+    ),
+    'fundraiser_tickets_soldout_message' => array(
+      'variables' => array('message' => NULL),
+    ),
+  );
+  return $theme;
+}
+
+/**
+ * Implements hook_fundraiser_field_info().
+ *
+ * Adds the ticket element to the webform.
+ */
+function fundraiser_tickets_fundraiser_field_info(){
+
+  // Donation amounts are handled in a special case.
+  $fields['tickets'] = array(
+    '#title' => t('Tickets'),
+    '#type' => 'fieldset',
+    '#required' => 0,
+    '#create_callback' => '_fundraiser_tickets_ticket_field_create',
+    '#display_callback' => '_fundraiser_tickets_ticket_field_display',
+    // Display callback, hide this field if the node isn't a ticket node.
+  );
+  $fields['tickets']['ticket_box'] = array(
+    '#title' => t('Tickets'),
+    '#type' => 'tickets',
+    '#required' => 1,
+    '#allow_update' => 1,
+  );
+  $fields['amount'] = array(
+    '#title' => t('Amount'),
+    '#type' => 'hidden',
+    '#value' => '',
+    '#required' => 1,
+    '#extra' => array(
+      'description' => '',
+      'hidden_type' => 'hidden',
+    ),
+  );
+  return $fields;
+}
+
+/**
+ * Implements hook_fundraiser_field_info_alter().
+ *
+ * Remove the donation fields, since we don't want them on ticket pages.
+ */
+function fundraiser_tickets_fundraiser_field_info_alter(&$info){
+  $info['donation']['#create_callback'] = '_fundraiser_tickets_donation_create';
+  $info['donation']['#display_callback'] = '_fundraiser_tickets_donation_display';
+}
+
+/**
+ * Field create callback, adjsut the type of the recurring page shown, based on fundraiser settings.
+ */
+function _fundraiser_tickets_ticket_field_create($fundraiser, $field) {
+  // If not a ticket page, drop the ticket field, drop the recurring field.
+  if (! fundraiser_tickets_is_ticket_type($fundraiser->type)) {
+    return FALSE;
+  } else {
+    return $field;
+  }
+}
+
+/**
+ * Field create callback, adjsut the type of the recurring page shown, based on fundraiser settings.
+ */
+function _fundraiser_tickets_donation_create($fundraiser, $field) {
+  // If not a ticket page, drop the ticket field, drop the recurring field.
+  if (fundraiser_tickets_is_ticket_type($fundraiser->type)) {
+     return FALSE;
+  } else {
+    return $field;
+  }
+}
+
+
+/**
+ * Implements hook_webform_component_info().
+ */
+function fundraiser_tickets_webform_component_info() {
+  $components = array();
+  $components['tickets'] = array(
+    'label' => t('Ticket box'),
+    'description' => t('The ticket listing box.'),
+    'features' => array(
+      'csv' => TRUE,
+      'email' => TRUE,
+      'email_address' => FALSE,
+      'email_name' => FALSE,
+      'required' => FALSE,
+      'title_display' => FALSE,
+      'title_inline' => FALSE,
+      'conditional' => FALSE,
+      'group' => FALSE,
+      'spam_analysis' => FALSE,
+      'attachment' => FALSE,
+      'required' => FALSE,
+      'description' => FALSE,
+      'default_value' => FALSE,
+    ),
+    'file' => 'components/tickets.inc',
+  );
+  return $components;
+}
+
+/**
+ * Page callback for the tickets settings management page.
+ */
+function fundraiser_tickets_edit_settings($node){
+
+  module_load_include('inc', 'node', 'node.pages');
+  $form = node_page_edit($node);
+
+  return drupal_render($form);
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function fundraiser_tickets_form_alter(&$form, &$form_state, $form_id) {
+  // Do not allow users to muck with defined form keys in component editting form.
+  // They're named what they're named for a reason and we need those keys to remain unharmed.
+  if ($form_id == 'webform_component_edit_form') {
+    $node = node_load($form['nid']['#value']);
+    // For donation types ONLY prevent type trigger.
+    if (fundraiser_tickets_is_ticket_type($node->type)) {
+       $form_key = $form['form_key']['#default_value'];
+      if ($form_key == 'tickets') {
+        $form['form_key']['#disabled'] = TRUE;
+        $form['form_key']['#description'] .= '</br>' . t('This field key is required by Fundraiser and cannot be changed.');
+        $form['form_key']['#value'] = $form['form_key']['#default_value'];
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Alter ticket settings form and add validation callback.
+ */
+function fundraiser_tickets_form_node_form_alter(&$form, &$form_state) {
+
+  if (fundraiser_tickets_is_ticket_type($form['type']['#value'])){
+
+    // Don't allow them to tinker with dollar handles or recurring gift settings
+    $form['fundraiser_settings']['fundraiser_sustainers']['#access'] = FALSE;
+    $form['fundraiser_settings']['amount_wrapper']['#access'] = FALSE;
+    $form['fundraiser_settings']['recurring_amount_wrapper']['#access'] = FALSE;
+
+    if (arg(0) == 'node' && (arg(2) == 'edit' || arg(1) == 'add')){
+      // Hide all tickets fields on the standard node add/edit page.
+      foreach (element_children($form) as $child){
+        if (fundraiser_tickets_is_ticket_field($child)){
+          $form[$child]['#access'] = FALSE;
+        }
+      }
+      $form['#validate'][] = '_fundraiser_tickets_form_node_form_validate';
+    } elseif (arg(0) == 'node' && arg(2) == 'tickets'){
+      // Hide all fields that aren't required on the tickets tab
+      $required_fields = array('actions','nid','vid','uid','type','option','form_build_id','form_token','form_id','webform');
+      foreach (element_children($form) as $child){
+        if (! fundraiser_tickets_is_ticket_field($child) && ! in_array($child, $required_fields)){
+          $form[$child]['#access'] = FALSE;
+        }
+      }
+      $form['#after_build'][] = '_fundraiser_tickets_ticket_settings_form_organize';
+      $form['#validate'] = array('_fundraiser_tickets_ticket_settings_form_validate');
+      $form['#submit'] = array();
+      unset($form['actions']['preview']);
+      unset($form['actions']['delete']);
+    }
+  }
+}
+
+/**
+ * Validate callback for node form.
+ *
+ * Make sure recurring billing is disabled on ticket forms.
+ */
+function _fundraiser_tickets_form_node_form_validate(&$form, &$form_state) {
+  $form_state['values']['recurring_setting'] = 'never';
+}
+
+/**
+ * Implements hook_commerce_line_item_type_info().
+ */
+function fundraiser_tickets_commerce_line_item_type_info() {
+  $line_item_types = array();
+  $line_item_types['ticket'] = array(
+    'type' => 'ticket',
+    'name' => t('Ticket'),
+    'description' => t('A ticket sale.'),
+    'product' => TRUE,
+    'base' => 'commerce_product_line_item',
+  );
+  return $line_item_types;
+}
+
+/**
+ * Implements hook_fundraiser_commerce_generate_line_items().
+ *
+ * Generate line items for the ticket sales and the extra donation.
+ * Returns TRUE if line items have been generated. Otherwise, returns FALSE.
+ */
+function fundraiser_tickets_fundraiser_commerce_generate_line_items($donation, $order){
+  if (isset($donation->donation['ticket_box']) && is_array($donation->donation['ticket_box']) && count($donation->donation['ticket_box'])){
+    $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+    $node_wrapper = entity_metadata_wrapper('node', $donation->node);
+    foreach ($donation->donation['ticket_box'] as $offset => $serialized_value){
+      $form_row = unserialize($serialized_value);
+      list ($key, $quantity) = each($form_row);
+      $product_id = _fundraiser_tickets_get_product_id_from_form_element_name($key);
+      if ($product_id && $quantity > 0){
+        $product_wrapper = entity_metadata_wrapper('commerce_product', commerce_product_load($product_id));
+        $line_item = commerce_line_item_new('ticket', $order->order_id);
+
+        // Populate the line item with default values, sets the unit price
+        commerce_product_line_item_populate($line_item, $product_wrapper->value());
+
+        // Set the label from the product title and the quantity from the webform component value
+        $line_item->line_item_label = t('Ticket - ' . $product_wrapper->title->value());
+        $line_item->quantity = $quantity;
+
+        commerce_line_item_save($line_item);
+
+        // Add the line item to the order, this will be saved by fundraiser_commerce
+        $order_wrapper->commerce_line_items[] = $line_item;
+      }
+    }
+
+    // Let fundraiser commerce know that we created line items
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Implements hook_fundraiser_donation_success().
+ */
+function fundraiser_tickets_fundraiser_donation_success($donation) {
+  // Only proceed if this donation is a ticketed event
+  if (empty($donation->node) || !fundraiser_tickets_is_ticket_type($donation->node->type)) {
+    return;
+  }
+
+  // Load up the commerce order and wrapper
+  $order = commerce_order_load($donation->did);
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+  // Ensure we have line items
+  if (!empty($order_wrapper->commerce_line_items)) {
+    // Resave the line items to have them sent to the queue and update totals
+    foreach ($order_wrapper->commerce_line_items as $line_item_wrapper) {
+      commerce_line_item_save($line_item_wrapper->value());
+    }
+  }
+
+  $node_wrapper = entity_metadata_wrapper('node', $donation->node);
+
+  // Update the inventory on the node
+  fundraiser_tickets_update_inventory($node_wrapper);
+}
+
+/**
+ * Alter an item before it is added to the queue.
+ *
+ * @param array $item
+ *   Array of values to be added to the queue
+ */
+function fundraiser_tickets_salesforce_queue_create_item_alter(&$item) {
+  // Connect a ticket line item to the donation opportunity
+  if ($item['module'] == 'commerce_line_item' && $item['delta'] == 'ticket') {
+    $line_item = commerce_line_item_load($item['drupal_id']);
+    $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+
+    $item['sobject']->fields['Opportunity__c'] = sprintf('[Opportunity:donation:%d]', $line_item->order_id);
+  }
+}
+
+/**
+ * Implements hook_salesforce_mapping_confirm_entity_for_queue
+ *
+ * Stop ticket line items from syncing till the order has charged
+ */
+function fundraiser_tickets_salesforce_mapping_confirm_entity_for_queue($entity, $entity_type, $op) {
+  // Only bother with commerce entities
+  if ($entity_type != 'commerce_line_item') {
+    return;
+  }
+
+  $line_item = $entity;
+  if ($line_item->type == 'ticket' && !empty($line_item->order_id)) {
+    $order = commerce_order_load($line_item->order_id);
+    if (empty($order->data['commerce_payment_order_paid_in_full_invoked'])) {
+      return FALSE;
+    }
+  }
+}
+
+/**
+ * Implements hook_commerce_line_item_insert
+ */
+function fundraiser_tickets_commerce_line_item_insert($line_item) {
+  if ($line_item->type == 'ticket') {
+    $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+    _fundraiser_tickets_update_quantity_sold($line_item_wrapper->commerce_product->value());
+  }
+}
+
+/**
+ * Implements hook_commerce_line_item_update
+ */
+function fundraiser_tickets_commerce_line_item_update($line_item) {
+  if ($line_item->type == 'ticket') {
+    $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+    _fundraiser_tickets_update_quantity_sold($line_item_wrapper->commerce_product->value());
+  }
+}
+
+/**
+ * Implements hook_commerce_line_item_delete
+ */
+function fundraiser_tickets_commerce_line_item_delete($line_item) {
+  if ($line_item->type == 'ticket') {
+    $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+    _fundraiser_tickets_update_quantity_sold($line_item_wrapper->commerce_product->value());
+  }
+}
+
+/**
+* Helper function: parse the product id out of the form element name.
+*/
+function _fundraiser_tickets_get_product_id_from_form_element_name($name){
+  list ($prefix, $product_id) = explode('-',$name);
+  if (strstr($prefix, 'product') && is_numeric($product_id)){
+    return $product_id;
+  } else {
+    return NULL;
+  }
+}
+
+/**
+* Helper function: updates the number of tickets sold.
+*/
+function _fundraiser_tickets_update_quantity_sold($product) {
+  // Get the quantity
+  $quantity = _fundraiser_tickets_product_total_purchased($product->product_id);
+
+  // Update the product; the node is updated when the product is saved
+  $product_wrapper = entity_metadata_wrapper('commerce_product', $product);
+  $product_wrapper->fr_tickets_quantity_sold->set(round($quantity));
+  $product_wrapper->save();
+}
+
+/**
+* Afterbuild function to add fieldsets to the tickets tab
+*/
+function _fundraiser_tickets_ticket_settings_form_organize($form, $form_state){
+  // Add donation-form admin CSS
+  drupal_add_css(drupal_get_path('module', 'fundraiser_tickets') . '/css/ticketing_form.css');
+
+  // Create fieldset
+  $form['waitlist']  = array(
+    '#type' => 'fieldset',
+    '#title' => t('Wait List options'),
+    '#weight' => '-5'
+  );
+  $form['waitlist']['fr_tickets_waitlist_form'] = $form['fr_tickets_waitlist_form'];
+  $form['waitlist']['fr_tickets_waitlist_soldout'] = $form['fr_tickets_waitlist_soldout'];
+  $form['waitlist']['fr_tickets_waitlist_closed'] = $form['fr_tickets_waitlist_closed'];
+  unset($form['fr_tickets_waitlist_form']);
+  unset($form['fr_tickets_waitlist_soldout']);
+  unset($form['fr_tickets_waitlist_closed']);
+  // These two fields seem to be redundant, so for now I am hiding them.
+  // TODO: Check where we want them.  If not, drop them completely.
+  $form['waitlist']['fr_tickets_waitlist_soldout']['#access'] = FALSE;
+  $form['waitlist']['fr_tickets_waitlist_closed']['#access']  = FALSE;
+
+  $form['closed']  = array(
+    '#type' => 'fieldset',
+    '#title' => t('Close settings'),
+    '#weight' => '-3'
+  );
+  $form['closed']['fr_tickets_closed_is_closed'] = $form['fr_tickets_closed_is_closed'];
+  $form['closed']['fr_tickets_closed_close_date'] = $form['fr_tickets_closed_close_date'];
+  $form['closed']['fr_tickets_closed_options'] = $form['fr_tickets_closed_options'];
+  $form['fr_tickets_closed_redirect']['#states'] = array(
+    'visible' => array(
+      ':input[name="fr_tickets_closed_options[und]"]' => array('value' => 'redirect'),
+    ),
+  );
+  // Move the closed redirect right after the closed redirect radio button.
+  $form['closed']['fr_tickets_closed_options'][LANGUAGE_NONE]['redirect']['#suffix'] = drupal_render($form['fr_tickets_closed_redirect']);
+  $form['closed']['fr_tickets_closed_message'] = $form['fr_tickets_closed_message'];
+  $form['closed']['fr_tickets_closed_message']['#states'] = array(
+    'visible' => array(
+      ':input[name="fr_tickets_closed_options[und]"]' => array('value' => 'message'),
+    ),
+  );
+
+  unset($form['fr_tickets_closed_is_closed']);
+  unset($form['fr_tickets_closed_close_date']);
+  unset($form['fr_tickets_closed_options']);
+  unset($form['fr_tickets_closed_redirect']);
+  unset($form['fr_tickets_closed_message']);
+
+  $form['soldout']  = array(
+    '#type' => 'fieldset',
+    '#title' => t('Sell out settings'),
+    '#weight' => '-1'
+  );
+  $form['soldout']['fr_tickets_soldout_options'] = $form['fr_tickets_soldout_options'];
+  $form['fr_tickets_soldout_redirect']['#states'] = array(
+    'visible' => array(
+      ':input[name="fr_tickets_soldout_options[und]"]' => array('value' => 'redirect'),
+    ),
+  );
+  // Move the sold out redirect right after the sold out redirect radio button.
+  $form['soldout']['fr_tickets_soldout_options'][LANGUAGE_NONE]['redirect']['#suffix'] = drupal_render($form['fr_tickets_soldout_redirect']);
+
+  $form['soldout']['fr_tickets_soldout_message'] = $form['fr_tickets_soldout_message'];
+  $form['soldout']['fr_tickets_soldout_message']['#states'] = array(
+    'visible' => array(
+      ':input[name="fr_tickets_soldout_options[und]"]' => array('value' => 'message'),
+    ),
+  );
+
+  unset($form['fr_tickets_soldout_options']);
+  unset($form['fr_tickets_soldout_redirect']);
+  unset($form['fr_tickets_soldout_message']);
+
+  $form['donation']  = array(
+    '#type' => 'fieldset',
+    '#title' => t('Donation add-on'),
+    '#weight' => '1'
+  );
+
+  // The 'Enable add-on donation' checkbox field
+  $form['donation']['fr_tickets_donation_donation'] = $form['fr_tickets_donation_donation'];
+  unset($form['fr_tickets_donation_donation']);
+
+  // The field to choose which donation form to use. Has a #states array
+  // to show/hide upon the checkbox above being checked/unchecked.
+  $form['donation']['fr_tickets_donation_addon_form'] = $form['fr_tickets_donation_addon_form'];
+  $form['donation']['fr_tickets_donation_addon_form']['#weight'] = 35;
+  $form['donation']['fr_tickets_donation_addon_form']['#attributes']['class'][] = 'autocomplete_extra_wide';
+  $form['donation']['fr_tickets_donation_addon_form']['#states'] = array(
+    'visible' => array(
+      ':input[name*=tickets_donation_donation]' => array('checked' => TRUE)
+    ),
+  );
+  unset($form['fr_tickets_donation_addon_form']);
+
+  // If fundraiser_tickets_salesforce module exists, use its field.
+  if (isset($form['fr_tickets_donation_salesforce_field'])) {
+    $form['donation']['fr_tickets_donation_salesforce_field'] = $form['fr_tickets_donation_salesforce_field'];
+    $form['donation']['fr_tickets_donation_salesforce_field']['#states'] = array(
+      'visible' => array(
+        ':input[name*=tickets_donation_donation]' => array('checked' => TRUE)
+      ),
+    );
+    unset($form['fr_tickets_donation_salesforce_field']);
+  }
+
+  // These fields are managed programmatically.
+  unset($form['fr_tickets_inventory_initial']);
+  unset($form['fr_tickets_inventory_available']);
+  unset($form['fr_tickets_inventory_purchased']);
+
+  return $form;
+}
+
+
+/**
+ * Validate callback for node form when in ticket settings view.
+ *
+ * Verify that redirect URLS are valid. Cribbed from menu module.
+ */
+function _fundraiser_tickets_ticket_settings_form_validate(&$form, &$form_state) {
+  // Restore default gateway settings lost due to gateway fields being hidden.
+  $gateways = $form['payment_methods']['gateways'];
+  foreach (array_keys($gateways) as $gateway_value) {
+    if (is_array($gateways[$gateway_value])) {
+      $gateway = $gateways[$gateway_value];
+      if (isset($gateway['_default']) && !empty($gateway['_default']['#default_value'])) {
+        $form_state['values']['gateways'][$gateway_value]['default'] = 1;
+      }
+    }
+  }
+
+  // Remove _default index from gateways.
+  unset($form_state['values']['gateways']['_default']);
+
+  $check_redirects = array('closed', 'soldout');
+
+  foreach ($check_redirects as $check_redirect) {
+    if ($form_state['values']['fr_tickets_' . $check_redirect . '_options'][LANGUAGE_NONE][0]['value'] == 'redirect') {
+      $redirect = $form_state['values']['fr_tickets_' . $check_redirect . '_redirect'][LANGUAGE_NONE][0]['value'];
+      if (!trim($redirect) || !drupal_valid_path($redirect, TRUE)) {
+        form_set_error('fr_tickets_' . $check_redirect . '_redirect', t("The path '@link_path' is either invalid or you do not have access to it.", array('@link_path' => $redirect)));
+      }
+      if (!empty($form_state['node']->nid)) {
+        $nid = $form_state['node']->nid;
+        $external = url_is_external($redirect);
+        // If this is an internal path, or if it's external but pointing to the
+        // host site, check that the redirect URL isn't pointing to this node,
+        // which would cause an infinite redirect.
+        $form_error = FALSE;
+        $redirect_without_base = str_replace($GLOBALS['base_url'] . '/', '', $redirect);
+        if ($redirect_without_base == $form_state['values']['path']['alias']) {
+          $form_error = TRUE;
+        }
+        if (!$external || $external && strpos($redirect, $GLOBALS['base_url']) !== FALSE) {
+          $path = url('node/' . $nid);
+          $path = ltrim($path, '/');
+          if ($redirect_without_base == $path || $redirect_without_base == 'node/' . $nid) {
+            $form_error = TRUE;
+          }
+        }
+        if ($form_error) {
+          form_set_error('fr_tickets_' . $check_redirect . '_redirect', t("Pointing your redirect URL to this form would cause an infinite redirect. Please use a different URL."));
+        }
+      }
+    }
+  }
+
+  if ($form_state['values']['fr_tickets_donation_donation'][LANGUAGE_NONE][0]['value'] == 1) {
+    $addon = $form_state['values']['fr_tickets_donation_addon_form'][LANGUAGE_NONE][0]['target_id'];
+    if (empty($addon)) {
+      form_set_error('fr_tickets_donation_addon_form', t('When add-on donations are enabled, "Donation form to Use for Add-ons" is required.'));
+    }
+    else {
+      $addon_currency = fundraiser_get_currency_from_node(node_load($addon));
+      $this_currency = fundraiser_get_currency_from_node($form['#node']);
+      if ($this_currency['code'] != $addon_currency['code']) {
+        $replacements = array(
+          '%addon' => $addon_currency['code'],
+          '%this' => $this_currency['code'],
+        );
+        form_set_error('fr_tickets_donation_addon_form', t('The currency of the add-on donation form (%addon) does not match the currency of this form (%this).', $replacements));
+      }
+    }
+  }
+
+  $closed = $form_state['values']['fr_tickets_closed_options'][LANGUAGE_NONE][0]['value'];
+  $soldout = $form_state['values']['fr_tickets_soldout_options'][LANGUAGE_NONE][0]['value'];
+  $waitlist = $form_state['values']['fr_tickets_waitlist_form'][LANGUAGE_NONE][0]['target_id'];
+  if (($closed == 'form' || $soldout == 'form') && $waitlist == NULL) {
+    form_set_error('fr_tickets_waitlist_form', t('You must select a wait list or choose a different closed or soldout setting.'));
+  }
+  $_GET['destination'] = current_path();
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Alter content type settings to add "Enable ticketed events?" checkbox.
+ */
+function fundraiser_tickets_form_node_type_form_alter(&$form, &$form_state) {
+  if (isset($form['type'])) {
+    $form['fundraiser_type']['fundraiser_tickets'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Enable ticketed events?'),
+      '#default_value' => variable_get('fundraiser_tickets_' . $form['#node_type']->type, FALSE),
+      '#description' => t('Enable this checkbox if this content type should provide ticketed event sales.  Fundraiser must be enabled as well.'),
+    );
+    $form['#validate'][] = 'fundraiser_tickets_form_node_type_form_validate';
+  }
+}
+
+/**
+ * Validation callback for the node type form. Called during form validation.
+ */
+function fundraiser_tickets_form_node_type_form_validate($form, &$form_state){
+  if ($form_state['values']['fundraiser_tickets'] && ! $form_state['values']['fundraiser']){
+    form_set_error('fundraiser', t('Fundraiser must also be enabled for ticketed event content types.'));
+  }
+}
+
+/**
+ * Implements hook_node_type_insert
+ */
+function fundraiser_tickets_node_type_insert($type) {
+  if (fundraiser_tickets_is_ticket_type($type->type)){
+    if (! fundraiser_is_donation_type($type->type)){
+      drupal_set_message(t('Fundraiser must also be enabled for ticketed event sales.'), 'error');
+    } else {
+      module_load_include('inc', 'fundraiser_tickets', 'includes/fundraiser_tickets.fields');
+      module_load_include('inc', 'fundraiser_tickets', 'includes/fundraiser_tickets.product');
+      _fundraiser_tickets_add_default_fields($type->type);
+      _fundraiser_tickets_create_fundraiser_ticket_product();
+    }
+  }
+}
+
+/**
+ * Implements hook_node_type_update
+ */
+function fundraiser_tickets_node_type_update($type) {
+  if (fundraiser_tickets_is_ticket_type($type->type)) {
+    if (! fundraiser_is_donation_type($type->type)) {
+      drupal_set_message(t('Fundraiser must also be enabled for ticketed event sales.'), 'error');
+    } else {
+      module_load_include('inc', 'fundraiser_tickets', 'includes/fundraiser_tickets.fields');
+      module_load_include('inc', 'fundraiser_tickets', 'includes/fundraiser_tickets.product');
+      _fundraiser_tickets_add_default_fields($type->type);
+      _fundraiser_tickets_create_fundraiser_ticket_product();
+    }
+  }
+}
+
+/**
+ * Implements hook_node_view().
+ */
+function fundraiser_tickets_node_view($node, $view_mode, $langcode) {
+  // If this isn't a fundraiser ticket type, ignore it.
+  if (fundraiser_tickets_is_ticket_type($node->type)) {
+    if ($view_mode == 'full') {
+      // If there are no tickets yet, or if we are closed or sold out,
+      // figure out what to do with them based on the form settings.
+      if (fundraiser_tickets_no_tickets_added($node)) {
+        global $user;
+        if ($user->uid) {
+          $message = t('The form will not work properly until tickets have been created. <strong>!link_url</strong>.', array('!link_url' => l('To add tickets, click here', 'node/' . $node->nid . '/tickets/tickets')));
+          drupal_set_message($message, 'error');
+        }
+      }
+
+      elseif(fundraiser_tickets_is_closed($node)) {
+        $access = fundraiser_tickets_manage_access($node);
+        $node_wrapper = entity_metadata_wrapper('node', $node);
+        switch($node_wrapper->fr_tickets_closed_options->value()){
+          case 'message':
+            $node->content['body']['#access'] = FALSE;
+            $node->content['webform']['#access'] = FALSE;
+            $message = $node_wrapper->fr_tickets_closed_message->value();
+            if (!empty($message)) {
+              $node->content['closed_message'] = array(
+                '#markup' => theme('fundraiser_tickets_closed_message', array('message' => $message)),
+                '#weight' => 10,
+              );
+            }
+            break;
+          case 'redirect':
+            $redirect = $node_wrapper->fr_tickets_closed_redirect->value();
+            if (!$access) {
+               drupal_goto($redirect);
+            }
+            else {
+              drupal_set_message(t('This form is closed and users are being redirected to !redirect.',
+                array('!redirect' => l('this page', $redirect))), 'warning');
+              break;
+            }
+          case 'form':
+            $waitlist = !empty($node_wrapper->value()->fr_tickets_waitlist_form);
+            if ($waitlist) {
+              $nid = $node_wrapper->fr_tickets_waitlist_form->value()->nid;
+              if (!$access) {
+                drupal_goto('node/' . $nid);
+              }
+              else {
+                drupal_set_message(t('This form is closed and users are being redirected to !redirect.',
+                  array('!redirect' => l('the waitlist form', 'node/' . $nid))), 'warning');
+                break;
+              }
+            }
+            elseif($access) {
+              drupal_set_message(t('This form is closed and is configured to redirect users to a wait list, but no wait list has been selected.'), 'warning');
+              break;
+            }
+          default:
+            drupal_set_message(t('This form is closed.'));
+        }
+      }
+      elseif(fundraiser_tickets_is_sold_out($node)){
+        $access = fundraiser_tickets_manage_access($node);
+        $node_wrapper = entity_metadata_wrapper('node', $node);
+
+        switch($node_wrapper->fr_tickets_soldout_options->value()){
+
+          case 'message':
+            $node->content['body']['#access'] = FALSE;
+            $node->content['webform']['#access'] = FALSE;
+            $message = $node_wrapper->fr_tickets_soldout_message->value();
+            if (!empty($message)) {
+              $node->content['soldout_message'] = array(
+                '#markup' => theme('fundraiser_tickets_soldout_message', array('message' => $message)),
+                '#weight' => 10,
+              );
+            }
+            break;
+
+          case 'redirect':
+            $redirect = $node_wrapper->fr_tickets_soldout_redirect->value();
+            if (!$access) {
+              drupal_goto($redirect);
+            }
+            else {
+              drupal_set_message(t('This form is sold out and users are being redirected to !redirect.',
+                array('!redirect' => l('this page', $redirect))), 'warning');
+              break;
+            }
+          case 'form':
+            $waitlist = !empty($node_wrapper->value()->fr_tickets_waitlist_form);
+            if ($waitlist) {
+              $nid = $node_wrapper->fr_tickets_waitlist_form->value()->nid;
+              if (!$access) {
+                drupal_goto('node/' . $nid);
+              }
+              else {
+                drupal_set_message(t('This form is soldout and users are being redirected to !redirect.',
+                  array('!redirect' => l('the waitlist form', 'node/' . $nid))), 'warning');
+                break;
+              }
+            }
+            elseif($access) {
+              drupal_set_message(t('This form is closed and is configured to redirect users to a wait list, but no wait list has been selected.'), 'warning');
+              break;
+            }
+
+          default:
+            drupal_set_message(t('This form is sold out.'));
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_clone_node_alter().
+ */
+function fundraiser_tickets_clone_node_alter(&$node, $context) {
+  if (fundraiser_tickets_is_ticket_type($context['original_node']->type)) {
+    // We want to associated cloned pages with new products
+    //  and reset the sold ticket count.
+    $node_wrapper = entity_metadata_wrapper('node', $node);
+    $ticket_types = $node_wrapper->fr_tickets_ticket_types->value();
+    if (is_array($ticket_types)){
+      $new_ticket_types = array();
+      foreach ($ticket_types as $offset => $ticket_type){
+        $new_ticket_type = clone $ticket_type;
+        // Product SKUs need to be unique and can be no longer than 255 characters.
+        // We don't know the nid of the new node yet, so I am using time() and
+        // a random number to generate a unique SKU.
+        if (strlen($new_ticket_type->sku > 220)){
+          $new_ticket_type->sku = substr($new_ticket_type->sku, 0, 220);
+        }
+        $new_ticket_type->sku .= '-clone-' . time() . sprintf('%04d',rand(1,1000));
+        $new_ticket_type->product_id = FALSE;
+        $new_ticket_type->revision_id = FALSE;
+        $new_ticket_type->is_new = TRUE;
+        $new_ticket_type->fr_tickets_quantity_sold[LANGUAGE_NONE][0] = 0;
+        commerce_product_save($new_ticket_type);
+        $new_ticket_types[] = $new_ticket_type;
+      }
+      $node_wrapper->fr_tickets_ticket_types->set($new_ticket_types);
+    }
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function fundraiser_tickets_node_update($node) {
+  if (!fundraiser_tickets_is_ticket_type($node->type)) {
+    return;
+  }
+
+  // Change the currency value on the ticket products.
+  $node_wrapper = entity_metadata_wrapper('node', $node);
+  if (is_array($node_wrapper->fr_tickets_ticket_types->value())) {
+    foreach ($node_wrapper->fr_tickets_ticket_types->value() as $ticket_type) {
+      $currency = fundraiser_get_currency_from_node($node);
+      $ticket_type->commerce_price[LANGUAGE_NONE][0]['currency_code'] = $currency['code'];
+
+      // Set this value so the inventory processes do not run.
+      $ticket_type->fundraiser_tickets_skip_inventory = TRUE;
+      commerce_product_save($ticket_type);
+    }
+  }
+}
+
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Hide the SKU and weight fields of tickets from users.
+ */
+function fundraiser_tickets_form_commerce_product_ui_product_form_alter(&$form, &$form_state) {
+  $product = $form_state['commerce_product'];
+
+  if ($product->type == 'fundraiser_ticket'){
+    $form['fr_tickets_weight']['#access'] = FALSE;
+    $form['fr_tickets_quantity_sold']['#disabled'] = TRUE;
+    $form['#validate'][] = 'fundraiser_tickets_form_commerce_product_ui_product_form_validate';
+    unset($form['actions']['save_continue']);
+
+    $destination = drupal_get_destination();
+    $destination_parts = explode('/', $destination['destination']);
+
+    if (count($destination_parts) == 4 && $destination_parts[0] == 'node' && is_numeric($destination_parts[1]) && $destination_parts[2] == 'tickets' && $destination_parts[3] == 'tickets') {
+      $currency = fundraiser_get_currency_from_node(node_load($destination_parts[1]));
+
+      $commerce_price_language = $form['commerce_price']['#language'];
+      $form['commerce_price'][$commerce_price_language][0]['currency_code']['#default_value'] = $currency['code'];
+      $form['commerce_price'][$commerce_price_language][0]['currency_code']['#access'] = FALSE;
+      $form['commerce_price'][$commerce_price_language][0]['currency_code_markup'] = array(
+        '#markup' => $currency['code'],
+        '#suffix' => '</div>',
+      );
+    }
+
+  }
+}
+
+/**
+ * Validation callback for the commerce product form.
+ *
+ * Generate a SKU and weight setting for new products
+ */
+function fundraiser_tickets_form_commerce_product_ui_product_form_validate($form, &$form_state){
+  $product = $form_state['commerce_product'];
+  if ($product->type == 'fundraiser_ticket'){
+
+    $form_state['values']['fr_tickets_quantity'][LANGUAGE_NONE][0]['value'] = intval($form_state['values']['fr_tickets_quantity'][LANGUAGE_NONE][0]['value']);
+    $form_state['values']['fr_tickets_threshold'][LANGUAGE_NONE][0]['value'] = intval($form_state['values']['fr_tickets_threshold'][LANGUAGE_NONE][0]['value']);
+
+    if (! $form_state['values']['fr_tickets_quantity'][LANGUAGE_NONE][0]['value']){
+      form_set_error('fr_tickets_quantity', t('Quantity must be numeric.'));
+    }
+    if (! $form_state['values']['sku']){
+      $destination = drupal_get_destination();
+      preg_match('/node\/(\\d+)\/tickets\/tickets/' , $destination['destination'], $matches);
+      if ($matches[1]){
+        $node_wrapper = entity_metadata_wrapper('node', $node = node_load($matches[1]));
+      }
+      $form_state['values']['sku']    = 'ticket-' . $node_wrapper->nid->value() . '-' . (count($node_wrapper->fr_tickets_ticket_types->value()) + 1);
+      $form_state['values']['fr_tickets_weight'][$form_state['values']['language']][0]['value'] = count($node_wrapper->fr_tickets_ticket_types->value()) + 1;
+    }
+  }
+}
+
+/**
+ * Implements hook_commerce_product_insert().
+ *
+ * Save an entity reference associating ticket products with the pages they are sold on.
+ * Also update the total available tickets on the associated ticket page node.
+ */
+function fundraiser_tickets_commerce_product_insert($product) {
+  if ($product->type == 'fundraiser_ticket') {
+    $destination = drupal_get_destination();
+    preg_match('/node\/(\\d+)\/tickets\/tickets/' , $destination['destination'], $matches);
+    if (isset($matches[1])){
+      $node_wrapper = entity_metadata_wrapper('node', node_load($matches[1]));
+      $node_wrapper->fr_tickets_ticket_types[] = $product->product_id;
+      fundraiser_tickets_update_inventory($node_wrapper);
+    }
+  }
+}
+
+/**
+ * Implements hook_commerce_product_update
+ *
+ * Update the total available tickets available on the associated ticket page node.
+ */
+function fundraiser_tickets_commerce_product_update($product) {
+  // Check for the skip inventory flag before updating values.
+  if ($product->type == 'fundraiser_ticket' && empty($product->fundraiser_tickets_skip_inventory)) {
+    if ($nid = _fundraiser_tickets_find_product_node($product->product_id)) {
+      $node_wrapper = entity_metadata_wrapper('node', node_load($nid));
+      fundraiser_tickets_update_inventory($node_wrapper);
+    }
+  }
+}
+
+/**
+ * Implements hook_commerce_product_delete
+ *
+ * Update the total available tickets available on the associated ticket page node.
+ */
+function fundraiser_tickets_commerce_product_delete($product) {
+  if ($product->type == 'fundraiser_ticket') {
+    if ($nid = _fundraiser_tickets_find_product_node($product->product_id)) {
+      $node_wrapper = entity_metadata_wrapper('node', node_load($nid));
+      fundraiser_tickets_update_inventory($node_wrapper);
+    }
+  }
+}
+
+/**
+ * Update the ticket level numbers that are saved in fields on the node.
+ */
+function fundraiser_tickets_update_inventory($node_wrapper) {
+  $ticket_types = $node_wrapper->fr_tickets_ticket_types->value();
+
+  if (!is_array($ticket_types)) {
+    return;
+  }
+
+  $inventory_initial = 0;
+  $inventory_purchased = 0;
+
+  // Loop through the ticket products and calculate the numbers
+  foreach ($ticket_types as $offset => $ticket_level) {
+    $ticket_level_wrapper = entity_metadata_wrapper('commerce_product', $ticket_level);
+
+    // Only include active tickets
+    if ($ticket_level_wrapper->status->value() == 1) {
+      $inventory_initial   += $ticket_level_wrapper->fr_tickets_quantity->value();
+      $inventory_purchased += $ticket_level_wrapper->fr_tickets_quantity_sold->value();
+    }
+  }
+
+  // Update these numbers via direct DB update to avoid node_save() overhead:
+  db_update('field_data_fr_tickets_inventory_available')
+    ->fields(array('fr_tickets_inventory_available_value' => $inventory_initial - $inventory_purchased))
+    ->condition('entity_id', $node_wrapper->getIdentifier())
+    ->condition('revision_id', $node_wrapper->vid->value())
+    ->execute();
+  db_update('field_revision_fr_tickets_inventory_available')
+    ->fields(array('fr_tickets_inventory_available_value' => $inventory_initial - $inventory_purchased))
+    ->condition('entity_id', $node_wrapper->getIdentifier())
+    ->condition('revision_id', $node_wrapper->vid->value())
+    ->execute();
+  db_update('field_data_fr_tickets_inventory_purchased')
+    ->fields(array('fr_tickets_inventory_purchased_value' => $inventory_purchased))
+    ->condition('entity_id', $node_wrapper->getIdentifier())
+    ->condition('revision_id', $node_wrapper->vid->value())
+    ->execute();
+  db_update('field_revision_fr_tickets_inventory_purchased')
+    ->fields(array('fr_tickets_inventory_purchased_value' => $inventory_purchased))
+    ->condition('entity_id', $node_wrapper->getIdentifier())
+    ->condition('revision_id', $node_wrapper->vid->value())
+    ->execute();
+
+  // If a new type of ticket exists, such as when an admin adds it, then apply the associated update:
+  foreach ($ticket_types as $delta => $ticket_data) {
+    if (isset($ticket_data->is_new) && $ticket_data->is_new == TRUE) {
+      $new_ticket_data = array(
+        'entity_type' => 'node',
+        'bundle' => 'ticketed_events',
+        'entity_id' => $node_wrapper->getIdentifier(),
+        'revision_id' => $node_wrapper->vid->value(),
+        'language' => $ticket_data->language,
+        'delta' => $delta,
+        'fr_tickets_ticket_types_product_id' => $ticket_data->product_id,
+      );
+      $new_ticket_added = TRUE;
+      db_insert('field_data_fr_tickets_ticket_types')
+        ->fields($new_ticket_data)
+        ->execute();
+      db_insert('field_revision_fr_tickets_ticket_types')
+        ->fields($new_ticket_data)
+        ->execute();
+    }
+  }
+
+  // Ensure the node-specific, admin ticket table updates if a new type of ticket is added:
+  if (isset($new_ticket_added)) {
+    cache_clear_all('field:node:' . $node_wrapper->getIdentifier(), 'cache_field');
+  }
+}
+
+/**
+ * Helper function, determine if this node type supports ticketed events.
+ */
+function fundraiser_tickets_is_ticket_type($type) {
+  static $fundraiser_tickets_types;
+  // Cache fundraiser ticket content types during page execution.
+  if (!isset($fundraiser_tickets_types[$type])) {
+    $fundraiser_tickets_types[$type] = variable_get('fundraiser_tickets_' . $type, FALSE);
+  }
+  return $fundraiser_tickets_types[$type];
+}
+
+/**
+ * Helper function, determine if this node type supports ticketed events.
+ */
+function fundraiser_tickets_get_ticket_types() {
+  // For all types, check if they are a fundraiser type.
+  $types = node_type_get_types();
+  foreach ($types as $type => $type_info) {
+    $fundraiser_tickets_types[$type] = variable_get('fundraiser_tickets_' . $type, FALSE);
+  }
+  return $fundraiser_tickets_types;
+}
+
+/**
+ * Helper function, determine if a given field is a ticketing field.
+ */
+function fundraiser_tickets_is_ticket_field($field_name) {
+  static $fundraiser_ticket_fields;
+  // Cache fundraiser ticket fields during page execution.
+  if (!is_array($fundraiser_ticket_fields)) {
+    $fundraiser_ticket_fields = fundraiser_tickets_get_ticket_field_keys();
+  }
+  return in_array($field_name, $fundraiser_ticket_fields);
+}
+
+/**
+ * Helper function, get the field names of the ticketing fields.
+ */
+function fundraiser_tickets_get_ticket_field_keys(){
+  module_load_include('inc', 'fundraiser_tickets', 'includes/fundraiser_tickets.fields');
+  return array_keys(_fundraiser_tickets_default_fields_settings(NULL));
+}
+
+/**
+ * Helper function determine if the form has any tickets attached to it.
+ */
+function fundraiser_tickets_no_tickets_added($node) {
+  if (isset($node->fr_tickets_ticket_types) && empty($node->fr_tickets_ticket_types)) {
+    return TRUE;
+  }
+}
+
+/**
+ * Helper function, determine if a given ticket page is closed.
+ */
+function fundraiser_tickets_is_closed($node) {
+  $node_wrapper = entity_metadata_wrapper('node', $node);
+  if ($node_wrapper->fr_tickets_closed_is_closed->value() == TRUE || ($node_wrapper->fr_tickets_closed_close_date->value() !== NULL && $node_wrapper->fr_tickets_closed_close_date->value() < time())){
+    return TRUE;
+  } else {
+    return FALSE;
+  }
+}
+
+/**
+ * Helper function, determine if all tickets for a given ticket page are sold.
+ */
+function fundraiser_tickets_is_sold_out($node) {
+  $sold_out = TRUE;
+  $node_wrapper = entity_metadata_wrapper('node', $node);
+  $ticket_types = $node_wrapper->fr_tickets_ticket_types->value();
+  if (is_array($ticket_types)){
+    foreach ($ticket_types as $offset => $ticket_level){
+      $product_wrapper = entity_metadata_wrapper('commerce_product', $ticket_level);
+      if ($product_wrapper->status->value() == 1 && $product_wrapper->fr_tickets_quantity->value() > $product_wrapper->fr_tickets_quantity_sold->value()){
+        return FALSE;
+      }
+    }
+  }
+  return $sold_out;
+}
+
+/**
+ * Calculate the sum of purchased tickets for a product
+ *
+ * @param $product_id Numeric
+ *    The numeric id of the product
+ *
+ * @return numeric
+ *    The sum of all purchased tickets
+ */
+function _fundraiser_tickets_product_total_purchased($product_id) {
+  // We need to get a SUM of all the current line items for this product where the orders are complete
+  $sql = "SELECT SUM(commerce_line_item.quantity) AS commerce_line_item_quantity FROM {commerce_line_item} commerce_line_item";
+  // Join the order
+  $sql .= " INNER JOIN {commerce_order} commerce_order_commerce_line_item ON commerce_line_item.order_id = commerce_order_commerce_line_item.order_id";
+  // Join the commerce product field
+  $sql .= " LEFT JOIN {field_data_commerce_product} field_data_commerce_product ON commerce_line_item.line_item_id = field_data_commerce_product.entity_id";
+  $sql .= " AND (field_data_commerce_product.entity_type = 'commerce_line_item' AND field_data_commerce_product.deleted = '0')";
+  // Join the commerce product
+  $sql .= " INNER JOIN {commerce_product} commerce_product_field_data_commerce_product ON field_data_commerce_product.commerce_product_product_id = commerce_product_field_data_commerce_product.product_id";
+
+  // Where conditions
+  $sql .= " WHERE ((";
+  // Product id
+  $sql .= " (commerce_line_item.type IN ('ticket')) AND (field_data_commerce_product.commerce_product_product_id = :product_id) ";
+  // Order in payment_received status
+  $sql .= " AND (commerce_order_commerce_line_item.status IN ('payment_received'))";
+  // Active products
+  $sql .= " AND (commerce_product_field_data_commerce_product.status <> '0')";
+  $sql .= " ))";
+
+  return db_query($sql, array(':product_id' => $product_id))->fetchField();
+}
+
+/**
+ * Find the node that references a product
+ *
+ * @param $product_id Numeric
+ *    The numeric id of the product
+ *
+ * @return MIXED
+ *    The node id or FALSE if nothing is found
+ */
+function _fundraiser_tickets_find_product_node($product_id) {
+  $query = new EntityFieldQuery();
+
+  // Find the node that references this product
+  $query
+    ->entityCondition('entity_type', 'node', '=')
+    ->fieldCondition('fr_tickets_ticket_types', 'product_id', $product_id, '=')
+    ->range(0, 1);
+
+  $result = $query->execute();
+  if (!empty($result['node'])) {
+    $node = reset($result['node']);
+    return $node->nid;
+  }
+
+  return FALSE;
+}
+
+// Custom array sort function by weight.
+function _fundraiser_tickets_weight_sort($a, $b) {
+  if (isset($a->fr_tickets_weight) && isset($b->fr_tickets_weight)) {
+    return $a->fr_tickets_weight->value() < $b->fr_tickets_weight->value() ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ *  Implements hook_fundraiser_donation process
+ *  Grab the donation and payment info and pass it to the add on donation form
+ */
+function fundraiser_tickets_fundraiser_donation_process($donation) {
+  if (fundraiser_tickets_is_ticket_type($donation->node->type) && $donation->result['success']) {
+
+    $node_wrapper = entity_metadata_wrapper('node', $donation->node);
+    if(isset($node_wrapper->fr_tickets_donation_addon_form)) {
+      $addons = $node_wrapper->fr_tickets_donation_addon_form->value();
+      $enabled = $node_wrapper->fr_tickets_donation_donation->value();
+    }
+    if(!empty($addons) && !empty($enabled)) {
+      $nid = $node_wrapper->fr_tickets_donation_addon_form->value()->nid;
+      $add_on_node = node_load($nid);
+      $compatible = fundraiser_tickets_check_addon_required_fields($nid, $donation);
+      if(isset($nid) && $donation->node->nid != $nid && $compatible == TRUE) {
+        // Find to see whether there is an 'other' donation within the ticket box fields.
+        // Loop through all of them to find whether one is an 'extra donation'.
+        foreach ($donation->donation['ticket_box'] as $key => $ticket_amounts) {
+          if (strpos($ticket_amounts, 'fundraiser-tickets-extra-donation')) {
+            // If we're here, we have found an 'extra donation', so unserialize and
+            // set the 'other_amount' to the value of the extra donation.
+            $extra_donation = unserialize($ticket_amounts);
+            if(!empty($extra_donation['fundraiser-tickets-extra-donation'])) {
+              $donation->donation['other_amount'] = _fundraiser_amount_value_sanitize($extra_donation['fundraiser-tickets-extra-donation']);
+              $donation->donation['amount'] = 'other';
+            }
+            break;
+          }
+        }
+        $min = $add_on_node->minimum_donation_amount;
+        if (!empty($extra_donation['fundraiser-tickets-extra-donation']) && $extra_donation['fundraiser-tickets-extra-donation'] >= $min) {
+          $result = fundraiser_tickets_form_action_submit($nid,  NULL, $donation->donation);
+        }
+
+        if (!empty($result) && !empty($result['submission_id'])) {
+
+          $record = array(
+            'original_nid' => $donation->node->nid,
+            'add_on_nid' => $nid,
+            'original_did' => $donation->did,
+          );
+
+          // Pull the add-on sid out of the result.
+          $add_on_sid = $result['submission_id'];
+
+          // Look up the did based on sid.
+          $record['add_on_did'] = db_query("SELECT did FROM {fundraiser_donation} WHERE sid = :sid AND nid = :nid", array(':sid' => $add_on_sid, ':nid' => $record['add_on_nid']))->fetchField();
+
+          drupal_write_record('fundraiser_tickets_add_on_donations', $record);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Ensure required fields on the addon donation form exist.
+ *
+ * Also, omits fields listed in the variable
+ * fundraiser_tickets_exempt_add_on_fields.
+ *
+ * @param int $nid
+ *    The node id of the donation form (webform) that is being added.
+ * @param object $donation
+ *    Donation object.
+ * @param object $node
+ *    The webform node object to compare the components of param #1 against.
+ *
+ * @return bool
+ *    Returns FALSE of a required field or the other_amount field is missing.
+ */
+function fundraiser_tickets_check_addon_required_fields($nid, $donation = NULL, $node = NULL) {
+  $exempt_fields = variable_get('fundraiser_tickets_exempt_add_on_fields', array('quantity', 'recurring_amount'));
+  $addon_details = springboard_api_get_form_details($nid);
+  if ($donation) {
+    // Validate the submission.
+    foreach ($addon_details['fields'] as $name => $field) {
+      if (isset($field['required']) && $field['required'] == 1 && !in_array($name, $exempt_fields)) {
+        if (!isset($donation->donation[$name]) || $donation->donation[$name] == '') {
+          drupal_set_message(t('Add on donation could not be processed. There was a problem with required field %field', array('%field' => $name)), 'error');
+          return FALSE;
+        }
+      }
+    }
+  }
+  elseif ($node) {
+    // Validate the settings form entity reference field.
+    $components = array();
+    foreach ($node->webform['components'] as $id => $component) {
+      $components[$component['form_key']] = $node->webform['components'][$id];
+    }
+    foreach ($addon_details['fields'] as $name => $field) {
+      if ($field['required'] == 1 && !in_array($name, $exempt_fields)) {
+        if (!isset($components[$name]) || $components[$name]['mandatory'] == '0') {
+          return FALSE;
+        }
+      }
+    }
+  }
+  if (!isset($addon_details['fields']['other_amount'])) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ *  springboard_api_form_action_submit() with services dependency removed.
+ *  Errors are sent to screen and watchdog instead of causing a services exception.
+ */
+function fundraiser_tickets_form_action_submit($nid, $app_id = NULL, $submission) {
+  include_once(drupal_get_path('module', 'springboard_api') . '/resources/springboard_api.form_resources.inc');
+  if (is_numeric($nid)) {
+    $node = node_load($nid);
+    $submission = (array) $submission;
+
+    // $submission here is the $donation->donation array, which has an
+    // improperly nested payment_fields array when using credit. Alter it to
+    // give webform the expected structure.
+    if (!empty($submission['payment_fields']['credit'])) {
+      // Month and year aren't nested properly.
+      if (!empty($submission['payment_fields']['credit']['card_expiration_month'])) {
+        $submission['payment_fields']['credit']['expiration_date']['card_expiration_month'] = $submission['payment_fields']['credit']['card_expiration_month'];
+        unset($submission['payment_fields']['credit']['card_expiration_month']);
+      }
+      if (!empty($submission['payment_fields']['credit']['card_expiration_year'])) {
+        $submission['payment_fields']['credit']['expiration_date']['card_expiration_year'] = $submission['payment_fields']['credit']['card_expiration_year'];
+        unset($submission['payment_fields']['credit']['card_expiration_year']);
+      }
+    }
+
+    $submission = _springboard_api_convert_submission($submission, $node);
+    $submit_text = db_query("SELECT submit_text FROM {webform} WHERE nid = :nid", array(':nid' => $nid))->fetchField();
+    if($submit_text == '') {
+      $submit_text = 'Submit';
+    }
+    $form_id = 'webform_client_form_' . $nid;
+    $form_state['webform_completed'] = 1;
+    $form_state['values'] = array(
+      'submit' => $submit_text,
+      'op' => $submit_text,
+      'details' => array(
+        'nid' => $nid,
+        'sid' => '',
+        'uid' => 0,
+        'page_num' => 1,
+        'page_count' => 1,
+        'finished' => 0,
+      ),
+      'values' => array(),
+    );
+    $form_state['clicked_button']['#parents'] = NULL;
+    $form_state['values']['submitted'] = springboard_api_submission_tree_build($submission, $node->webform['components'], $tree, 0);
+    $webform_submission = array(
+      'nid' => $nid,
+      'uid' => 0,
+      'submitted' => time(),
+      'remote_addr' => ip_address(),
+      'data' => array(),
+    );
+    foreach ($node->webform['components'] as $cid => $component) {
+      if ($component['type'] != 'fieldset') {
+        $fields[] = $component['form_key'];
+        if (isset($submission[$component['form_key']]) && !is_array($submission[$component['form_key']])) {
+          $webform_submission['data'][$cid]['value'][] = $submission[$component['form_key']];
+        }
+        elseif (isset($submission[$component['form_key']])) {
+          $webform_submission['data'][$cid]['value'] = $submission[$component['form_key']];
+        }
+        else {
+          // Backfill with null data to match what Webform does.
+          $webform_submission['data'][$cid]['value'][] = '';
+        }
+      }
+    }
+    drupal_form_submit($form_id, $form_state, $node, $webform_submission);
+
+    if ($errors = form_get_errors()) {
+      watchdog('fundraiser_tickets', print_r($errors, TRUE), $variables = array(), WATCHDOG_ERROR);
+      drupal_set_message('Add on donation could not be processed.', 'error');
+      return FALSE;
+    }
+    else {
+      $sid = isset($form_state['values']['details']['sid']) ? $form_state['values']['details']['sid'] : 0;
+      return array('submission_id' => $sid);
+    }
+  }
+}

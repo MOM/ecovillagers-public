@@ -1,0 +1,294 @@
+# Salesforce Sync
+
+Provides a means of communicating with Salesforce. Its primary goals are to:
+
+  * Export Drupal records to Salesforce
+  * Import Salesforce records into Drupal
+  * Maintain a relationship between a record in Drupal and the same record in
+    Salesforce in order to keep them in sync
+  * Perform actions required to prepare a record for synchronization
+
+This module is "dumb" and requires explicit instructions of what information to
+send to or export from Salesforce.  It is not, for example, aware of "mapping"
+systems and will require you to perform the mapping prior to sending
+instructions to `salesforce_sync`.
+
+
+## Configuration
+
+Config page: admin/config/salesforce/salesforce-sync
+
+This configuration page provides options for `salesforce_sync` and any other
+module that is used to support syncing with Salesforce, such as
+`salesforce_queue`.  The `salesforce_sync` module provides the following
+options:
+
+  * **Maximum Salesforce Batch Size:** The maximum amount of records that can be
+    processed in a single request.  Salesforce has a limit of 200, so this
+    option defaults to 200.  You would want to only lower this option if you
+    find you are having server resource problems when sending a maxed-out batch
+    to Salesforce.
+  * **Maximum length of a Salesforce Query:** The maximum length a single query
+    to Salesforce can be.  Salesforce has a limit of 10,000 characters, so this
+    option defaults to 10,000.  A query is sent to Salesforce during UPSERT and
+    UPDATE operations that require sync rules to be applied.  A query's length
+    will be dependant upon how many fields each record has and how long each
+    field name is.  If a query exceeds the character limit, then the number of
+    items queried for in a single run is reduced to minimize the number of
+    Salesforce Ids included in the query.  It would be rare to have a case where
+    you would need to adjust this number.
+
+
+## Export to Salesforce
+
+The `SalesforceSync` class handles the direct communication with Salesforce.
+Load a new `SalesforceSync` class by providing `Salesforce` and
+`SalesforceSoapPartner` objects -- if one is not provided, a default version of
+each will be constructed and used.
+
+```php
+<?php
+  $sfapi = salesforce_get_api();
+  $soap = new SalesforceSoapPartner($sfapi);
+  $salesforce_sync = new SalesforceSync($sfapi, $soap);
+```
+
+Sending information to and receiving from Salesforce is done through the
+`SalesforceSync` class.  The simplest instruction would be to send a single item
+to Salesforce:
+
+```php
+<?php
+  $sync_rules = array(
+    'FirstName' => SALESFORCE_SYNC_RULE_ALWAYS,
+    'LastName' => SALESFORCE_SYNC_RULE_ALWAYS,
+    'Email' => SALESFORCE_SYNC_RULE_BLANK,
+  );
+  $item = new SalesforceSyncItem('Contact', 'UPSERT', $sync_rules, 'Email');
+  $item->sobject->fields = array(
+    'FirstName' => 'John',
+    'LastName' => 'Doe',
+    'Email' => 'john.doe@example.com',
+  );
+  $salesforce_sync->sendItem($item);
+```
+
+The recommended means of sending and receiving information is through batches so
+that multiple items to be processed simultaneously.  You can create a batch of
+items that have similar properties.  Salesforce has rules on what sorts of
+properties may be grouped together in a batch and what information is required
+for each type of batch.  Those rules are:
+
+  * All items in a batch must have the same operation and object type.  An array
+    of the items' "sobjects" need to be provided.
+  * When the operation is UPSERT, a 'dedupe_field' property must be declared.
+  * When the operation is UPDATE, the items' "sobject" must contain the "Id"
+    property with the value of the record's Salesforce Id.
+  * When the operation is DELETE or UNDELETE there is not a restriction on
+    object type.  The "sobjects" are not needed, but rather an array of "ids" is
+    required which is a list of the items' Salesforce Ids.
+
+A batch is formatted and sent as follows:
+
+```php
+<?php
+  $items = array(
+    // An array of items. Refer to how an individual item was created above.
+  );
+  $sobjects = array();
+  foreach ($items as &$item) {
+    // The sobject is referenced so that ultimately the list of 'items' will
+    // always be the cannonical source of the items' data
+    $sobjects[] = &$item->sobject;
+  );
+  $batch = array(
+    'object_type' => 'Contact',
+    'operation' => 'UPSERT',
+    'dedupe_field' => 'Email',
+    'items' => $items,
+    'sobjects' => $sobjects,
+  );
+  $salesforce_sync->sendBatch($batch);
+```
+
+
+## Import from Salesforce
+
+General importing from Salesforce is not yet supported.
+
+
+## Pass and fail notifications
+
+Results are sent through pass and fail hooks and require you to react to them in
+order to receive any notifications in the UI.  The following is an example of
+how the `salesforce_queue` module has used the pass hook to remove successful
+items from the queue, and the fail hook to mark the items to be retried or as
+permanent failure. See the documentation on the hooks in the
+`salesforce_queue.api.php` file for further details.
+
+```php
+<?php
+  /**
+   * Implements hook_salesforce_sync_pass_item().
+   */
+  function salesforce_queue_salesforce_sync_pass_item($item, $result) {
+    if (isset($item->queue) && !empty($item->queue)) {
+      // Remove successful items from the queue.
+      $queue = salesforce_queue_load();
+      $queue->deleteItem($item);
+    }
+  }
+
+  /**
+   * Implements hook_salesforce_sync_fail_item().
+   */
+  function salesforce_queue_salesforce_sync_fail_item($item, $result) {
+    if (isset($item->queue) && isset($item->item_id) && !empty($item->queue) && !empty($item->item_id)) {
+      // Mark items for retry if they have not exceeded the maximum.
+      $max_retries = variable_get('salesforce_queue_max_retries', SALESFORCE_QUEUE_MAX_RETRIES_DEFAULT);
+      if ($max_retries > $item->retries) {
+        $item->retries++;
+        $item->queue = 'retry';
+      }
+      // When the retry maximum is exceeded, put the item in the fail queue.
+      else {
+        $item->queue = 'fail';
+      }
+      $item->sobject = json_encode($item->sobject);
+      drupal_write_record('salesforce_queue', $item, array('item_id'));
+    }
+  }
+```
+
+
+## Sync rules
+
+Field-by-field synchronization rules are supported when exporting and importing
+content.  This allows specific fields to have a specific rule of how it should
+be synchronized.  For example, the Salesforce Id field may be stored directly
+with the Drupal record and a rule can be set that when exporting content from
+Drupal into Salesforce that the Salesforce Id field on Drupal should never be
+written to the Salesforce record.  While, simultaneously, it can have a rule
+saying that when importing content from Salesforce that that it should always
+overwrite the Drupal value.
+
+The following sync rules are supported:
+
+  * `SALESFORCE_SYNC_RULE_ALWAYS`: Always replace the recipient's value with
+    that of the incoming value.
+  * `SALESFORCE_SYNC_RULE_BLANK`: Only apply the incoming value if the recipient
+    does not yet have a value.
+  * `SALESFORCE_SYNC_RULE_APPEND`: Add the incoming value to the end of the
+    current value of the recipient, separated by a space.  This option should
+    only be used on strings.
+  * `SALESFORCE_SYNC_RULE_NEVER`: Never apply the incoming value to the
+    recipient.  This option is typically used to clarify that a field should
+    sync in one direction and not the other, or in the cases of not wanting to
+    sync the value of a dedupe field.
+
+Sync rules are applied as an associated array to the individual item providing
+instructions for how to sync the record.  The key is the name of the field and
+the value is the sync rule.  The following is an example of how to set sync
+rules to an item:
+
+```php
+<?php
+  // Provide the rules as an associative array.
+  $sync_rules = array(
+    'FirstName' => SALESFORCE_SYNC_RULE_ALWAYS,
+    'LastName' => SALESFORCE_SYNC_RULE_ALWAYS,
+    'Email' => SALESFORCE_SYNC_RULE_BLANK,
+  );
+
+  // Sync rules can be manually set to a sync instructions item.
+  $item = new stdClass();
+  $item->sync_rules = $sync_rules;
+
+  // Or the sync rules can be provided when a sync instructions item is built
+  // using the `SalsforceSyncItem` class.
+  $item = new SalesforceSyncItem('Contact', 'UPSERT', $sync_rules, 'Email');
+```
+
+
+## Token values
+
+@TODO: Phillip
+
+
+## Format conversions
+
+The `SalesforceSync` class provides a means to convert the format of a value
+during the export or import process in case the values are not compatible.
+Currently it supports the instance where Salesforce expects all dates to be in
+ISO 8601 format.  More conversions can be added to the
+`convertToSalesforceFormat()` and `convertToDrupalFormat()` methods of the
+`SalesforceSync` class.
+
+
+### Support to expand modules
+
+The `salesforce_sync` module will allow you to expand existing module for the
+purpose of adding Salesforce sync support into those modules.  Since
+`salesforce_sync` does not currently have any expanded modules, refer to
+`salesforce_genmap` for an example of how this system works and why you would
+use it.
+
+To expand a module, add an include file to the `includes/modules` directory that
+has the filename structure of `my_module.inc`.  For example, if the module you
+wished to expand was `views_bulk_operation` you would name the file
+`views_bulk_operation.inc`.  The include file will only be loaded if the
+original module is enabled.  The list of expanded modules is cached, so clear
+the cache if the include file is not loading properly.
+
+
+## Misc helpers
+
+### Get records
+
+The `SalesforceSync` object will keep track of all records that have been
+processed by that object allowing you to retrieve those specific records and
+perform additional actions upon them.
+
+```php
+<?php
+  // Array of items that had created new Salesforce records, along with their
+  // updated sobjects and Salesforce Ids.
+  $new_records = $salesforce_sync->getNewSfRecords();
+
+  // Array of Salesforce Ids segregated by their Salesforce object type.
+  $processed_items = $salesforce_sync->getProcessedItemIds();
+
+  // Delete all of the new records that were created. Handy for testing.
+  $salesforce_sync->deleteNewSfRecords();
+```
+
+
+### Fetch from Salesforce
+
+If you need to, you can use `salesforce_sync` to fetch records directly from
+Salesforce.
+
+```php
+<?php
+  // The fields listed here will be the fields of the returned records.  You
+  // must explicitly state all fields to retrieve or else no data for the record
+  // will be retrieved.
+  $fields = array(
+    'FirstName',
+    'LastName',
+  );
+
+  // Fetch from Salesforce when you know the the records' Salesforce Ids.
+  $ids = array(
+    '0016000000MRatd',
+    '0394050000DusEf',
+  );
+  $records = $salesforce_sync->fetchByIds('Contact', $fields, $ids);
+
+  // Fetch from Salesforce when you know the value of a specific field.
+  $key_field_values = array(
+    'john.doe@example.com',
+    'jane.done@example.com',
+  );
+  $records = $salesforce_sync->fetchByField('Contact', $fields, 'Email', $key_field_values);
+```

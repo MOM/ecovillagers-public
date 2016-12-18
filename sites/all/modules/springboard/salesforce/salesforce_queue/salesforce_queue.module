@@ -1,0 +1,451 @@
+<?php
+
+/**
+ * @file
+ * Provides batch processing functionality for Salesforce integration.
+ */
+
+/**
+ * @defgroup salesforce_queue_var_default Default variables for Salesforce Queue
+ * @{
+ */
+
+// Maximum items that can be claimed from the queue.
+define('SALESFORCE_QUEUE_MAX_ITEMS_DEFAULT', 1000);
+
+// Length of time the queue can be leased to a process.
+define('SALESFORCE_QUEUE_LEASE_TIME_DEFAULT', 3600);
+
+// Maximum retries an item will go through before moving to the 'fail' queue.
+define('SALESFORCE_QUEUE_MAX_RETRIES_DEFAULT', 5);
+
+// Minimum frequency the processor can be run when cron is run.
+define('SALESFORCE_QUEUE_CRON_FREQUENCY_DEFAULT', 60);
+
+/**
+ * @} salesforce_queue_var_default
+ */
+
+
+/**
+ * @defgroup salesforce_queue_processor_statuses Statuses of queue processor
+ * @{
+ * The processor will return one of the following statuses once it completes its
+ * processing of a batch of queue items.
+ */
+
+// The process completed as expected.
+define('SALESFORCE_QUEUE_PROCESS_COMPLETE', 10);
+
+// No items were retreived from the queue.
+define('SALESFORCE_QUEUE_PROCESS_NO_ITEMS', 1);
+
+// The process has never been initiated.
+define('SALESFORCE_QUEUE_PROCESS_NOT_STARTED', 0);
+
+// Items cannot be claimed because the queue is leased.
+define('SALESFORCE_QUEUE_PROCESS_FAIL_QUEUE_LEASED', -1);
+
+// The lease expired before all batches could be completed.
+define('SALESFORCE_QUEUE_PROCESS_FAIL_LEASE_EXPIRED', -2);
+
+// Although items were claimed from the queue, none of them passed validation.
+define('SALESFORCE_QUEUE_PROCESS_FAIL_NO_VALID_ITEMS', -3);
+
+// Cannnot connect to Salesforce.
+define('SALESFORCE_QUEUE_PROCESS_FAIL_CONNECT', -8);
+
+// Cannnot create a valid soap connection.
+define('SALESFORCE_QUEUE_PROCESS_FAIL_SOAP', -9);
+
+// Items cannot be claimed for an unknown reason.
+define('SALESFORCE_QUEUE_PROCESS_FAIL_CLAIM_ITEMS', -10);
+
+/**
+ * @} salesforce_queue_processor_statuses
+ */
+
+
+/**
+ * @addtogroup salesforce_sync_item_fail_responses
+ * @{
+ */
+
+// The item could not reach processing because the lease on the queue expired.
+define('SALESFORCE_QUEUE_PROCESS_ITEM_FAIL_LEASE_EXPIRED', 'Lease expired before batch could be processed.');
+
+// Item failed validation. It does not have the proper properties nessisary to
+// be sent to Salesforce for the operation associated with it.
+define('SALESFORCE_QUEUE_PROCESS_ITEM_FAIL_NOT_VALID', 'Item failed validation.');
+
+/**
+ * @} salesforce_sync_item_fail_responses
+ */
+
+/**
+ * Implements hook_entity_info().
+ */
+function salesforce_queue_entity_info() {
+  return array(
+    'salesforce_queue_item' => array(
+      'label' => t('Salesforce queue item'),
+      'label callback' => '_salesforce_queue_item_label',
+      'entity class' => 'Entity',
+      'base table' => 'salesforce_queue',
+      'entity keys' => array(
+        'id' => 'item_id',
+      ),
+      'fieldable' => FALSE,
+      'exportable' => FALSE,
+      'module' => 'salesforce_queue',
+      'deletion callback' => '_salesforce_queue_item_entity_delete',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function salesforce_queue_menu() {
+  // Settings page.
+  $items['admin/config/salesforce/salesforce-queue'] = array(
+    'title' => 'Queue',
+    'description' => 'Configuration settings for the Salesforce queue.',
+    'page callback' => 'salesforce_queue_admin_page',
+    'access arguments' => array('administer salesforce queue'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'includes/salesforce_queue.admin.inc',
+  );
+  $items['admin/config/salesforce/salesforce-queue/config'] = $items['admin/config/salesforce/salesforce-queue'];
+  $items['admin/config/salesforce/salesforce-queue/config']['title'] = 'Config';
+  $items['admin/config/salesforce/salesforce-queue/config']['type'] = MENU_DEFAULT_LOCAL_TASK;
+  $items['admin/config/salesforce/salesforce-queue/config']['weight'] = -10;
+
+  // Utility to help debugging.
+  $items['admin/config/salesforce/salesforce-queue/object-verify'] = array(
+    'title' => 'Debug',
+    'description' => 'Utility for verifying the format of Salesforce objects.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('salesforce_queue_object_verification_form'),
+    'access arguments' => array('administer salesforce sync'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'includes/salesforce_queue.utility.inc',
+    'weight' => 10,
+  );
+
+  // Execute cron on demand.
+  // There are no restrictions executing the processor since the processor has a
+  // set restriction for a maximum length of time between executions and
+  // prevents concurrent executions.
+  $items['salesforce-queue/process'] = array(
+    'title' => 'Process queue',
+    'description' => 'Call back to immediately process the queue',
+    'page callback' => 'salesforce_queue_cron',
+    'page arguments' => array('all'),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+  $items['salesforce-queue/process/%'] = array(
+    'title' => 'Process specific queue',
+    'description' => 'Call back to immediately process a given specific queue',
+    'page callback' => 'salesforce_queue_cron',
+    'page arguments' => array(2),
+    'access callback' => TRUE,
+    'type' => MENU_CALLBACK,
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function salesforce_queue_permission() {
+  return array(
+    'administer salesforce queue' => array(
+      'description' => t('Configure settings for the Salesforce queue.'),
+      'title' => t('Configure Salesforce queue'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function salesforce_queue_theme() {
+  return array(
+    'salesforce_queue_admin_form' => array(
+      'render element' => 'form',
+      'file' => 'includes/salesforce_queue.admin.inc',
+    ),
+  );
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function salesforce_queue_node_delete($node) {
+  // Dequeue all queue items related to this node.
+  db_delete('salesforce_queue')
+    ->condition('drupal_id', $node->nid)
+    ->condition('module', 'node')
+    ->condition('delta', $node->type)
+    ->execute();
+}
+
+/**
+ * Implements hook_action_info().
+ */
+function salesforce_queue_action_info() {
+  return array(
+    'salesforce_queue_salesforce_queue_item_requeue_action' => array(
+      'description' => t('Requeue'),
+      'label' => t('Requeue failed item'),
+      'type' => 'salesforce_queue_item',
+      'configurable' => FALSE,
+      'triggers' => array('any'),
+    ),
+    'salesforce_queue_salesforce_queue_item_refresh_item_action' => array(
+      'description' => t('Refresh item'),
+      'label' => t('Refresh item'),
+      'type' => 'salesforce_queue_item',
+      'configurable' => FALSE,
+      'triggers' => array('any'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_salesforce_log_info().
+ */
+function salesforce_queue_salesforce_log_info() {
+  return array(
+    'watchdog' => array(
+      'queue-01' => t('Item failed to be added to queue'),
+      'queue-02' => t('Claim items failed, queue is leased'),
+      'queue-03' => t('QueueProcessor failed: Salesforce not authorized'),
+      'queue-04' => t('QueueProcessor Failed: SalesforceSoapPartner unusable'),
+      'queue-05' => t('QueueProcessor found only invalid items'),
+      'queue-06' => t('QueueProcessor claimed no items: Queue is leased'),
+      'queue-07' => t('QueueProcessor found no items'),
+      'queue-08' => t("QueueProcessor claimed no items: Reason unknown"),
+    ),
+  );
+}
+
+/**
+ * Wrapper to load a SalesforceQueue object.
+ *
+ * @param string $queue_name
+ *   Name of the queue to load.  The default queues are 'new', 'retry' and
+ *   'fail', but any number of other queues can be created.  Use 'all' to have
+ *   access to the multi-queue manager.  If no queue name is provided, it will
+ *   default to 'all'.
+ *
+ * @return SalesforceQueue
+ *   SalesforceQueue object
+ */
+function salesforce_queue_load($queue_name = 'all') {
+  return SalesforceQueue::get($queue_name);
+}
+
+/**
+ * Wrapper to load SalesforceQueueProcessor object for a given SalesforceQueue.
+ *
+ * @param mixed $queue
+ *   Provide a string of the name of the queue to load a processor for, or the
+ *   SalesforceQueue object itself.
+ *
+ * @return SalesforceQueueProcessor
+ *   Processor for the given SalesforceQueue.
+ */
+function salesforce_queue_load_processor($queue = 'all') {
+  if (is_string($queue)) {
+    $queue = salesforce_queue_load($queue);
+  }
+  return SalesforceQueueProcessor::get($queue);
+}
+
+
+/**
+ * @name salesforce_queue_process  Group for behaviors processing the queue
+ * @{
+ */
+
+/**
+ * Processes the data in the Salesforce queue.
+ */
+function salesforce_queue_process_queue($queue_name = 'all') {
+  $processor = salesforce_queue_load_processor($queue_name);
+  return $processor->process();
+}
+
+/**
+ * Implements hook_cron().
+ */
+function salesforce_queue_cron() {
+  // Abort if this is being run automatically (e.g.: through standard cron) and
+  // running during standard cron is disabled.
+  $params = func_get_args();
+  if (empty($params) && !variable_get('salesforce_queue_cron_enabled', 1)) {
+    watchdog('salesforce_queue', 'Processing queue during Drupal cron is disabled.', array(), WATCHDOG_DEBUG);
+    return;
+  }
+
+  // Limit the running of the processor to a configured frequency.
+  $cron_frequency = variable_get('salesforce_queue_cron_frequency', SALESFORCE_QUEUE_CRON_FREQUENCY_DEFAULT);
+  $watchdog_options = array('@request_type' => (empty($params) ? 'Drupal cron' : 'direct'));
+  if (!salesforce_get_api()->isAuthorized()) {
+    watchdog('salesforce_queue', 'Queue could not be processed during @request_type request because Salesforce is not authorized.', $watchdog_options, WATCHDOG_DEBUG);
+  }
+  elseif (lock_acquire('salesforce_queue_cron', $cron_frequency)) {
+    watchdog('salesforce_queue', 'Processing queue via @request_type request.', $watchdog_options, WATCHDOG_DEBUG);
+    $queue_name = (isset($params[0]) && !empty($params[0])) ? $params[0] : 'all';
+    salesforce_queue_process_queue($queue_name);
+  }
+  else {
+    watchdog('salesforce_queue', 'Queue not processed during @request_type request due to frequency limitation.', $watchdog_options, WATCHDOG_DEBUG);
+  }
+}
+
+/**
+ * Implements hook_salesforce_sync_pass_item().
+ */
+function salesforce_queue_salesforce_sync_pass_item($item, $result) {
+  if (isset($item->queue) && !empty($item->queue)) {
+    // Remove successful items from the queue.
+    $queue = salesforce_queue_load();
+    $queue->deleteItem($item);
+  }
+}
+
+/**
+ * Implements hook_salesforce_sync_fail_item().
+ */
+function salesforce_queue_salesforce_sync_fail_item($item, $result) {
+  if (isset($item->queue) && isset($item->item_id) && !empty($item->queue) && !empty($item->item_id)) {
+    // Mark items for retry if they have not exceeded the maximum.
+    $max_retries = variable_get('salesforce_queue_max_retries', SALESFORCE_QUEUE_MAX_RETRIES_DEFAULT);
+    if ($max_retries > $item->retries) {
+      $item->retries++;
+      $item->queue = 'retry';
+    }
+    // When the retry maximum is exceeded, put the item in the fail queue.
+    else {
+      $item->queue = 'fail';
+    }
+    $item->sobject = json_encode($item->sobject);
+    drupal_write_record('salesforce_queue', $item, array('item_id'));
+  }
+}
+
+/**
+ * @} salesforce_queue_process
+ */
+
+/**
+ * Delete function for the queue item entity.
+ */
+function _salesforce_queue_item_entity_delete($item_id) {
+  $items = entity_load('salesforce_queue_item', array($item_id));
+  if (!empty($items[$item_id])) {
+    $queue = salesforce_queue_load();
+    $queue->deleteItem($items[$item_id]);
+  }
+}
+
+/**
+ * Requeue queue item action.
+ */
+function salesforce_queue_salesforce_queue_item_requeue_action($item) {
+  // Only requeue items that have failed.
+  if ($item->queue != 'fail') {
+    return;
+  }
+
+  $queue = salesforce_queue_load();
+  $queue->deleteItem($item);
+  $new = array();
+  $values = array(
+    'drupal_id',
+    'module',
+    'delta',
+    'object_type',
+    'operation',
+    'dedupe_field',
+  );
+  foreach ($values as $value) {
+    $new[$value] = $item->{$value};
+  }
+  $new['sobject'] = json_decode($item->sobject);
+  $new['sobject']->fields = (array)$new['sobject']->fields;  // createItem() expects fields to be an array, not an object
+  $queue = salesforce_queue_load();
+  $queue->createItem($new);
+}
+
+/**
+ * Refresh queue item VBO action.
+ */
+function salesforce_queue_salesforce_queue_item_refresh_item_action($item) {
+  // Let the individual modules handle the actual object refreshing and queuing.
+  // Check for a TRUE return value because we'll want to leave the item
+  // alone if it is not requeued successfully.
+  $result = module_invoke_all('salesforce_queue_refresh_queue_item', $item);
+  if (!empty($result) && $result[0]) {
+    // Force the item back into the new queue.
+    db_query("UPDATE {salesforce_queue} SET queue = 'new', retries = 0 WHERE item_id = :item_id",
+      array(':item_id' => $item->item_id));
+  }
+  else {
+    drupal_set_message(t('Item with Drupal Id !id (!module|!delta) could not be refreshed. It was not moved back into the new queue.', array(
+      '!id' => $item->drupal_id, '!module' => $item->module, '!delta' => $item->delta)));
+  }
+}
+
+/**
+ * Helper to find queue names that have been used in the system.
+ *
+ * We really have no idea what queues have been used so we're just going to have
+ * to search around.
+ */
+function salesforce_queue_get_queue_names() {
+  // Defaults.
+  $default_queues = array(
+    'new' => 'new',
+    'retry' => 'retry',
+    'fail' => 'fail',
+  );
+
+  // Start with the current tracked queues.
+  $tracked_queues = variable_get('salesforce_queue_tracked_queues', $default_queues);
+  // Merge in the defaults in case someone messed with the variable outside of
+  // the configuration page.
+  $queue_names = $default_queues + $tracked_queues;
+
+  // Find queue names from the variables table.
+  $sql = "SELECT * FROM {variable} v WHERE v.name LIKE 'salesforce_queue_%_lease_expire'";
+  $result = db_query($sql);
+  foreach ($result as $record) {
+    $name = trim(str_replace(array('salesforce_queue_', '_lease_expire'), array('', ''), $record->name));
+    if ($name != 'all') {
+      $queue_names[$name] = $name;
+    }
+  }
+
+  // Find queue names from the queue.
+  $result = db_select('salesforce_queue', 'q')
+    ->fields('q', array('queue'))
+    ->distinct()
+    ->execute();
+  foreach ($result as $record) {
+    $queue_names[$record->queue] = $record->queue;
+  }
+
+  ksort($queue_names);
+  return $queue_names;
+}
+
+function _salesforce_queue_item_label($entity, $entity_type) {
+  return t('Salesforce Queue Item #@id (@delta:@drupal_id:@object_type)', array('@id' => $entity->item_id, '@delta' => $entity->delta, '@drupal_id' => $entity->drupal_id, '@object_type' => $entity->object_type));
+}

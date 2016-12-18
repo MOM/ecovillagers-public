@@ -1,0 +1,11 @@
+name = Page manager existing pages
+description = Provides the ability to override existing pages through Page manager.
+core = 7.x
+dependencies[] = page_manager
+package = Chaos tool suite
+
+; Information added by drush on 2016-12-18
+version = "e0451cc00e9661aaa70feeef35cf79aaf39710f7-dev"
+project = "pm_existing_pages"
+datestamp = "1482080408"
+

@@ -1,0 +1,135 @@
+<?php
+/**
+ * @file
+ * Install file for the form layouts module.
+ */
+
+/**
+ * Implements hook_uninstall().
+ */
+function form_layouts_uninstall() {
+  variable_del('fundraiser_form_layouts_default');
+  variable_del('form_layouts_default');
+}
+
+/**
+ * Implements hook_schema().
+ */
+function form_layouts_schema() {
+  $schema['form_layouts_node'] = array(
+    'description' => 'Stores form layout information per webform node.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Webform enabled {node}.nid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'layout_name' => array(
+        'description' => 'The form layout machine name for this node.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('nid'),
+    'foreign keys' => array(
+      'form_layouts_node' => array(
+        'table' => 'node',
+        'columns' => array('nid' => 'nid'),
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Add form_layouts table and migrate existing layouts from drupal vars.
+ */
+function form_layouts_update_7001() {
+
+  $table = array(
+    'description' => 'Stores form layout information per webform node.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'Webform enabled {node}.nid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'layout_name' => array(
+        'description' => 'The form layout machine name for this node.',
+        'type' => 'varchar',
+        'length' => 32,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('nid'),
+    'foreign keys' => array(
+      'form_layouts_node' => array(
+        'table' => 'node',
+        'columns' => array('nid' => 'nid'),
+      ),
+    ),
+  );
+
+  db_create_table('form_layouts_node', $table);
+
+  // As of this update, form layouts only apply to fundraiser types.
+  $types = fundraiser_get_donation_types();
+  $types = array_keys(array_filter($types));
+
+  // Migrate the current fundraiser types to the new settings
+  // and data storage.
+  if (count($types)) {
+    form_layouts_enable_fundraiser_types($types);
+    form_layouts_move_drupal_variables_to_table($types);
+  }
+
+  // Rename an existing variable to match the module name.
+  $default = variable_get('fundraiser_form_layouts_default', 'one_column');
+  variable_set('form_layouts_default', $default);
+  variable_del('fundraiser_form_layouts_default');
+
+  // Rebuild the registry to account for the new FormLayout class.
+  registry_rebuild();
+}
+
+
+/**
+ * Enable form layouts functionality for all donation types.
+ *
+ * @param array $types
+ *   Machine names of content types to enable.
+ */
+function form_layouts_enable_fundraiser_types($types) {
+  foreach ($types as $type) {
+    variable_set('form_layouts_' . $type, 1);
+  }
+}
+
+/**
+ * Changes the storage of form layouts from drupal variables to a table.
+ *
+ * @param array $types
+ *   Machine names of content types.
+ */
+function form_layouts_move_drupal_variables_to_table($types) {
+  $result = db_query('SELECT nid FROM {node} WHERE type IN (:types)', array(':types' => $types));
+
+  foreach ($result as $data) {
+    $var_name = 'donation_form_' . $data->nid . '_theme';
+    $layout_name = variable_get($var_name);
+    if ($layout_name) {
+      $record = array(
+        'nid' => $data->nid,
+        'layout_name' => $layout_name,
+      );
+      drupal_write_record('form_layouts_node', $record);
+      variable_del($var_name);
+    }
+  }
+}

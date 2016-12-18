@@ -1,0 +1,7 @@
+2013-02-01 Allen Freeman <allen.freeman@jacksonriver.com>
+
+  * fundraiser_webform.module (fundraiser_webform_confirmation_page_tokens) - implements hook_confirmation_page_tokens(), fundraiser tokens now available via webform token selector.
+
+fundraiser_webform 7.x-3.0, 2012-03-30
+------------------------------
+Initial creation as part of D7 port of fundraiser.

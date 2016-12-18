@@ -1,0 +1,62 @@
+<?php
+/**
+ * @file
+ * Schema function for the fundraiser_upsell_salesforce module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function fundraiser_upsell_salesforce_schema() {
+  $schema['fundraiser_upsell_salesforce'] = array(
+    'description' => 'Stores Salesforce specific data for nodes that are fundraiser upsell enabled.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'data' => array(
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big',
+        'serialize' => TRUE,
+        'description' => 'A serialized array of Salesforce data to apply to upsell donations made through this node.',
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+
+  $schema['fundraiser_upsell_salesforce_donation'] = array(
+    'description' => 'Stores Salesforce specific data for upsell donations.',
+    'fields' => array(
+      'master_did' => array(
+        'description' => 'The recurring donation master ID.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'data' => array(
+        'type' => 'blob',
+        'not null' => FALSE,
+        'size' => 'big',
+        'serialize' => TRUE,
+        'description' => 'A serialized array of Salesforce data to apply to upsell donations that have this master donation.',
+      ),
+    ),
+    'primary key' => array('master_did'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * Removes the overrideable market source settings.
+ */
+function fundraiser_upsell_salesforce_uninstall() {
+  variable_del('fundraiser_upsell_market_source_default_fields');
+  variable_del('fundraiser_upsell_market_source_custom_fields');
+}

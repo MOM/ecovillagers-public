@@ -1,0 +1,82 @@
+.views-exposed-form .views-exposed-widget {
+    vertical-align: top;
+    margin-right: 1em;
+}
+
+.views-exposed-form .views-exposed-widget .form-type-textfield .description,
+ .views-widget-filter-submitted .description{
+    width: 150px;
+    font-size: 0.9em;
+    margin-left: 8px;
+}
+
+.views-exposed-form .views-exposed-widget.views-submit-button,
+.views-exposed-form .views-exposed-widget.views-reset-button {
+    margin-top: 15px;
+}
+fieldset#edit-select {
+    margin-bottom: 20px;
+    margin-top: -30px;
+}
+fieldset#webform-ui-exposed-search {
+    margin-bottom: 20px;
+}
+
+#edit-select  input[type="submit"] {
+    vertical-align:top;
+    margin-top: 4px;
+    margin-left: 1em;
+}
+#webform-ui-exposed-search  .views-exposed-widget {
+    display: inline-block!important;
+}
+
+.views-exposed-widgets {
+    display:block;
+}
+
+.webform-ui-fieldset .fieldset-wrapper{
+    padding: 20px 26px;
+}
+#webform-configure-form fieldset.webform-ui-fieldset {
+    padding: 10px;
+}
+#webform-configure-form fieldset.webform-ui-fieldset.collapsed,
+#edit-confirmation-format.collapsed {
+    height: 30px;
+}
+
+#webform-configure-form fieldset fieldset fieldset.collapsed,
+#webform-configure-form fieldset fieldset fieldset fieldset.collapsed{
+    padding: 0;
+    height: 30px;
+}
+
+#edit-confirmation-format.collapsed {
+    padding-bottom: 0;
+}
+
+#webform-configure-form fieldset.submission-fieldset.collapsed {
+    padding-bottom: 30px;
+}
+
+#webform-configure-form fieldset fieldset legend {
+  margin-bottom: 0;
+}
+.webform-ui-body-container .filter-wrapper {
+     padding-top: 0;
+ }
+
+.webform-ui-body-container .filter-wrapper legend{
+     top: -10px;
+     margin-bottom:10px;
+ }
+
+.webform-ui-body-container fieldset.filter-wrapper.collapsed {
+     height: 20px;
+ }
+
+.views-exposed-form  #edit-submitted-wrapper .form-item,
+.views-exposed-form  #edit-submitted-wrapper label {
+    display: inline-block;
+}

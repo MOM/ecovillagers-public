@@ -1,0 +1,121 @@
+<?php
+
+/**
+ * @file
+ * Configuration form tests
+ */
+
+include_once dirname(__FILE__) . '/salesforce_sync.test';
+
+/**
+ * @file
+ * Salesforce queue module config form tests.
+ */
+class SalesforceSyncAdminTestCase extends SalesforceSyncTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Salesforce Sync Administration'),
+      'description' => t('Tests of configuration settings for the Salesforce sync module.'),
+      'group' => t('Salesforce Sync'),
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    parent::setUp($modules, $permissions);
+
+    // Path to config page.
+    $this->path = 'admin/config/salesforce/salesforce-sync/config';
+
+    // Connect to Salesforce.
+    $this->salesforceConnect();
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Tests that the form renders properly.
+   */
+  public function testAdminForm() {
+    $this->drupalGet($this->path);
+
+    // Ensure each field is there with the correct default value.
+    $this->assertFieldByName('max_batch_size', '', 'Max batch size field exists.');
+    $this->assertFieldByName('max_batch_size', 200, 'Max batch size field has the correct default value.');
+    $this->assertFieldByName('max_retrieve_size', '', 'Max retrieve size field exists.');
+    $this->assertFieldByName('max_retrieve_size', 2000, 'Max retrieve size field has the correct default value.');
+    $this->assertFieldByName('max_query_length', '', 'Max query length field exists.');
+    $this->assertFieldByName('max_query_length', 10000, 'Max query length field has the correct default value.');
+  }
+
+  /**
+   * Tests that the form will validate submissions properly.
+   */
+  public function testAdminFormValidate() {
+    $fields = array(
+      'max_batch_size',
+      'max_retrieve_size',
+      'max_query_length',
+    );
+    foreach ($fields as $field) {
+      // Is numeric.
+      $this->drupalGet($this->path);
+      $edit = array($field => 'abc');
+      $this->drupalPost($this->path, $edit, 'Save');
+      $this->assertText('must be numeric', $field . ' field fails validation when value is not numeric.');
+      $this->assertNoText('Your settings have been saved.', 'Form does not save when ' . $field . ' field fails numeric validation.');
+
+      // Is a positive value.
+      $this->drupalGet($this->path);
+      $edit = array($field => -5);
+      $this->drupalPost($this->path, $edit, 'Save');
+      $this->assertText('must be a positive number', $field . ' field fails validation when value is not a positive number.');
+      $this->assertNoText('Your settings have been saved.', 'Form does not save when ' . $field . ' field fails positive value validation.');
+    }
+  }
+
+  /**
+   * Tests that form submissions are performed and values are saved properly.
+   */
+  public function testAdminFormSubmit() {
+    $this->drupalGet($this->path);
+
+    // Set values.
+    $edit = array(
+      'max_batch_size' => 13,
+      'max_retrieve_size' => 18,
+      'max_query_length' => 15,
+    );
+
+    // Cancel and make sure no values were changed.
+    $this->drupalPost($this->path, $edit, 'Cancel');
+    $this->assertText('The form has been reset to its original values', 'Cancelling the form posted correctly.');
+    $this->assertFieldByName('max_batch_size', 200, 'Max batch size value did not change after cancelling form.');
+    $this->assertEqual(NULL, variable_get('salesforce_sync_max_batch_size', NULL), 'Max batch size value did not save after cancelling form.');
+    $this->assertFieldByName('max_retrieve_size', 2000, 'Max retrieve size value did not change after cancelling form.');
+    $this->assertEqual(NULL, variable_get('salesforce_sync_max_retrieve_size', NULL), 'Max retrieve size value did not save after cancelling form.');
+    $this->assertFieldByName('max_query_length', 10000, 'Max query length value did not change after cancelling form.');
+    $this->assertEqual(NULL, variable_get('salesforce_sync_max_query_length', NULL), 'Max query length value did not save after cancelling form.');
+
+    // Save and make sure the values were changed.
+    $this->drupalPost($this->path, $edit, 'Save');
+    $this->assertText('Your settings have been saved', 'Saving the form posted correctly.');
+    $this->assertFieldByName('max_batch_size', 13, 'Max batch size value changed after saving form.');
+    $this->assertEqual(13, variable_get('salesforce_sync_max_batch_size', 13), 'Max batch size value saved after submitting form.');
+    $this->assertFieldByName('max_retrieve_size', 18, 'Max retrieve size value changed after saving form.');
+    $this->assertEqual(18, variable_get('salesforce_sync_max_retrieve_size', 18), 'Max retrieve size value saved after submitting form.');
+    $this->assertFieldByName('max_query_length', 15, 'Max query length value changed after saving form.');
+    $this->assertEqual(15, variable_get('salesforce_sync_max_query_length', 15), 'Max query length value saved after submitting form.');
+  }
+}

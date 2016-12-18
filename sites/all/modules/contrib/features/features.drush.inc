@@ -43,7 +43,6 @@ function features_drush_command() {
       'destination' => "Destination path (from Drupal root) of the exported feature. Defaults to '" . $path . "'.",
       'version-set' => "Specify a version number for the feature.",
       'version-increment' => "Increment the feature's version number.",
-      'ignore-conflicts' => "Ignore conflicts and export all components.",
     ),
     'drupal dependencies' => array('features'),
     'aliases' => array('fe'),
@@ -72,9 +71,6 @@ function features_drush_command() {
       ),
       'not-exported' => array(
         'description' => 'Show only components that have not been exported.',
-      ),
-      'info-style' => array(
-        'description' => 'Export components in format suitable for using in an info file.',
       ),
     ),
     'aliases' => array('fc'),
@@ -236,7 +232,6 @@ function drush_features_list() {
 function drush_features_components() {
   $args = func_get_args();
   $components = _drush_features_component_list();
-  ksort($components);
   // If no args supplied, prompt with a list.
   if (empty($args)) {
     $types = array_keys($components);
@@ -257,13 +252,10 @@ function drush_features_components() {
   elseif (drush_get_option(array('not-exported', 'o'), NULL)) {
     $options['exported'] = FALSE;
   }
-  if (drush_get_option(array('info-style', 'is'), NULL)) {
-    $options['info style'] = TRUE;
-  }
 
   $filtered_components = _drush_features_component_filter($components, $args, $options);
   if ($filtered_components){
-    _drush_features_component_print($filtered_components, $options);
+    _drush_features_component_print($filtered_components);
   }
 }
 
@@ -428,17 +420,11 @@ function _drush_features_component_filter($all_components, $patterns = array(), 
 /**
  * Prints a list of filtered components.
  */
-function _drush_features_component_print($filtered_components, $options = array()) {
+function _drush_features_component_print($filtered_components) {
   $rows = array(array(dt('Available sources')));
   foreach ($filtered_components['components'] as $source => $components) {
     foreach ($components as $name => $value) {
-      if (!empty($options['info style'])) {
-        // Output as .info file style.
-        $row = array('features[' . $source . '][] = "' . $name . '"');
-      }
-      else {
-        $row = array($source .':'. $name);
-      }
+      $row = array($source .':'. $name);
       if (isset($filtered_components['sources'][$source .':'. $name])) {
         $row[] = dt('Provided by') . ': ' . $filtered_components['sources'][$source .':'. $name];
       }
@@ -460,11 +446,9 @@ function drush_features_export() {
       return drush_set_error('', 'No components supplied.');
     }
     $components = _drush_features_component_list();
-    $options = array();
-
-    if (!drush_get_option('ignore-conflicts', FALSE)) {
-      $options['exported'] = FALSE;
-    }
+    $options = array(
+      'exported' => FALSE,
+    );
 
     $filtered_components = _drush_features_component_filter($components, $args, $options);
     $items = $filtered_components['components'];
@@ -584,9 +568,11 @@ function _drush_features_export($info, $module_name = NULL, $directory = NULL) {
     $destination = drush_get_option(array('destination'), variable_get('features_default_export_path', FEATURES_DEFAULT_EXPORT_PATH));
     $directory = isset($directory) ? $directory : $destination . '/' . $module_name;
     if (is_dir($directory)) {
+      $warning = dt('Module appears to already exist in !dir', array('!dir' => $directory));
+      drush_log($warning, 'warning');
       // If we aren't skipping confirmation and the directory already exists,
-      // prompt the user. This message most make sense for but fe and fu.
-      if (!$skip_confirmation && !drush_confirm(dt('Module located at !dir will be updated. Do you want to continue?', array('!dir' => $directory)))) {
+      // prompt the user.
+      if (!$skip_confirmation && !drush_confirm(dt('Do you really want to continue?'))) {
         drush_die('Aborting.');
       }
     }
@@ -739,13 +725,8 @@ function drush_features_revert() {
             $dt_args['@component'] = $component;
             $confirmation_message = 'Do you really want to revert @module.@component?';
             if ($skip_confirmation || drush_confirm(dt($confirmation_message, $dt_args))) {
-              if (features_feature_is_locked($module, $component)) {
-                drush_log(dt('Skipping locked @module.@component.', $dt_args), 'ok');
-              }
-              else {
-                features_revert(array($module => array($component)));
-                drush_log(dt('Reverted @module.@component.', $dt_args), 'ok');
-              }
+              features_revert(array($module => array($component)));
+              drush_log(dt('Reverted @module.@component.', $dt_args), 'ok');
             }
             else {
               drush_log(dt('Skipping @module.@component.', $dt_args), 'ok');

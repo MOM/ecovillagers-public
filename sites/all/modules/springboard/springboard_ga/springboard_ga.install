@@ -1,0 +1,53 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the springboard_ga module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function springboard_ga_schema() {
+  $schema['springboard_ga'] = array(
+    'description' => 'Stores data for ga tracking donation nodes.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The user id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'settings' => array(
+        'description' => 'Serialized settings details.',
+        'type' => 'text',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  return $schema;
+}
+
+function springboard_ga_uninstall() {
+  variable_del('springboard_ga_trans_transaction_id');
+  variable_del('springboard_ga_trans_affiliation');
+  variable_del('springboard_ga_trans_total');
+  variable_del('springboard_ga_trans_tax');
+  variable_del('springboard_ga_trans_shipping');
+  variable_del('springboard_ga_trans_city');
+  variable_del('springboard_ga_trans_state');
+  variable_del('springboard_ga_trans_country');
+  variable_del('springboard_ga_item_order_id');
+  variable_del('springboard_ga_item_sku');
+  variable_del('springboard_ga_item_name');
+  variable_del('springboard_ga_item_category');
+  variable_del('springboard_ga_item_price');
+  variable_del('springboard_ga_item_quantity');
+}

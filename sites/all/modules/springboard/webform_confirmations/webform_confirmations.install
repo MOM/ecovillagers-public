@@ -1,0 +1,145 @@
+<?php
+
+/**
+ * Implements hook_schema().
+ */
+function webform_confirmations_schema() {
+  $schema['webform_confirmations'] = array(
+    'description' => 'Track nodes that are enabled as webform user nodes.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'confirmation_page_title' => array(
+        'description' => 'Title for the confirmation page',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  $schema['webform_confirmations_submissions'] = array(
+    'description' => 'Map webform submission ids to session ids.',
+    'fields' => array(
+      'sid' => array(
+        'description' => 'The node',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'sessid' => array(
+        'description' => 'The webform component',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+      'timestamp' => array(
+        'description' => 'Record creation time, used for garbage collection',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('sid'),
+  );
+
+  $schema['cache_webform_confirm'] = drupal_get_schema_unprocessed('system', 'cache');
+  $schema['cache_webform_confirm']['description'] = 'Cache table for webform confirmations.';
+  return $schema;
+}
+
+
+/**
+ * Implements hook_install().
+ */
+function webform_confirmations_install() {
+  // First we need to check if old data from old tables is still around.
+  // If we've never pulled any of this data before, we need to move it over.
+  // Check for table, and fields.
+  if (db_table_exists('webform_user') && db_field_exists('webform_user', 'confirmation_page_title')) {
+    // Copy all data over from the old tables to the new table.
+    db_query('REPLACE INTO {webform_confirmations} ' .
+      '(nid, confirmation_page_title) ' .
+      'SELECT nid, confirmation_page_title ' .
+      'FROM {webform_user}');
+    // If we're done, we can drop the old fields.
+    db_drop_field('webform_user', 'confirmation_page_title');
+  }
+  // Check for table, and fields.
+  if (db_table_exists('fundraiser') && db_field_exists('fundraiser', 'confirmation_page_title')) {
+    // Copy all data over from the old tables to the new table.
+    db_query('REPLACE INTO {webform_confirmations} ' .
+      '(nid, confirmation_page_title) ' .
+      'SELECT nid, confirmation_page_title ' .
+      'FROM {fundraiser}');
+    // If we're done, we can drop the old fields.
+    db_drop_field('fundraiser', 'confirmation_page_title');
+    // Move additional settings over to the proper configuration tracking in webform proper.
+    db_query('REPLACE INTO {webform} ' .
+      '(nid, confirmation, confirmation_format, redirect_url) ' .
+      'SELECT nid, confirmation_page_body, confirmation_page_format, redirect_url ' .
+      'FROM {fundraiser}');
+    db_drop_field('fundraiser', 'confirmation_page_body');
+    db_drop_field('fundraiser', 'confirmation_page_format');
+    db_drop_field('fundraiser', 'redirect_url');
+  }
+}
+/**
+ * Create the cache bin for webform confirmations.
+ */
+function webform_confirmations_update_7001() {
+  $schema_name = 'cache_webform_confirm';
+  $schema['cache_webform_confirm'] = drupal_get_schema_unprocessed('system', 'cache');
+  $schema['cache_webform_confirm']['description'] = 'Cache table for webform confirmations.';
+  db_create_table($schema_name, $schema[$schema_name]);
+}
+
+/**
+ * Add webform submission id to session id tracking table.
+ */
+function webform_confirmations_update_7003() {
+  $schema = array(
+    'description' => 'Map webform submission ids to session ids.',
+    'fields' => array(
+      'sid' => array(
+        'description' => 'The node',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'sessid' => array(
+        'description' => 'The webform component',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('sid'),
+  );
+  db_create_table('webform_confirmations_submissions', $schema);
+
+}
+
+/**
+ * Add timestamp column to {webform_confirmations_submissions}
+ */
+function webform_confirmations_update_7004() {
+  $field = array(
+    'description' => 'Record creation time, used for garbage collection',
+    'type' => 'int',
+    'unsigned' => TRUE,
+    'not null' => TRUE,
+    'default' => 0, 
+  );
+  db_add_field('webform_confirmations_submissions', 'timestamp', $field);
+  // Initialize to current date, otherwise all preexisting records will get wiped out
+  // the first time cron runs with purge enabled.
+  db_query('UPDATE {webform_confirmations_submissions} SET timestamp = :timestamp', array(':timestamp' => time())); 
+}
+

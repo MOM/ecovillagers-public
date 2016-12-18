@@ -1,0 +1,94 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_sync salesforce_queue hooks
+ */
+
+module_load_include('test', 'salesforce_queue', 'tests/salesforce_queue');
+
+/**
+ * Ensure salesforce_sync integrates with salesforce_queue properly.
+ */
+class SalesforceSyncQueueTestCase extends SalesforceQueueTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Queue Integration',
+      'description' => 'Ensure that the salesforce_sync integration with salesforce_queue functions properly.',
+      'group' => 'Salesforce Sync',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    parent::setUp($modules, $permissions);
+
+    // Initiate a queue and processor.
+    $this->salesforceConnect();
+    $this->queue = salesforce_queue_load();
+    $this->processor = salesforce_queue_load_processor($this->queue);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    // Remove the items we created in our Salesforce instance.
+    $this->processor->deleteNewSfRecords();
+
+    parent::tearDown();
+  }
+
+  /**
+   * Test the salesforce_queue hooks.
+   */
+  public function testSalesforceQueueHooks() {
+    // Create items, then grab them so we can reference them later.
+    $this->createQueueItems($this->queue, 5, array('CREATE'), array('Opportunity'));
+    $items = $this->queue->claimBatch();
+    $this->queue->releaseBatch($items[0]->leaseKey);
+
+    // Items added to Salesforce will have their records mapped to their
+    // Salesforce Ids.  Retreive records and verify record maps were created.
+    $this->processor->process();
+    $records = entity_load('salesforce_sync_map');
+    $this->assertEqual(5, count($records), 'Mapped ' . count($records) . ' records out of 5 queued.');
+
+    // Updated and deleted items will automatically have their sfid added when
+    // queued.
+    $ops = array('UPDATE', 'DELETE');
+    foreach ($ops as $op) {
+      $item = array_shift($items);
+      $data = array(
+        'drupal_id' => $item->drupal_id,
+        'module' => $item->module,
+        'delta' => $item->delta,
+        'object_type' => $item->object_type,
+        'operation' => $op,
+        'dedupe_field' => $item->dedupe_field,
+        'sobject' => $item->sobject,
+      );
+      $this->queue->createItem($data);
+
+      // When successful, the queue will be empty after processing.
+      $this->processor->process();
+      $temp_claim = $this->queue->claimBatch();
+      $this->assertTrue(empty($temp_claim), 'sfid added to ' . $op . ' queue item.');
+      if (is_array($temp_claim)) {
+        // If the above failed, release the queue.
+        $this->queue->releaseBatch($temp_claim[0]->leaseKey);
+      }
+    }
+
+    // Remove the items that were created and verify the record maps deleted.
+    $this->processor->deleteNewSfRecords();
+    $records = entity_load('salesforce_sync_map');
+    $this->assertEqual(0, count($records), count($records) . ' records remained after deleting all newly created Salesforce records.');
+  }
+}

@@ -1,0 +1,107 @@
+<?php
+
+/**
+ * @file
+ * Common functions for all the webform add-to-all tests.
+ */
+
+class WebformAddToAllTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Webform Add To All',
+      'description' => 'Webform Add To All functional tests.',
+      'group' => 'Webform Add To All',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(array('webform', 'webform_addtoall'));
+
+    $this->privileged_user = $this->drupalCreateUser(array(
+      'administer site configuration',
+      'add components to any webform type',
+      'create webform content',
+      'edit own webform content',
+      'access all webform results',
+    ));
+    $this->drupalLogin($this->privileged_user);
+  }
+
+  public function testWebformComponentAdd() {
+    //create test webforms
+    $nids = $this->WebformCreateMultiple();
+
+    // component addtoall
+    $nid = $nids[0];
+    $options = array(
+      'query' => array(
+        'name' => 'Derp',
+        'mandatory' => 0,
+        'pid' => 0,
+        'weight' => 2,
+      ),
+    );
+    $settings = array(
+      "add[name]" => 'Derp',
+      "add[type]" => 'textfield',
+      "add[cid]" => '',
+      "add[pid]" => 0,
+      "add[weight]" => 2,
+    );
+    $this->drupalPost("node/$nid/webform", $settings, t('Save'), array(), array(), 'webform-components-form');
+
+    $settings = array(
+      'name' => 'Derp',
+      'form_key' => 'derp',
+      'value' => '',
+      'addtoall[webform_types][webform]' => 'webform',
+      'extra[description]' => '',
+    );
+    $this->drupalPost("node/$nid/webform/components/new/textfield", $settings, t('Save component'), $options, array(), 'webform-component-edit-form');
+
+    // check db for elements
+    foreach ($nids as $nid) {
+      $success = db_query('SELECT 1 FROM {webform_component} WHERE form_key = :form_key AND nid = :nid', array(':form_key' => 'derp', ':nid' => $nid))->fetchColumn();
+      $this->assertTrue($success, t('Component added to node @nid', array('@nid' => $nid)));
+    }
+
+    // confirm element display on webforms.
+  }
+
+  private function WebformCreateMultiple($count = 3) {
+    $nids = array();
+    for ($i = 0; $i < $count; ++$i) {
+      $node = array(
+        'type' => 'webform',
+        'title' => $this->randomName(8),
+        'body' => $this->randomName(16),
+        'uid' => $this->privileged_user->uid,
+      );
+      $node = (object) $node;
+      node_save($node);
+      $nids[] = $node->nid;
+      $component = array(
+        'nid' => $node->nid,
+        'cid' => 1,
+        'pid' => 0,
+        'form_key' => 'name',
+        'name' => 'Name Test',
+        'type' => 'textfield',
+        'value' => '',
+        'extra' => serialize(array(
+          'title_display' => 'before',
+          'description' => '',
+          'private' => '',
+        )),
+        'mandatory' => '',
+      );
+      drupal_write_record('webform_component', $component);
+    }
+    return $nids;
+  }
+
+}

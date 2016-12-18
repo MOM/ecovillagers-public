@@ -1,0 +1,84 @@
+<?php
+/**
+ * @file
+ * Install, uninstall, and update hooks for the springboard_admin module.
+ */
+
+include_once 'springboard_admin.menu.inc';
+
+/**
+ * Implements hook_install().
+ *
+ * Creates a custom drupal menu for the Springboard administration interface.
+ */
+function springboard_admin_install() {
+  $themes = array_keys(list_themes());
+  if (in_array('springboard_backend', $themes)) {
+    theme_enable(array('springboard_backend'));
+  }
+  // Set the weight of springboard_admin very high so our theme switch rules
+  // will always override other settings.
+  db_update('system')
+    ->fields(array('weight' => 20))
+    ->condition('name', 'springboard_admin', '=')
+    ->execute();
+
+  // Set springboard_admin weight very high so it can force theme via
+  // hook_custom_theme.
+  db_update('system')
+    ->fields(array('weight' => 9999))
+    ->condition('name', 'springboard_admin', '=')
+    ->execute();
+
+  // Create the Springboard Admin Menu.
+  springboard_admin_create_menu();
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * Delete the custom drupal menu for the Springboard administration interface.
+ */
+function springboard_admin_uninstall() {
+  $sb_menu = springboard_admin_admin_menu();
+  menu_delete($sb_menu);
+}
+
+/**
+ * Rebuilds the Springboard Admin Menu to add new items.
+ */
+function springboard_admin_update_7001() {
+  if ($menu = menu_load('springboard_admin_menu')) {
+    menu_delete($menu);
+  }
+  springboard_admin_create_menu();
+}
+
+/**
+ * Updates a variable name.
+ *
+ * Renames variable springboard_login_redirect_roles to
+ * springboard_user_experience for coverage of more features.
+ */
+function springboard_admin_update_7002() {
+  $sb_ux_roles = variable_get('springboard_login_redirect_roles', FALSE);
+  if ($sb_ux_roles) {
+    variable_set('springboard_user_experience', $sb_ux_roles);
+    variable_del('springboard_login_redirect_roles');
+  }
+}
+
+/**
+ * Rebuilds the Springboard Admin Menu to add new items.
+ */
+function springboard_admin_update_7003() {
+  springboard_admin_recreate_menu();
+}
+
+/**
+ * Rebuilds Drupal's menu router to add title callbacks for customizing
+ * some of webform's menu titles.
+ */
+function springboard_admin_update_7004() {
+  menu_rebuild();
+}

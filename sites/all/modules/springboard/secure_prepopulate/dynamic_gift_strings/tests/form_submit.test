@@ -1,0 +1,80 @@
+<?php
+
+/**
+ * @file
+ * Dynamic Gift Strings standard test.
+ */
+
+class GiftStringFormSubmitTestCase extends DynamicGiftStringsTestSetup {
+
+  /**
+   * Test info.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Dynamic Gift String decryption with form submit',
+      'description' => 'Submit a form with a Dynamic Gift String and Secure Pre-populate data in the URL.',
+      'group' => 'Secure Prepopulate',
+    );
+  }
+
+  /**
+   * Confirm an error message appears when no default amount is passed/selected.
+   */
+  public function testErrorMessage() {
+    // Standard post values.
+    $month = date('n');
+    $year = date('Y');
+    $post = array(
+      'submitted[payment_information][payment_fields][credit][card_number]' => '4111111111111111',
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]' => $month,
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]' => $year,
+      'submitted[payment_information][payment_fields][credit][card_cvv]' => '111',
+    );
+
+    // Post to the form with the af and gs query parameters.
+    $this->drupalPost(
+      'node/' . $this->donationForm->nid,
+      $post,
+      t('Donate'),
+      array(
+        'query' => array(
+          'af' => $this->encryptedAF,
+          'gs' => $this->encryptedGSNoDefault,
+        ),
+      )
+    );
+
+    $this->assertText('Please select your tax-deductible gift amount below field is required.', t('The correct error message appears.'));
+  }
+
+  /**
+   * Confirm the form submits with the correct amount selected.
+   */
+  public function testSuccess() {
+    // Standard post values.
+    $month = date('n');
+    $year = date('Y');
+    $post = array(
+      'submitted[payment_information][payment_fields][credit][card_number]' => '4111111111111111',
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]' => $month,
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]' => $year,
+      'submitted[payment_information][payment_fields][credit][card_cvv]' => '111',
+    );
+
+    // Post to the form with the af and gs query parameters.
+    $this->drupalPost(
+      'node/' . $this->donationForm->nid,
+      $post,
+      t('Donate'),
+      array(
+        'query' => array(
+          'af' => $this->encryptedAF,
+          'gs' => $this->encryptedGSWithDefault,
+        ),
+      )
+    );
+
+    $this->assertText('666', t('The correct ammount appears on the confirmation page.'));
+  }
+}

@@ -1,0 +1,322 @@
+<?php
+
+/**
+ * @file
+ * Install hooks for the Salesforce Log module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function salesforce_log_schema() {
+  $schema['salesforce_log_batch'] = array(
+    'description' => 'Logs data for the Salesforce Sync.',
+    'fields' => array(
+      'bid' => array(
+        'description' => 'Unique id of this batch.',
+        'type' => 'serial',
+        'not null' => TRUE,
+      ),
+      'start' => array(
+        'description' => 'Timestamp of when this batch started.',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'end' => array(
+        'description' => 'Timestamp of when this batch finished.',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'count' => array(
+        'description' => 'Total amount of items in this batch.',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'successes' => array(
+        'description' => 'Count of successfully synced items.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'failures' => array(
+        'description' => 'Count of failed items.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+      'module' => array(
+        'description' => 'Name of the module that implements the Drupal type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'delta' => array(
+        'description' => 'Name or id of the Drupal sub-type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'object_type' => array(
+        'description' => 'The Salesforce object type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'operation' => array(
+        'description' => 'The action to take in Salesforce.',
+        'type' => 'varchar',
+        'length' => '10',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('bid'),
+    'indexes' => array(
+      'end' => array('end'),
+      'failures' => array('failures'),
+      'module' => array('module'),
+      'object_type' => array('object_type'),
+      'operation' => array('operation'),
+      'successes' => array('successes'),
+      'delta_module_object' => array(
+        'delta',
+        'module',
+        'object_type',
+      ),
+      'end_bid' => array(
+        'end',
+        'bid',
+      ),
+      'fail_module' => array(
+        'failures',
+        'module',
+      ),
+      'fail_module_object_op' => array(
+        'failures',
+        'module',
+        'object_type',
+        'operation',
+      ),
+      'fail_object' => array(
+        'failures',
+        'object_type',
+      ),
+      'fail_object_op' => array(
+        'failures',
+        'object_type',
+        'operation',
+      ),
+      'fail_op' => array(
+        'failures',
+        'operation',
+      ),
+      'module_object' => array(
+        'module',
+        'object_type',
+      ),
+      'module_object_op' => array(
+        'module',
+        'object_type',
+        'operation',
+      ),
+      'module_op' => array(
+        'module',
+        'operation',
+      ),
+      'object_op' => array(
+        'object_type',
+        'operation',
+      ),
+    ),
+  );
+
+  $schema['salesforce_log_item'] = array(
+    'description' => 'Logs data on individual items for the Salesforce Sync.',
+    'fields' => array(
+      'lid' => array(
+        'description' => 'Unique id of this item.',
+        'type' => 'serial',
+        'not null' => TRUE,
+      ),
+      'item_id' => array(
+        'description' => 'Queue id of this item.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'bid' => array(
+        'description' => 'The id of the batch containing this item.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'drupal_id' => array(
+        'description' => 'The id of the Drupal object.',
+        'type' => 'varchar',
+        'length' => '50',
+        'not null' => TRUE,
+      ),
+      'module' => array(
+        'description' => 'Name of the module that implements the Drupal type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'delta' => array(
+        'description' => 'Name or id of the Drupal sub-type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'object_type' => array(
+        'description' => 'The Salesforce object type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'operation' => array(
+        'description' => 'The action to take in Salesforce.',
+        'type' => 'varchar',
+        'length' => '10',
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'dedupe_field' => array(
+        'description' => 'The Salesforce field to dedupe on during UPSERT operations.',
+        'type' => 'varchar',
+        'length' => '40',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'sobject' => array(
+        'description' => 'The Salesforce sObject in json format.',
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => TRUE,
+      ),
+      'queue' => array(
+        'description' => 'The name of the processing queue this item was within.',
+        'type' => 'varchar',
+        'length' => '40',
+        'not null' => TRUE,
+        'default' => 'new',
+      ),
+      'retries' => array(
+        'description' => 'Number of times this item has failed attempts to be processed.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'status' => array(
+        'description' => 'Flag for success or failure.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'error_code' => array(
+        'description' => 'Error ID from Salesforce.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'message' => array(
+        'description' => 'Message from Salesforce.',
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => FALSE,
+      ),
+      'sfid' => array(
+        'description' => 'The Salesforce Id.',
+        'type' => 'varchar',
+        'length' => '50',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('lid'),
+    'indexes' => array(
+      'bid' => array('bid'),
+      'drupal_id' => array('drupal_id'),
+      'error_code' => array('error_code'),
+      'item_id' => array('item_id'),
+      'object_type' => array('object_type'),
+      'sfid' => array('sfid'),
+      'status' => array('status'),
+      'bid_drupal_object' => array(
+        'bid',
+        'drupal_id',
+        'object_type',
+      ),
+      'bid_item' => array(
+        'bid',
+        'item_id',
+      ),
+      'drupal_object' => array(
+        'drupal_id',
+        'object_type',
+      ),
+      'object_status' => array(
+        'object_type',
+        'status',
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Add indexes to tables.
+ */
+function salesforce_log_update_7001() {
+  $ret = array();
+
+  db_drop_index('salesforce_log_batch', 'drupal_index');
+  db_add_index('salesforce_log_batch', 'delta_module_object',
+    array('delta', 'module', 'object_type'));
+  $ret[] = t('Renamed index "drupal_index" to "drupal_module_object" on {salesforce_log_batch} table.');
+
+  db_drop_index('salesforce_log_item', 'item_id_bid');
+  db_add_index('salesforce_log_item', 'bid_item', array('bid', 'item_id'));
+  $ret[] = t('Renamed index "item_id_bid" to "bid_item" on {salesforce_log_item} table.');
+
+  db_add_index('salesforce_log_batch', 'end', array('end'));
+  db_add_index('salesforce_log_batch', 'failures', array('failures'));
+  db_add_index('salesforce_log_batch', 'module', array('module'));
+  db_add_index('salesforce_log_batch', 'object_type', array('object_type'));
+  db_add_index('salesforce_log_batch', 'operation', array('operation'));
+  db_add_index('salesforce_log_batch', 'successes', array('successes'));
+  db_add_index('salesforce_log_batch', 'end_bid', array('end', 'bid'));
+  db_add_index('salesforce_log_batch', 'fail_module',
+    array('failures', 'module'));
+  db_add_index('salesforce_log_batch', 'fail_module_object_op',
+    array('failures', 'module', 'object_type', 'operation'));
+  db_add_index('salesforce_log_batch', 'fail_object',
+    array('failures', 'object_type'));
+  db_add_index('salesforce_log_batch', 'fail_object_op',
+    array('failures', 'object_type', 'operation'));
+  db_add_index('salesforce_log_batch', 'fail_op',
+    array('failures', 'operation'));
+  db_add_index('salesforce_log_batch', 'module_object',
+    array('module', 'object_type'));
+  db_add_index('salesforce_log_batch', 'module_object_op',
+    array('module', 'object_type', 'operation'));
+  db_add_index('salesforce_log_batch', 'module_op',
+    array('module', 'operation'));
+  db_add_index('salesforce_log_batch', 'object_op',
+    array('object_type', 'operation'));
+  db_add_index('salesforce_log_item', 'bid', array('bid'));
+  db_add_index('salesforce_log_item', 'drupal_id', array('drupal_id'));
+  db_add_index('salesforce_log_item', 'error_code', array('error_code'));
+  db_add_index('salesforce_log_item', 'item_id', array('item_id'));
+  db_add_index('salesforce_log_item', 'object_type', array('object_type'));
+  db_add_index('salesforce_log_item', 'sfid', array('sfid'));
+  db_add_index('salesforce_log_item', 'status', array('status'));
+  db_add_index('salesforce_log_item', 'bid_drupal_object',
+    array('bid', 'drupal_id', 'object_type'));
+  db_add_index('salesforce_log_item', 'drupal_object',
+    array('drupal_id', 'object_type'));
+  db_add_index('salesforce_log_item', 'object_status',
+    array('object_type', 'status'));
+  $ret[] = t('Added more indexes to {salesforce_log_batch} and {salesforce_log_item} tables.');
+
+  return implode("\n", $ret);
+}

@@ -1,0 +1,67 @@
+<?php
+/**
+ * @file
+ * Tests loading an email wrapper template for prefilling email wrappers.
+ */
+
+class EmailWrappersLoadTemplateTestCase extends DrupalWebTestCase {
+
+  /**
+   * @var stdClass
+   */
+  protected $privileged_user;
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Email Wrappers template loading',
+      'description' => 'Tests loading an email wrappers template for prefilling an email wrapper on a webform.',
+      'group' => 'Email Wrappers',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(array('email_wrappers'));
+    variable_set('mail_system', array('default-system' => 'TestingMailSystem'));
+
+    $this->privileged_user = $this->drupalCreateUser(array(
+      'create email_wrapper content',
+    ));
+    $this->drupalLogin($this->privileged_user);
+  }
+
+  /**
+   * Tests that we get back the correct values when loading the template.
+   */
+  public function testTemplateLoading() {
+    $edit = array(
+      'title' => 'Testing BCC bug',
+      'email_wrapper_from_email[und][0][value]' => 'from@example.com',
+      'email_wrapper_reply_email[und][0][value]' => 'replyto@example.com',
+      'email_wrapper_subject[und][0][value]' => 'Testing BCC bug',
+      'email_wrapper_html_template[und][0][value]' => '<p>Thanks for the submission (HTML)</p>%html_message',
+      'email_wrapper_html_template[und][0][format]' => 'filtered_html',
+      'email_wrapper_html_message[und][0][value]' => '<p>This is an html message</p>',
+      'email_wrapper_html_message[und][0][format]' => 'filtered_html',
+      'email_wrapper_text_template[und][0][value]' => 'Thanks for the submission (text) %text_message',
+      'email_wrapper_text_message[und][0][value]' => 'This is a text message',
+    );
+    $this->drupalPost('node/add/email-wrapper', $edit, t('Save'));
+
+    // Node 1 since we haven't created anything else.
+    $defaults = email_wrappers_load_defaults_from_template(1);
+
+    $this->assertEqual($defaults['subject'], $edit['email_wrapper_subject[und][0][value]'], 'Subject is correct.');
+    $this->assertNull($defaults['from_name'], 'From name is null as expected.');
+    $this->assertEqual($defaults['from_mail'], $edit['email_wrapper_from_email[und][0][value]'], 'From mail is correct.');
+    $this->assertNull($defaults['reply_to_email'], 'Reply to email is null as expected.');
+    $this->assertNull($defaults['bcc_email'], 'BCC email is null as expected.');
+    $this->assertEqual($defaults['html_template'], $edit['email_wrapper_html_template[und][0][value]'], 'HTML template is correct.');
+    $this->assertEqual($defaults['html_message'], $edit['email_wrapper_html_message[und][0][value]'], 'HTML message is correct.');
+    $this->assertEqual($defaults['text_template'], $edit['email_wrapper_text_template[und][0][value]'], 'Text template is correct.');
+    $this->assertEqual($defaults['text_message'], $edit['email_wrapper_text_message[und][0][value]'], 'Text message is correct.');
+  }
+
+}

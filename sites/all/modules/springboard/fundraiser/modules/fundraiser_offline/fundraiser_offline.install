@@ -1,0 +1,66 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the fundraiser module.
+ */
+/**
+ * Implements hook_schema().
+ */
+function fundraiser_offline_schema() {
+  $schema['fundraiser_offline_donation'] = array(
+    'description' => 'Stored fundraiser nodes marked as offline',
+    // May be used to collect more information as we go.
+    'fields' => array(
+      'did' => array(
+        'description' => 'The offline donation did.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'nid' => array(
+        'description' => 'The offline fundraiser nid.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'The offline fundraiser user.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'created_by' => array(
+        'description' => t('The ID of the user that created the donation.'),
+        // Offline users are not always the same as the associated user account.
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'temporary_user' => array(
+        'description' => t('Indicates whether or not the donation was created with a temporary user.'),
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => FALSE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('did'),
+    'indexes' => array(
+      'nid' => array('nid'),
+    ),
+  );
+  return $schema;
+}
+
+
+/**
+ * Implements hook_update_N().
+ */
+
+/**
+ * Remove unused table.
+ */
+function fundraiser_offline_update_7001() {
+  if (db_table_exists('fundraiser_offline')) {
+    db_drop_table('fundraiser_offline');
+  }
+}

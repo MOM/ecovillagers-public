@@ -1,0 +1,61 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for springboard_version
+ */
+
+/**
+ * Sets up basic tools for testing Springboard Version.
+ */
+class SpringboardVersionTestCase extends DrupalWebTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Springboard Version',
+      'description' => 'Sets up basic tools for Springboard Version',
+      'group' => 'Springboard Version',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'springboard_version',
+    ));
+    parent::setUp($modules);
+
+    $permissions = array_merge($permissions, array(
+      'access content',
+      'administer site configuration',
+      'administer content types',
+      'administer nodes',
+      'administer users',
+      'access springboard version',
+    ));
+    $this->admin_user = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->admin_user);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    user_cancel(array(), $this->admin_user->uid, 'user_cancel_delete');
+    parent::tearDown();
+  }
+
+  /**
+   * Test installation of dependencies.
+   *
+   * Remove this test once tests are added for this module.
+   */
+  public function testInstall() {
+    $this->assertTrue(module_exists('springboard_version'), 'Module was not enabled correctly.');
+  }
+}

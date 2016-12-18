@@ -1,0 +1,62 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the commerce_litle_test module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function commerce_litle_test_schema() {
+  $schema = array();
+
+  $schema['commerce_litle_test_tokens'] = array(
+    'description' => 'Test token data for Litle',
+    'fields' => array(
+      'token' => array(
+        'description' => 'Serial numeric ID that is a standin for a token.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'routing_number' => array(
+        'description' => 'The original routing number.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'account_number' => array(
+        'description' => 'The original account number.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'card_validation' => array(
+        'description' => 'The original CVV.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'order_id' => array(
+        'description' => 'The original order ID.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+    ),
+    'primary key' => array('token'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function commerce_litle_test_uninstall() {
+  variable_del('commerce_litle_test_account_updater_enabled');
+}

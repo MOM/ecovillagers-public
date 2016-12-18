@@ -1,0 +1,9 @@
+name = Secure Pre-populate
+description = Uses an encrypted url string to pre-populate form fields.
+core = 7.x
+package = Webform Extra
+dependencies[] = webform
+version = 7.x-4.x-dev
+configure = 'admin/config/system/secure-prepopulate'
+
+files[] = tests/secure_prepopulate.unit.test

@@ -1,0 +1,104 @@
+<?php
+
+/**
+ * @file
+ * Simpletests for salesforce_log
+ */
+
+module_load_include('test', 'salesforce_queue', 'tests/salesforce_queue');
+
+/**
+ * Basic set up for running salesforce_log tests.
+ */
+class SalesforceLogTestCase extends SalesforceQueueTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Salesforce Log',
+      'description' => 'Basic set up for running salesforce_log tests.',
+      'group' => 'Salesforce Log',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = $modules + array(
+      'entity',
+      'entity_token',
+      'libraries',
+      'views',
+      'views_bulk_operations',
+      'salesforce',
+      'salesforce_soap',
+      'salesforce_sync',
+      'salesforce_queue',
+      'salesforce_log',
+    );
+    parent::setUp($modules);
+
+    // Create an admin user.
+    $permissions = $permissions + array(
+      'access content',
+      'administer site configuration',
+      'administer content types',
+      'administer nodes',
+      'administer users',
+      'administer salesforce',
+      'administer salesforce sync',
+    );
+    $this->admin_user = $this->drupalCreateUser($permissions);
+    // Don't forget, need to pass --uri in drush command in order for logging
+    // in to work.
+    $this->drupalLogin($this->admin_user);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    user_cancel(array(), $this->admin_user->uid, 'user_cancel_delete');
+    parent::tearDown();
+  }
+
+  /**
+   * Helper to create rules.
+   */
+  protected function createRule($event, $config = array()) {
+    $rule_machinename = isset($config['rule_machinename']) ? $config['rule_machinename'] : $this->randomName();
+    $rule_label = isset($config['rule_label']) ? $config['rule_label'] : $event;
+    $event = 'salesforce_log-' . $event;
+    $role = new stdClass();
+    $role->name = isset($config['role_name']) ? $config['role_name'] : $this->randomName();
+    user_role_save($role);
+    $role = user_role_load_by_name($role->name);
+
+    $json = '{ "' . $rule_machinename . '" : {
+        "LABEL" : "' . $rule_label  . '",
+        "PLUGIN" : "reaction rule",
+        "ACTIVE" : true,
+        "TAGS" : [ "simpletests", "' . $role->name . '" ],
+        "REQUIRES" : [ "rules", "salesforce_log" ],
+        "ON" : [ "' . $event  . '" ],
+        "DO" : [ { "user_add_role" : { "account" : [ "site:current-user" ], "roles" : { "value" : { "rid" : "' . $role->rid . '" } } } } ]
+      }
+    }';
+
+    $rule = rules_import($json);
+    $rule->integrityCheck()->save($rule_machinename);
+    rules_clear_cache();
+    return $rule;
+  }
+
+  /**
+   * Helper to verify that the rule created by createRule() was executed.
+   */
+  protected function assertRuleExecuted($rule) {
+    $account = user_load(1, TRUE);
+    return $this->assertTrue(in_array($rule->tags[1], $account->roles), 'Rule ' . $rule->label . ' was executed');
+  }
+}

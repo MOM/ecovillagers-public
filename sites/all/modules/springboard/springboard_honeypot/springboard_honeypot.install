@@ -1,0 +1,41 @@
+<?php
+
+/**
+ * @file
+ * Install, update and uninstall functions for springboard_honeypot module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function springboard_honeypot_schema() {
+  $schema['springboard_honeypot'] = array(
+    'description' => 'Table that stores failed attempts to submit a form.',
+    'fields' => array(
+      'uid' => array(
+        'description' => 'Foreign key to {users}.uid; uniquely identifies a Drupal user to whom this ACL data applies.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'ip' => array(
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'description' => 'Hostname of user that that triggered honeypot.',
+      ),
+      'timestamp' => array(
+        'description' => 'Date/time when the form submission failed, as Unix timestamp.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+    ),
+    'indexes' => array(
+      'uid' => array('uid'),
+      'ip' => array('ip'),
+      'timestamp' => array('timestamp'),
+    ),
+  );
+  return $schema;
+}

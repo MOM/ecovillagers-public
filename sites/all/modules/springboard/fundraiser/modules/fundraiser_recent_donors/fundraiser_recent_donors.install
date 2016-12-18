@@ -1,0 +1,77 @@
+<?php
+/**
+ * @file
+ * Table creation and module weight adjustment for recent opt-in donations.
+ */
+
+/**
+ * Implements hook_schema().
+ * 
+ * Creates the fundraiser_donation_opt_in_block and fundraiser_donor_opt_in tables
+ * which are used for tracking and display of opt-in donations.
+ */
+function fundraiser_recent_donors_schema() {
+  $schema['fundraiser_donor_opt_in'] = array(
+    'description' => t('Tracks which donations have been opted in for public display.'),
+    'fields' => array(
+      'sid' => array(
+        'description' => t('The webform submission ID.'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE),
+      'nid' => array( 
+        'description' => t('The donation form\'s node ID.'),
+        'type' => 'int',
+        'unsigned' => TRUE, 
+        'not null' => TRUE),
+      'did' => array( 
+        'description' => t('The donation ID; also known as the commerce order_id.'),
+        'type' => 'int',
+        'unsigned' => TRUE, 
+        'not null' => TRUE),
+      'created' => array(
+        'description' => t('Timestamp taken when the donor opted in.'),
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE),
+    ),
+    'primary key' => array('did'),
+  );
+
+  $schema['fundraiser_donation_opt_in_block'] = array(
+    'description' => t('Tracks node-specific settings for recent opt-in donation.'),
+    'fields' => array(
+      'nid' => array( 
+        'description' => t('The donation form\'s node ID.'),
+        'type' => 'int',
+        'unsigned' => TRUE, 
+        'not null' => TRUE),
+      'min_donation_amount' => array(
+        'description' => t('The minimum donation amount needed for an opt-in donation to be displayed.'),
+        'type' => 'float',
+        'size' => 'medium', 
+        'not null' => TRUE),
+      'visibility' => array(
+        'description' => t('Toggles whether opt-in donation tracking and display of recent donations are enabled.'),
+        'type' => 'int',
+        'size' => 'tiny',
+        'unsigned' => TRUE,
+        'not null' => TRUE),
+    ),
+    'primary key' => array('nid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_enable().
+ */
+function fundraiser_recent_donors_enable() {
+  // Ensure this module runs after commerce code executes so that a donation ID (aka order_id) 
+  // is already available when a donation is submitted.
+  db_update('system')
+    ->fields(array('weight' => 1000))
+    ->condition('type', 'module')
+    ->condition('name', 'fundraiser_recent_donors')
+    ->execute();
+}

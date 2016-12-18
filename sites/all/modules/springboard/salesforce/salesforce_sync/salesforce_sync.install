@@ -1,0 +1,109 @@
+<?php
+
+/**
+ * @file
+ * Install hooks and schema
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function salesforce_sync_schema() {
+  $schema['salesforce_sync_map'] = array(
+    'description' => 'Salesforce records to Drupal mappings',
+    'fields' => array(
+      'rmid' => array(
+        'description' => 'Record map id.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'mid' => array(
+        'description' => 'Object map id.',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'sfid' => array(
+        'description' => 'The Salesforce Id.',
+        'type' => 'varchar',
+        'length' => '50',
+        'not null' => TRUE,
+      ),
+      'drupal_id' => array(
+        'description' => 'The id of the Drupal object.',
+        'type' => 'varchar',
+        'length' => '50',
+        'not null' => TRUE,
+      ),
+      'module' => array(
+        'description' => 'Name of the module that implements the Drupal type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'delta' => array(
+        'description' => 'Name or id of the Drupal sub-type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+      'object_type' => array(
+        'description' => 'The Salesforce object type.',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('rmid'),
+    'indexes' => array(
+      'delta' => array('delta'),
+      'drupal_id' => array('drupal_id'),
+      'module' => array('module'),
+      'object_type' => array('object_type'),
+      'sfid' => array('sfid'),
+      'delta_drupal_module' => array(
+        'delta',
+        'drupal_id',
+        'module',
+      ),
+      'delta_drupal_object' => array(
+        'delta',
+        'drupal_id',
+        'object_type',
+      ),
+      'delta_drupal_module_object' => array(
+        'delta',
+        'drupal_id',
+        'module',
+        'object_type',
+      ),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Add indexes to tables.
+ */
+function salesforce_sync_update_7001() {
+  $ret = array();
+
+  db_drop_index('salesforce_sync_map', 'drupal_index');
+  db_add_index('salesforce_sync_map', 'delta_drupal_module_object',
+    array('delta', 'drupal_id', 'module', 'object_type'));
+  $ret[] = t('Rename index "drupal_index" to "delta_drupal_module_object" on {salesforce_sync_map} table.');
+
+  db_add_index('salesforce_sync_map', 'delta', array('delta'));
+  db_add_index('salesforce_sync_map', 'drupal_id', array('drupal_id'));
+  db_add_index('salesforce_sync_map', 'module', array('module'));
+  db_add_index('salesforce_sync_map', 'object_type', array('object_type'));
+  db_add_index('salesforce_sync_map', 'sfid', array('sfid'));
+  db_add_index('salesforce_sync_map', 'delta_drupal_module',
+    array('delta', 'drupal_id', 'module'));
+  db_add_index('salesforce_sync_map', 'delta_drupal_object',
+    array('delta', 'drupal_id', 'object_type'));
+  $ret[] = t('Added indexes to {salesforce_sync_map} table.');
+
+  return implode("\n", $ret);
+}

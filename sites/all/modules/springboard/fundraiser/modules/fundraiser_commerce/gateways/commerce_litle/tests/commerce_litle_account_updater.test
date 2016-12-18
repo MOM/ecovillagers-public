@@ -1,0 +1,79 @@
+<?php
+/**
+ * @file
+ * Unit tests for commerce_litle Account Updater class.
+ */
+
+class CommerceLitleAccountUpdaterUnitTest extends DrupalUnitTestCase {
+  public static function getInfo() {
+    return array(
+      'name' => 'Commerce Litle Account Updater Unit Tests',
+      'description' => 'Test the Litle payment gateway Account Updater.',
+      'group' => 'Commerce Litle',
+    );
+  }
+
+  /**
+   * Include the needed files.
+   */
+  public function setUp() {
+    parent::setUp();
+
+    module_load_include('php', 'commerce_litle', 'includes/CommerceLitleAccountUpdater');
+  }
+
+  public function testShouldExtendEnabled() {
+    $method_instance = array(
+      'base' => 'commerce_litle_cc',
+      'settings' => array(
+        'accountupdater_extend_sustainers' => TRUE,
+      ),
+    );
+
+    $au = new CommerceLitleAccountUpdater($method_instance);
+
+    $this->assertTrue($au->shouldExtendSustainers(), 'Should extend is true.');
+  }
+
+  public function testShouldExtendDisabled() {
+    $method_instance = array();
+
+    $au = new CommerceLitleAccountUpdater($method_instance);
+
+    $this->assertFalse($au->shouldExtendSustainers(), 'Should extend is false');
+  }
+
+  public function testAddOneMonth() {
+    $original = array(
+      'month' => 12,
+      'year' => 2014,
+    );
+    $expected = array(
+      'month' => 1,
+      'year' => 2015,
+    );
+    $au = new CommerceLitleAccountUpdater(array());
+
+    $actual = $au->getNewEndDate($original['year'], $original['month']);
+
+    $this->assertEqual($actual['year'], $expected['year'], 'Years match.');
+    $this->assertEqual($actual['month'], $expected['month'], 'Months match.');
+  }
+
+  public function testConvertExpDateString() {
+    $au = new CommerceLitleAccountUpdater(array());
+
+    $input = '1016';
+
+    $expected = array(
+      'month' => 10,
+      'year' => 2016,
+    );
+
+    $actual = $au->convertExpDateString($input);
+
+    $this->assertEqual($actual['year'], $expected['year'], 'Years match.');
+    $this->assertEqual($actual['month'], $expected['month'], 'Months match.');
+  }
+
+}

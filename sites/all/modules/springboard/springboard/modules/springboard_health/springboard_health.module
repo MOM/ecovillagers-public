@@ -1,0 +1,250 @@
+<?php
+/**
+ * @file
+ * Adds ability to track db health.
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function springboard_health_permission() {
+  return array(
+    'administer site health reports' => array(
+      'title' => t('Administer site health reports'),
+      'description' => t('Springboard self-tracking'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_health_menu() {
+  $items = array();
+
+  $items['admin/reports/springboard-health'] = array(
+    'type' => MENU_NORMAL_ITEM,
+    'title' => t('Springboard Health'),
+    'description' => t('View reports about your database.'),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_health_report_form'),
+    'access arguments' => array('administer site health reports'),
+  );
+  $items['admin/reports/springboard-health/report'] = array(
+    'title' => 'Springboard Health',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 0,
+  );
+  $items['admin/reports/springboard-health/settings'] = array(
+    'title' => 'Table Settings',
+    'description' => 'Configure the springboard health module.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_health_admin_settings'),
+    'access arguments' => array('administer site health reports'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1,
+
+  );
+  $items['admin/reports/springboard-health/email-settings'] = array(
+    'title' => 'Email Settings',
+    'description' => 'Configure the springboard health module.',
+    'page callback' => 'drupal_goto',
+    'page arguments' => array('admin/config/workflow/rules/reaction/manage/springboard_health_row_count_alert'),
+    'access arguments' => array('administer site health reports'),
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_PAGE,
+    'weight' => 2,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter
+ * Get our modules tabs to display on its actions settings page
+ */
+function springboard_health_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+
+  if(strpos($router_item['href'], 'admin/config/workflow/rules/reaction/manage/springboard_health_row_count_alert') !== FALSE ){
+    $data['tabs'][0]['output'][] = array(
+      '#theme' => 'menu_local_task',
+      '#link' => array(
+        'title' => t('Springboard Health'),
+        'href' => 'admin/reports/springboard-health/report',
+        'localized_options' => array(
+        ),
+      ),
+    );
+
+    $data['tabs'][0]['output'][] = array(
+      '#theme' => 'menu_local_task',
+      '#link' => array(
+        'title' => t('Table Settings'),
+        'href' => 'admin/reports/springboard-health/settings',
+        'localized_options' => array(
+        ),
+      ),
+    );
+
+    $data['tabs'][0]['output'][] = array(
+      '#theme' => 'menu_local_task',
+      '#active' => TRUE,
+      '#link' => array(
+        'title' => t('Email Settings'),
+        'href' => current_path(),
+        'localized_options' => array(
+        ),
+      ),
+    );
+
+    // Won't display without count > 1
+    if (!isset($data['tabs']['0']['count'])) {
+      $data['tabs']['0']['count'] =  3;
+    }
+    else {
+      $data['tabs']['0']['count'] = $data['tabs']['0']['count'] + 3;
+    }
+  }
+}
+
+/**
+ * DB table selection form;
+ * Allow selection of default database and default tables to monitor
+ */
+function springboard_health_admin_settings() {
+  
+  $form = array();
+  
+  $default = array(
+    'salesforce_log_batch' => 'salesforce_log_batch',
+    'salesforce_log_item' => 'salesforce_log_item',
+    'webform_submissions' => 'webform_submissions',
+    'secure_prepopulate_expired' => 'secure_prepopulate_expired',
+    'fundraiser_sustainers_log' => 'fundraiser_sustainers_log',
+  );
+
+  $tables = Database::getConnection()->schema()->findTables('%');
+  $form['springboard_health_tables'] = array(
+    '#type' => 'select',
+    '#title' => t('Select the tables that should be visible in the reports interface.'),
+    '#options' => $tables,
+    '#multiple' => TRUE,
+    '#required' => TRUE,
+    '#size' => 50,
+    '#default_value' => variable_get('springboard_health_tables', $default),
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+ * Implements hook_theme().
+ */
+function springboard_health_theme($existing, $type, $theme, $path) {
+  return array(
+    'springboard_health_table' => array(
+      'render element' => 'element'
+    ),
+  );
+}
+
+function theme_springboard_health_table($vars) {
+  $element = $vars['element'];
+  $rows = array();
+  foreach (element_children($element) as $key) {
+    $rows[] = array(
+      array('data' => $element[$key]['send']),
+      array('data' => $element[$key]['name']),
+      array('data' => $element[$key]['row_limit']),
+      array('data' => $element[$key]['current']),
+    );
+  }
+  $header = array(t('Send Report'), t('Table name'), t('Set notification row limit'), t('Current Size'));
+  return theme('table', array('header' => $header, 'rows' => $rows));
+}
+
+function springboard_health_report_form() {
+  $tables = variable_get('springboard_health_tables', 0);
+
+  $form['header'] = array(
+    '#markup' => t('Check "send report" to send emails when table count exceeds notification row limit'),
+    '#prefix' => '<p>',
+    '#suffixfix' => '</p>',
+
+  );
+  $form['health'] = array(
+    '#tree' => TRUE,
+    '#theme' => 'springboard_health_table',
+  );
+
+  foreach ($tables as $table) {
+    $select = db_select($table);
+    $size = $select->countQuery()->execute()->fetchField();
+
+    $values = db_query('SELECT * FROM {springboard_health} where tablename = :name', array(':name' => $table))->fetchAll();
+    $form['health'][$table]['send'] = array (
+     '#type' => 'checkbox',
+      '#default_value' => isset($values[0]->mail) ? $values[0]->mail : 0,
+      '#size' => 10
+    );
+    $form['health'][$table]['name'] = array(
+      '#markup' => $table,
+      '#size' => 10
+    );
+      $form['health'][$table]['row_limit'] = array(
+        '#type' => 'textfield',
+        '#default_value' => isset($values[0]->row_limit) ? $values[0]->row_limit : '',
+        '#size' => 30
+      );
+    $form['health'][$table]['current'] = array(
+      '#type' => 'markup',
+      '#markup' => $size,
+      '#size' => 10
+    );
+  }
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Submit'),
+  );
+  return $form;
+}
+
+function springboard_health_report_form_submit(&$form, &$form_state) {
+  db_delete('springboard_health')->execute();
+  $tables = $form_state['values']['health'];
+  foreach ($tables as $name => $values) {
+    $data = array(
+      'tablename' => $name,
+      'mail' => $values['send'],
+      'row_limit' => $values['row_limit'],
+    );
+    drupal_write_record('springboard_health', $data);
+  }
+}
+
+/**
+ * Implements hook_cron.
+ */
+function springboard_health_cron() {
+  if (module_exists("rules")) {
+    $rule = rules_config_load('springboard_health_row_count_alert');
+    if (!empty($rule->active) && in_array('springboard_health_row_count_exceeded', $rule->events())) {
+      springboard_health_status_check();
+    }
+  }
+}
+
+/**
+ * Checks status and invokes rules event if db limit is exceeded.
+ */
+function springboard_health_status_check() {
+  $result = db_query('SELECT * FROM {springboard_health} where mail = 1');
+  foreach ($result as $table) {
+    $select = db_select($table->tablename);
+    $size = $select->countQuery()->execute()->fetchField();
+    if ((!empty($table->row_limit) && $size > $table->row_limit) && module_exists("rules")) {
+      rules_invoke_event("springboard_health_row_count_exceeded", $table->tablename, $size, $table->row_limit);
+      watchdog('springboard health', 'Row count limit has been exceeded on table %table. Current size: %tablesize, limit: %limit', array('%table' => $table->tablename, '%tablesize' => $size, '%limit' => $table->row_limit), WATCHDOG_WARNING);
+    }
+  }
+}

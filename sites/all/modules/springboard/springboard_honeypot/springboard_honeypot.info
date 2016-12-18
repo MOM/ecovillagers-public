@@ -1,0 +1,5 @@
+name = Springboard Honeypot
+description = "Implement Honeypot hooks for Springboard."
+core = 7.x
+configure = admin/config/content/springboard-honeypot
+package = "Spam control"

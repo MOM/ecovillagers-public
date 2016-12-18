@@ -1,0 +1,35 @@
+<?php
+
+/**
+ * @file
+ * Provides on install, enable, and update hook: Hashes Springbaord supported module dirs to detect hacked code.
+ */
+
+function springboard_version_enable() {
+  _springboard_version_hash_modules();
+}
+
+/**
+ * Helper function, create a new set of hashes on install or update.
+ * NOTE: ALWAYS RUN THIS AS PART OF UPDATE HOOKS.
+ */
+function _springboard_version_hash_modules() {
+  $springboard_tracked = springboard_version_info();
+  $hashes = '';
+  foreach ($springboard_tracked as $module => $version) {
+    $hashes .= $module . '=' . _springboard_version_hash_module($module) . "\n";
+  }
+
+  // Write hashes to file.
+  $directory = file_default_scheme() . '://springboard_version';
+  file_prepare_directory($directory, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
+  $filename = drupal_realpath($directory);
+  if (is_writable($filename)) {
+    $filename .= '/springboard_version.hashes';
+    file_put_contents($filename, $hashes);
+  }
+  else {
+    drupal_set_message(t('Unable to write hash file on enable. Please check permissions at @file',
+      array('@file' => $filename)), 'error');
+  }
+}

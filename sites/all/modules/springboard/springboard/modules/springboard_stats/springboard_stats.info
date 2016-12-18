@@ -1,0 +1,10 @@
+name = Springboard Statistics
+description = Adds statistical tally fields to Springboard donation forms and webforms.
+package = Jackson River Springboard
+core = 7.x
+version = 7.x-4.x-dev
+
+dependencies[] = springboard
+dependencies[] = fundraiser
+
+files[] = springboard_stats.fields.inc

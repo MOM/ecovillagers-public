@@ -1,0 +1,51 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_genmap
+ */
+
+module_load_include('test', 'salesforce_mapping', 'tests/salesforce_mapping');
+
+/**
+ * Tests basic set up for mapping salesforce objects to webforms.
+ */
+class SalesforceGenmapTestCase extends SalesforceMappingTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Salesforce Generic Mapping API',
+      'description' => 'Ensure that the salesforce_genmap module functions properly.',
+      'group' => 'Salesforce Generic Mapping',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'salesforce_genmap',
+    ));
+
+    // Create an admin user.
+    $permissions = array_merge($permissions, array(
+      'access content',
+      'administer site configuration',
+      'administer content types',
+      'administer nodes',
+      'administer users',
+    ));
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+}

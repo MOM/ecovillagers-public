@@ -1,0 +1,8 @@
+name = Salesforce Sync UI
+description = User interface layer for the Salesforce sync module.
+package = Salesforce
+core = 7.x
+version = 7.x-3.x-dev
+
+dependencies[] = salesforce_sync
+dependencies[] = salesforce_genmap

@@ -1,0 +1,71 @@
+[![Build Status](https://travis-ci.org/JacksonRiver/springboard.png?branch=7.x-4.x)](https://travis-ci.org/JacksonRiver/springboard)
+
+# Springboard Install Profile
+
+The Springboard install profile makes it easy to get started with a fundraising
+website or to experiment with Springboard quickly and easily.
+
+For full installation instructions, see the GoSpringboard.com documentation.
+
+
+## Build
+
+### Auto Build (recommended)
+
+It would be best to have the Springboard codebase built automatically using
+[drush make]() with the build profile provided by
+[Springboard-Build](https://github.com/JacksonRiver/Springboard-Build).
+
+
+### Manual Build
+
+When checking out this repository, it must be in a directory labeled `sbsetup`.
+Unless otherwise specified, git will place this project in a directory called
+`springboard` which will prevent this profile from working.
+
+**Dependencies:**
+ * **[springboard_modules](https://github.com/JacksonRiver/springboard_modules):**
+   Custom modules created specifically for the Springboard project.
+ * **contributed modules:** The list of required modules can be found in the
+   `sbsetup.info` file of this project.  If compatibility issues occur, refer to
+   the precise version numbers from
+   [Springboard-Build](https://github.com/JacksonRiver/Springboard-Build)
+   project's build file.
+ * **Salesforce toolkit:** Checkout the tool kit from
+   [its repository](git://github.com/developerforce/Force.com-Toolkit-for-PHP)
+   into libraries.
+
+
+#### Patches
+
+_All patches are automatically applied when a `springboard` instance is built
+using [Springboard Build](https://github.com/JacksonRiver/Springboard-Build)._
+
+**Fix issue where validation not failing when it should (node/1951700):**
+  * http://drupal.org/files/key_validation-1951700_0.patch
+
+
+**Fix ajax validation issue (node/1951722):**
+  * http://drupal.org/files/salesforce_mapping-01-extract_default_values-1951722_0.patch
+  * http://drupal.org/files/salesforce_mapping-02-extract_default_values-1951722.patch
+
+This is considered a critical issue because the issue prevented the ability to
+build tests on the form. The issue was caused by having each ajax request
+validate the entire form, which would cause simpletest to abort.
+
+
+**Salesforce Mapping form enhancements:**
+  * (node/1951728): http://drupal.org/files/salesforce-externalId_to_idLookup-1951728.patch
+  * (node/1951730): http://drupal.org/files/salesforce_mapping-flexible_table_alter.patch
+  * (node/1951734): http://drupal.org/files/salesforce_mapping-descriptive_select-1951734.patch
+
+These are not strictly considered bugs, however, 1951728 is considered required
+because the usage of `externalId` is too restrictive, and 1951730 allows an
+easier ability to modify the form through the use of hook_alters.
+
+
+**Add simpletests to Salesforce Mapping:**
+  * (node/1951744): http://drupal.org/files/salesforce_mapping-tests-1951744.patch
+
+This is considered critical in order to provide a streamlined development
+environment.

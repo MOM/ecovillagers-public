@@ -1,0 +1,25 @@
+name = Salesforce Sync
+description = Synchronization controller for Salesforce.
+package = Salesforce
+core = 7.x
+version = 7.x-3.x-dev
+
+files[] = includes/salesforce_sync.item.inc
+files[] = includes/salesforce_sync.sync.inc
+files[] = includes/salesforce_sync.tokens.inc
+
+files[] = tests/salesforce_sync.admin.test
+files[] = tests/salesforce_sync.entities.test
+files[] = tests/salesforce_sync.salesforce_queue.test
+files[] = tests/salesforce_sync.sync.test
+files[] = tests/salesforce_sync.test
+files[] = tests/salesforce_sync.token.test
+files[] = tests/salesforce_sync.sync_token.test
+files[] = tests/salesforce_sync.formats.test
+files[] = tests/salesforce_sync.sync_truncate.test
+
+dependencies[] = entity
+dependencies[] = salesforce
+dependencies[] = salesforce_soap
+
+configure = admin/config/salesforce/salesforce-sync

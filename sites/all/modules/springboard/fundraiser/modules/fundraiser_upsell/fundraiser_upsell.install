@@ -1,0 +1,238 @@
+<?php
+/**
+ * @file
+ * Install, update, and uninstall functions for the fundraiser_upsell module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function fundraiser_upsell_install() {
+  // @todo Why do we need to mess with the weight?
+  db_query("UPDATE {system} SET weight = 5 WHERE name = 'fundraiser_upsell'");
+
+  // Set the default content.
+  variable_set('fundraiser_upsell_default_content',
+    '<h3>Become a</h3><h2>MONTHLY DONOR</h2>
+    <p>Your donation will repeat every month.</p>'
+  );
+
+  variable_set('fundraiser_upsell_default_content_disclaimer',
+    '<em>By signing up to be a monthly donor,
+     your credit card will be charged the monthly amount
+      you specify beginning next month.</em>'
+  );
+
+  variable_set('fundraiser_upsell_thank_you_content',
+    'Thank you for your recurring donation!'
+  );
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function fundraiser_upsell_uninstall() {
+
+  variable_del('fundraiser_upsell_default_content');
+  variable_del('fundraiser_upsell_default_content_disclaimer');
+  variable_del('fundraiser_upsell_thank_you_content');
+  variable_del('fundraiser_upsell_default_charge_time');
+  variable_del('fundraiser_upsell_rejection_lifetime');
+  variable_del('fundraiser_upsell_debug');
+  variable_del('fundraiser_upsell_acceptance_enabled');
+  variable_del('fundraiser_upsell_rejection_enabled');
+  variable_del('fundraiser_upsell_brackets');
+  variable_del('fundraiser_upsell_acceptance_lifetime');
+
+  // Remove the email wrappers settings for upsell and upsell enabled nodes.
+  if (module_exists('email_wrappers')) {
+    email_wrappers_mail_delete_all('fundraiser_upsell');
+  }
+}
+
+/**
+ * Implements hook_schema().
+ */
+function fundraiser_upsell_schema() {
+  $schema['fundraiser_upsell'] = array(
+    'description' => 'Stores data for fundraiser_upsell donation form nodes.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'The node id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'enabled' => array(
+        'description' => 'A boolean indicating if upsell is enabled for node',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'size' => 'tiny',
+      ),
+      'charge_time' => array(
+        'description' => 'A string describing when to charge the first upsell donation in the series.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => 'one_month',
+      ),
+      'content' => array(
+        'description' => 'Node specific content to place on the upsell form',
+        'type' => 'text',
+        'not null' => TRUE,
+      ),
+      'footer' => array(
+        'description' => 'Node specific footer to place on the upsell modal below the form.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'thankyou' => array(
+        'description' => 'Node specific content to place on the upsell modal thank you page.',
+        'type' => 'text',
+        'not null' => TRUE,
+      ),
+      'class' => array(
+        'description' => 'Additional class(es) to pass to the theme.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'modal_width' => array(
+        'description' => 'The modal width in pixels.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 400,
+      ),
+      'modal_height' => array(
+        'description' => 'The modal height in pixels.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 300,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+
+  $schema['fundraiser_upsell_donation'] = array(
+    'description' => 'Stores data for fundraiser_upsell donations.',
+    'fields' => array(
+      'did' => array(
+        'description' => 'The donation ID.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'A string describing what this donation is in regards to upsell.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'related_did' => array(
+        'description' => 'The donation ID that is related to this donation.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('did'),
+  );
+
+  return $schema;
+}
+
+/**
+ * Removes the decoupled field, as all upsells are now decoupled.
+ */
+function fundraiser_upsell_update_7000() {
+  db_drop_field('fundraiser_upsell', 'decoupled');
+  variable_del('fundraiser_upsell_decouple');
+}
+
+/**
+ * Adds the footer and thankyou fields so individual forms can have them.
+ */
+function fundraiser_upsell_update_7001() {
+  $footer_field = array(
+    'description' => 'Node specific footer to place on the upsell modal below the form.',
+    'type' => 'varchar',
+    'length' => 255,
+    'not null' => TRUE,
+    'default' => '',
+    'initial' => '',
+  );
+
+  db_add_field('fundraiser_upsell', 'footer', $footer_field);
+
+  $thankyou_field = array(
+    'description' => 'Node specific content to place on the upsell modal thank you page.',
+    'type' => 'text',
+    'not null' => TRUE,
+    'initial' => '',
+  );
+
+  db_add_field('fundraiser_upsell', 'thankyou', $thankyou_field);
+}
+
+/**
+ * Drops the campaign_id field.
+ */
+function fundraiser_upsell_update_7002() {
+  db_drop_field('fundraiser_upsell', 'campaign_id');
+}
+
+/**
+ * Create the fundraiser_upsell_donation table.
+ */
+function fundraiser_upsell_update_7003() {
+  $schema = array(
+    'description' => 'Stores data for fundraiser_upsell donations.',
+    'fields' => array(
+      'did' => array(
+        'description' => 'The donation ID.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'type' => array(
+        'description' => 'A string describing what this donation is in regards to upsell.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ),
+      'related_did' => array(
+        'description' => 'The donation ID that is related to this donation.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array('did'),
+  );
+
+  db_create_table('fundraiser_upsell_donation', $schema);
+}
+
+/**
+ * Add the charge_time field.
+ */
+function fundraiser_upsell_update_7004() {
+  $field = array(
+    'description' => 'A string describing when to charge the first upsell donation in the series.',
+    'type' => 'varchar',
+    'length' => 255,
+    'not null' => TRUE,
+    'default' => 'one_month',
+    'initial' => 'one_month',
+  );
+
+  db_add_field('fundraiser_upsell', 'charge_time', $field);
+}

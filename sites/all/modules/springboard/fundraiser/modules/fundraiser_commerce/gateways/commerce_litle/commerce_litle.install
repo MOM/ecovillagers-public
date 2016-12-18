@@ -1,0 +1,170 @@
+<?php
+
+/**
+ * @file
+ * Ensures users have cURL enabled prior to installation.
+ */
+
+/**
+ * Implements hook_requirements().
+ */
+function commerce_litle_requirements($phase) {
+
+  $requirements = array();
+  // Ensure translations don't break at install time.
+  $t = get_t();
+
+  if ($phase == 'runtime') {
+    $requirements['commerce_litle_sdk'] = array(
+      'title' => $t('Litle SDK for PHP'),
+      'description' => $t('The Commerce Litle module requires the Litle SDK for PHP.'),
+      'value' => $t('Present'),
+      'severtiy' => REQUIREMENT_OK,
+    );
+
+    if (!libraries_get_path('litle')) {
+      $requirements['commerce_litle_sdk']['description'] = $t(
+          'The Commerce Litle module requires the !sdk in a valid library location. Consider installing it using the included make file.',
+          array(
+            '!sdk' => l($t('Litle SDK for PHP'), 'https://github.com/LitleCo/litle-sdk-for-php'),
+          ));
+      $requirements['commerce_litle_sdk']['value'] = 'Missing';
+      $requirements['commerce_litle_sdk']['severity'] = REQUIREMENT_ERROR;
+
+    }
+  }
+
+  // Skip the requirements check if SimpleTest is installed to avoid multiple
+  // cURL rows.
+  if (module_exists('simpletest')) {
+    return $requirements;
+  }
+
+  $has_curl = function_exists('curl_init');
+  $requirements['commerce_litle_curl'] = array(
+    'title' => $t('cURL'),
+    'value' => $has_curl ? $t('Enabled') : $t('Not found'),
+  );
+  if (!$has_curl) {
+    $requirements['commerce_litle_curl'] += array(
+      'severity' => REQUIREMENT_ERROR,
+      'description' => $t("Litle Gateways requires the PHP <a href='!curl_url'>cURL</a> library.", array('!curl_url' => 'http://php.net/manual/en/curl.setup.php')),
+    );
+  }
+
+  if (module_exists('commerce_cardonfile')) {
+    $path = drupal_get_path('module', 'commerce_cardonfile') . '/commerce_cardonfile.info';
+    $info = drupal_parse_info_file($path);
+    if (isset($info['version']) && version_compare($info['version'], '7.x-2', '<=')) {
+      $requirements['commerce_litle_cardonfile'] = array(
+        'title' => $t('Card on File'),
+        'value' => $t('Less than 2.x'),
+        'severity' => REQUIREMENT_ERROR,
+        'description' => $t("Litle now requires Card on File 2.x"),
+      );
+    }
+  }
+
+  return $requirements;
+}
+
+/**
+ * Implements hook_schema().
+ */
+function commerce_litle_schema() {
+  $schema['commerce_litle_fraud'] = array(
+    'description' => 'Track responses from Threat Metrix.',
+    'fields' => array(
+      'rid' => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key',
+      ),
+      'order_id' => array(
+        'type' => 'int',
+        'not null' => FALSE,
+        'description' => 'Commerce order id',
+      ),
+      'litle_txn_id' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => FALSE,
+      ),
+      'response_time' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'description' => 'Timestamp of response',
+      ),
+      'avs_result' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => FALSE,
+        'description' => 'Three digit approval code',
+      ),
+      'device_review_status' => array(
+        'type' => 'varchar',
+        'length' => '24',
+        'not null' => FALSE,
+        'description' => 'Possible values are pass, fail, review, invalid_session, and unavailable',
+      ),
+      'device_reputation_score' => array(
+        'type' => 'int',
+        'not null' => FALSE,
+        'description' => 'Fraud score -100 to 100',
+      ),
+      'message' => array(
+        'type' => 'varchar',
+        'length' => '512',
+        'not null' => FALSE,
+        'description' => 'Approve, decline status',
+      ),
+     'mark_reviewed' => array(
+        'type' => 'int',
+        'not null' => FALSE,
+        'size' => 'tiny',
+        'description' => 'Checkbox to denote review status',
+      ),
+    ),
+    'primary key' => array('rid'),
+  );
+  return $schema;
+}
+
+function commerce_litle_update_7001() {
+  drupal_install_schema('commerce_litle');
+}
+/*
+ * alter db tables
+ */
+function commerce_litle_update_7002() {
+  // Rename the timestamp column to changed.
+  db_change_field('commerce_litle_fraud', 'litle_txn_id', 'litle_txn_id', array(
+    'type' => 'text',
+    'not null' => FALSE,
+    'size' => 'big',
+  ));
+  db_change_field('commerce_litle_fraud', 'message', 'message', array(
+    'type' => 'varchar',
+    'length' => '512',
+    'not null' => FALSE,
+    'description' => 'Approve, decline status',
+    )
+  );
+}
+
+/**
+ * Rebuild the registry to find the new account updater class.
+ */
+function commerce_litle_update_7003() {
+  registry_rebuild();
+}
+
+/**
+ * Remove unused variables now that Commerce Litle uses the libraries module.
+ */
+function commerce_litle_update_7004() {
+  variable_del('commerce_litle_sdk_path');
+  variable_del('commerce_litle_sdk_mode');
+  registry_rebuild();
+}

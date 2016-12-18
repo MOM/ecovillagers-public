@@ -1,0 +1,560 @@
+<?php
+
+/**
+ * @file
+ * Tests for mapping webform integration with queuing.
+ */
+
+module_load_include('test', 'salesforce_genmap', 'tests/webform/webform');
+
+/**
+ * Tests integrating webform mapping into queuing.
+ */
+class SalesforceWebformSalesforceQueueTestCase extends SalesforceWebformTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Webform Map Queuing',
+      'description' => 'Ensure that the webform queue componant functions properly.',
+      'group' => 'Salesforce Generic Mapping',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'salesforce_sync',
+      'salesforce_soap',
+      'salesforce_queue',
+      'salesforce_log',
+      'fundraiser',
+    ));
+    parent::setUp($modules, $permissions);
+
+    // Create webforms.
+    $this->webform1 = $this->createWebform();
+    $this->webform2 = $this->createWebform();
+
+    // Map some Salesforce fields to the webforms.
+    $this->mapWebform($this->webform1->nid);
+    $this->mapWebform($this->webform2->nid, TRUE);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    // Delete the webform node.
+    node_delete($this->webform2->nid);
+    node_delete($this->webform1->nid);
+
+    parent::tearDown();
+  }
+
+  /**
+   * Tests the VBO refresh item action for webform submissions.
+   */
+  public function testVBOItemRefresh() {
+    $edit = array(
+      'submitted[first_name]' => 'ExampleFirstName',
+      'submitted[last_name]' => 'ExampleLastName',
+      'submitted[email]' => 'webform2@email.com',
+    );
+
+    // Create a new submission.  The webform2 map has already been configured
+    // with a dedupe field so this should end up queued as an UPSERT.
+    $this->drupalPost($this->webformPath('submission', $this->webform2->nid), $edit, 'Submit');
+    $this->assertText('your submission has been received', 'There was not an obvious error submitting UPSERT.');
+
+    // Pull the item out and make sure it matches expectations.
+    $item = $this->fetchQueueItem();
+
+    $this->assertEqual($item['sobject']->fields['LastName'], 'ExampleLastName', 'Contact has a last name.');
+
+    // Much with the object to simulate a failure.
+    $item['sobject']->fields['FirstName'] = 'FirstNameChanged';
+    $item['sobject']->fields['LastName'] = '';
+    $item['sobject'] = json_encode($item['sobject']);
+    drupal_write_record('salesforce_queue', $item, array('item_id'));
+
+    // Process this queue item.
+    $this->salesforceConnect();
+    $processor = salesforce_queue_load_processor();
+    $processor->process();
+
+    // Grab the item again.
+    $item = $this->fetchQueueItem();
+
+    // Assert the item did fail.
+    $this->assertEqual($item['queue'], 'retry', 'Contact failed to export and is now in retry queue.');
+
+    // Assert item still has no last name.
+    $this->assertEqual($item['sobject']->fields['LastName'], '', 'Contact has no last name.');
+    $this->assertEqual($item['sobject']->fields['FirstName'], 'FirstNameChanged', 'Contact first name still altered.');
+
+    // Create and log in a user that has access to the queue log report.
+    $this->privileged_user = $this->drupalCreateUser(array(
+      'view salesforce batch logs',
+      ));
+    $this->drupalLogin($this->privileged_user);
+    $this->drupalGet('admin/reports/salesforce/queue');
+
+    $this->assertNoOptionSelected('edit-operation', 'action::salesforce_queue_salesforce_queue_item_refresh_item_action', 'Refresh VBO action exists but is not selected.');
+
+    $edit = array(
+      'operation' => 'action::salesforce_queue_salesforce_queue_item_refresh_item_action',
+      'views_bulk_operations[0]' => '1',
+    );
+    $this->drupalPost('admin/reports/salesforce/queue', $edit, 'Execute');
+    $this->drupalPost(NULL, NULL, 'Confirm');
+
+    $this->assertText('Performed Refresh item on 1 item.', 'The text "Performed Refresh item on 1 item." appears on the queue report page.');
+
+    // Fetch the item one last ime.
+    $item = $this->fetchQueueItem();
+
+    // Assert the item did fail.
+    $this->assertEqual($item['queue'], 'new', 'Contact moved back to new queue.');
+    $this->assertEqual($item['sobject']->fields['LastName'], 'ExampleLastName', 'Last name reverted to original value.');
+    $this->assertEqual($item['sobject']->fields['FirstName'], 'ExampleFirstName', 'First name reverted to original value.');
+  }
+
+  /**
+   * Tests that information was sent to the queue properly.
+   */
+  public function testQueueSystem() {
+    $edit = array(
+      'submitted[first_name]' => 'ExampleFirstName',
+      'submitted[last_name]' => 'ExampleLastName',
+      'submitted[email]' => 'webform2@email.com',
+    );
+
+    // Create a new submission.  The webform2 map has already been configured
+    // with a dedupe field so this should end up queued as an UPSERT.
+    $this->drupalPost($this->webformPath('submission', $this->webform2->nid), $edit, 'Submit');
+    $this->assertText('your submission has been received', 'There was not an obvious error submitting UPSERT.');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'UPSERT');
+    $this->deleteQueueItem($item);
+
+    // Create a new submission using webform1, whose map does not have a dedupe
+    // field so so it should end up queued as CREATE.  We will not delete the
+    // item after this test in order to test having the item while still in the
+    // queue.
+    $edit['submitted[email]'] = 'webform1@email.com';
+    $this->drupalPost($this->webformPath('submission', $this->webform1->nid), $edit, 'Submit');
+    $this->assertText('your submission has been received', 'There was not an obvious error submitting CREATE.');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'CREATE');
+
+    // Modify the newly created submission.  Because the original submission was
+    // not processed and sent to Salesforce, this should end up queued as
+    // CREATE.
+    $edit['submitted[email]'] = 'webform1.update1@email.com';
+    $edit_path = $this->webformPath('edit_submission', $this->webform1->nid, $item['drupal_id']);
+    $this->drupalPost($edit_path, $edit, 'Submit');
+    $this->assertText('Submission updated', 'There was not an obvious error submitting UPDATE.');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'CREATE');
+    $this->deleteQueueItem($item);
+
+    // Modify the submission after the queue item has been removed from the
+    // queue.  Because there is not an associated mapped record in Salesforce
+    // nor a dedupe field, this should end up queued as CREATE.
+    $edit['submitted[email]'] = 'webform1.update2@email.com';
+    $this->drupalPost($edit_path, $edit, 'Submit');
+    $this->assertText('Submission updated', 'There was not an obvious error submitting UPDATE.');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'CREATE');
+
+    // Process this queue item so a real record is created in Salesforce.
+    $this->salesforceConnect();
+    $processor = salesforce_queue_load_processor();
+    $processor->process();
+
+    // Modify the submission.  Now that there is a map to Salesforce and not a
+    // dedupe field, this should end up queued as UPDATE.
+    $edit['submitted[email]'] = 'webform1.update3@email.com';
+    $this->drupalPost($edit_path, $edit, 'Submit');
+    $this->assertText('Submission updated', 'There was not an obvious error submitting UPDATE.');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'UPDATE');
+    $this->deleteQueueItem($item);
+
+    // Delete the submission and no queue item should be created because DELETE
+    // sync option is disabled by default.
+    $edit_path = $this->webformPath('delete_submission', $this->webform1->nid, $item['drupal_id']);
+    $this->drupalPost($edit_path, array(), 'Delete');
+    $this->assertText('Submission deleted', 'There was not an obvious error submitting DELETE.');
+    $queue = salesforce_queue_load();
+    $queue_count = $queue->numberOfItems();
+    $this->assertTrue(empty($queue_count), 'No queue item created because site has disabled queuing DELETE.');
+
+    // Enable ability to set a DELETE sync option and set option on map.
+    $this->enableDeleteSync('webform');
+    $webform_edit = array('map_config[sync_options][delete]' => TRUE);
+    $this->drupalPost($this->webformPath('salesforce_map', $this->webform1->nid), $webform_edit, 'Save');
+    $this->assertText('The map was saved successfully.', 'The DELETE sync option was saved.');
+
+    // Create a new webform submission and send it to Salesforce.
+    $edit['submitted[email]'] = 'webform1.sub2@email.com';
+    $this->drupalPost($this->webformPath('submission', $this->webform1->nid), $edit, 'Submit');
+    $this->assertText('your submission has been received', 'There was not an obvious error submitting CREATE.');
+    $processor->process();
+
+    // Delete the submission, it should end up queued as DELETE.
+    $edit_path = $this->webformPath('delete_submission', $this->webform1->nid, ($item['drupal_id'] + 1));
+    $this->drupalPost($edit_path, array(), 'Delete');
+    $this->assertText('Submission deleted', 'There was not an obvious error submitting DELETE.');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'DELETE');
+    $this->deleteQueueItem($item);
+
+    // Go back to the webform with the dedupe field.  Create and modify an item.
+    // This should end up queued as UPSERT.
+    $this->drupalPost($this->webformPath('submission', $this->webform2->nid), $edit, 'Submit');
+    $this->assertText('your submission has been received', 'There was not an obvious error submitting UPSERT.');
+    $item = $this->fetchQueueItem();
+    $edit_path = $this->webformPath('edit_submission', $this->webform2->nid, $item['drupal_id']);
+    $edit['submitted[email]'] = 'webform2.update1@email.com';
+    $this->drupalPost($edit_path, $edit, 'Submit');
+    $this->assertText('Submission updated', 'There was not an obvious error submitting UPDATE.');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'UPSERT');
+
+    // Process this queue item so a real record is created in Salesforce.
+    $processor->process();
+
+    // Modify the submission.  Now that there is a map to Salesforce it should
+    // be queued as UPDATE even thought there is a dedupe field.
+    $edit['submitted[email]'] = 'webform2.update2@email.com';
+    $this->drupalPost($edit_path, $edit, 'Submit');
+    $this->assertText('Submission updated', 'There was not an obvious error submitting UPDATE.');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'UPDATE');
+
+    // Remove the new record from Salesforce.
+    $processor->deleteNewSfRecords();
+  }
+
+  /**
+   * Test dequeuing when the webform has been deleted for Salesforce Queue.
+   */
+  public function testNodeDeleteDequeue() {
+    $this->generateSubmissions($this->webform1->nid);
+    $this->generateSubmissions($this->webform2->nid);
+    node_delete($this->webform1->nid);
+    $query = db_select('salesforce_queue', 'sq')
+      ->fields('sq')
+      ->condition('module', 'webform')
+      ->condition('delta', 'webform:' . $this->webform1->nid);
+    $result = $query->execute();
+    $unexpected_records = array();
+    foreach ($result as $record) {
+      $unexpected_records[] = $record->item_id;
+    }
+    $this->assertTrue(empty($unexpected_records), 'Dequeuing all items from a deleted node worked on Salesforce Queue.');
+  }
+
+  /**
+   * Test that a requeued item create request is converted to an update request.
+   *
+   * Test to ensure that when an exported item is re-added to the Salesforce
+   * Queue as a CREATE operation that it gets correctly converted to an
+   * UPDATE to prevent creating a duplicate record in Salesforce.
+   */
+  public function testCreateToUpdateOperationConverstion() {
+    $edit = array(
+      'submitted[first_name]' => 'ExampleFirstName',
+      'submitted[last_name]' => 'ExampleLastName',
+      'submitted[email]' => 'webform2@email.com',
+    );
+
+    // Initial export should be a CREATE operation.
+    $this->drupalPost($this->webformPath('submission', $this->webform1->nid), $edit, 'Submit');
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'CREATE');
+
+    // Process this queue item so a real record is created in Salesforce.
+    $this->salesforceConnect();
+    $processor = salesforce_queue_load_processor();
+    $processor->process();
+
+    // Requeue the item as a CREATE and make sure it's operation is switched to
+    // UPDATE because it has already been exported and a record exists in the
+    // sync_map table.
+    module_load_include('inc', 'webform', 'includes/webform.submissions');
+    $submission = webform_get_submission($this->webform1->nid, 1);
+
+    // Simulate re-adding to queue as a create (insert) operation.
+    salesforce_genmap_send_object_to_queue('webform', 'insert', $this->webform1, 1, $submission, $this->webform1->nid);
+
+    // Get the queue item and assert the operation has been changed to
+    // UPDATE.
+    $item = $this->fetchQueueItem();
+    $this->compareSubmissionQueueItem($edit, $item, 'UPDATE');
+
+    // Remove the new record from Salesforce.
+    $processor->deleteNewSfRecords();
+  }
+
+  /**
+   * Helper tests sync options are obeyed for the controlling queue.
+   */
+  public function testSyncOptions() {
+    // Set up a webform.
+    $this->salesforceConnect();
+    $webform = $this->createWebform();
+    $this->drupalGet($this->webformPath('salesforce_map', $webform->nid));
+    $this->drupalPostAjax(NULL, array('salesforce_object_info[salesforce_object_type]' => 'Contact'), 'salesforce_object_info[salesforce_object_type]');
+    $this->drupalPost(NULL, array(), 'Save');
+
+    // testQueueSystem() tests when all are selected.  Lets run through the
+    // tests when different combinations are selected.
+    $edit = array(
+      'submitted[first_name]' => 'ExampleFirstName',
+      'submitted[last_name]' => 'ExampleLastName',
+      'submitted[email]' => 'example@email.com',
+    );
+    $combinations = array(
+      array(
+        'map_config[sync_options][insert]' => TRUE,
+        'map_config[sync_options][update]' => FALSE,
+      ),
+      array(
+        'map_config[sync_options][insert]' => FALSE,
+        'map_config[sync_options][update]' => TRUE,
+      ),
+      array(
+        'map_config[sync_options][insert]' => TRUE,
+        'map_config[sync_options][update]' => FALSE,
+        'map_config[sync_options][delete]' => FALSE,
+      ),
+      array(
+        'map_config[sync_options][insert]' => FALSE,
+        'map_config[sync_options][update]' => TRUE,
+        'map_config[sync_options][delete]' => FALSE,
+      ),
+      array(
+        'map_config[sync_options][insert]' => FALSE,
+        'map_config[sync_options][update]' => FALSE,
+        'map_config[sync_options][delete]' => TRUE,
+      ),
+      array(
+        'map_config[sync_options][insert]' => TRUE,
+        'map_config[sync_options][update]' => TRUE,
+        'map_config[sync_options][delete]' => FALSE,
+      ),
+      array(
+        'map_config[sync_options][insert]' => FALSE,
+        'map_config[sync_options][update]' => TRUE,
+        'map_config[sync_options][delete]' => TRUE,
+      ),
+      array(
+        'map_config[sync_options][insert]' => TRUE,
+        'map_config[sync_options][update]' => FALSE,
+        'map_config[sync_options][delete]' => TRUE,
+      ),
+    );
+    $queue = salesforce_queue_load();
+    foreach ($combinations as $sync_config) {
+      if (isset($sync_config['map_config[sync_options][delete]'])) {
+        // Set up ability to configure DELETE on sync.
+        $this->enableDeleteSync('webform');
+      }
+      else {
+        // Disable ability to configure DELETE on sync.
+        $this->disableDeleteSync();
+      }
+
+      // Set the sync config options for this loop.
+      $this->drupalGet($this->webformPath('salesforce_map', $webform->nid));
+      $this->drupalPost(NULL, $sync_config, 'Save');
+
+      // Create submission.
+      $this->drupalGet($this->webformPath('submission', $webform->nid));
+      $this->drupalPost(NULL, $edit, 'Submit');
+      $queue_item = $queue->claimItem();
+      if ($sync_config['map_config[sync_options][insert]']) {
+        $this->assertTrue(is_object($queue_item), 'Submission configured to sync on insert was sent to queue.');
+        // Simulate processed item.
+        $queue->releaseItem($queue_item);
+        $queue->deleteItem($queue_item);
+      }
+      else {
+        $this->assertFalse($queue_item, 'Submission not configured to sync on insert was not sent to the queue.');
+      }
+
+      // Get the SID of the new submission.
+      $matches = array();
+      preg_match('/sid=([0-9]+)/', $this->getUrl(), $matches);
+      $sid = $matches[1];
+
+      // Update submission.
+      $this->drupalGet($this->webformPath('edit_submission', $webform->nid, $sid));
+      $this->drupalPost(NULL, array(), 'Submit');
+      $queue_item = $queue->claimItem();
+      if ($sync_config['map_config[sync_options][update]']) {
+        $this->assertTrue(is_object($queue_item), 'Submission configured to sync on update was not sent to queue.');
+        // Simulate processed item.
+        $queue->releaseItem($queue_item);
+        $queue->deleteItem($queue_item);
+      }
+      else {
+        $this->assertFalse($queue_item, 'Submission not configured to sync on update was sent to the queue.');
+      }
+
+      // Delete submission.
+      $this->drupalGet($this->webformPath('delete_submission', $webform->nid, $sid));
+      $this->drupalPost(NULL, array(), 'Delete');
+      $queue_item = $queue->claimItem();
+      if (variable_get('salesforce_genmap_allow_delete_sync', FALSE)) {
+        if ($sync_config['map_config[sync_options][delete]']) {
+          $this->assertTrue(is_object($queue_item), 'Submission configured to sync on delete was not sent to queue.');
+          // Simulate processed item.
+          $queue->releaseItem($queue_item);
+          $queue->deleteItem($queue_item);
+        }
+        else {
+          $this->assertFalse($queue_item, 'Submission not configured to sync on delete was sent to the queue.');
+        }
+      }
+      else {
+        $this->assertTrue(empty($queue_item), 'Delete not queued when delete sync is disallowed.');
+      }
+    }
+  }
+
+  /**
+   * Test the requeuing of associated queue items when the map is updated.
+   */
+  public function testUpdateMapUpdateQueue() {
+    // Create several submissions.
+    $submission_count = 2;
+    $count = $submission_count;
+    while ($count > 0) {
+      $count--;
+      $edit = array(
+        'submitted[first_name]' => $this->randomName(),
+        'submitted[last_name]' => $this->randomName(),
+        'submitted[email]' => $this->randomName() . '@email.com',
+      );
+      $this->drupalGet($this->webformPath('submission', $this->webform2->nid));
+      $this->drupalPost(NULL, $edit, 'Submit');
+      $this->assertText('your submission has been received', 'There was not an obvious error making a submission.');
+    }
+
+    // Verify what is in the queue before updating the map.
+    $queue = salesforce_queue_load();
+    $original_items = $queue->claimBatch();
+    $queue->releaseBatch($original_items[0]->leaseKey);
+    $this->assertEqual($submission_count, $queue->numberOfItems(), 'Found correct number of items in the queue before updating the map.');
+
+    // Update the map.
+    $edit = array('salesforce_dedupe_field' => 'none');
+    $this->drupalGet($this->webformPath('salesforce_map', $this->webform2->nid));
+    $this->drupalPost(NULL, $edit, 'Save');
+    $this->assertText('The map was saved successfully.', 'Saving posted correctly.');
+
+    // Verify what is in the queue after updating the map.
+    $updated_items = $queue->claimBatch();
+    $queue->releaseBatch($updated_items[0]->leaseKey);
+    $this->assertEqual($submission_count, $queue->numberOfItems(), 'Found correct number of items in the queue after updating the map.');
+
+    // Make the item_id the key of the items.
+    $original = array();
+    $updated = array();
+    foreach ($original_items as $key => $item) {
+      $original[$item->item_id] = $item;
+      $updated[$updated_items[$key]->item_id] = $updated_items[$key];
+    }
+
+    // Compare items.
+    foreach ($original as $item_id => $item) {
+      $new_item = $updated[$item_id];
+      $this->assertEqual('UPSERT', $item->operation, 'Original item had correct operation.');
+      $this->assertEqual('CREATE', $new_item->operation, 'New item has correct operation.');
+      $this->assertEqual('Email', $item->dedupe_field, 'Original item had correct dedupe_field');
+      $this->assertTrue(empty($new_item->dedupe_field), 'New item has correct dedupe_field');
+      $this->assertEqual($item->sobject->fields['Email'], $new_item->sobject->fields['Email'], 'The original and queue items are identical.');
+    }
+  }
+
+  /**
+   * Helper to return the last queued item.
+   */
+  public function fetchQueueItem() {
+    $queue = salesforce_queue_load();
+    $item = $queue->claimItem();
+    $this->assertFalse(empty($item), 'Data was received from the queue.');
+    if (empty($item)) {
+      return array();
+    }
+    $queue->releaseItem($item);
+    return $this->formatQueueItem($item);
+  }
+
+  /**
+   * Helper to delete a queue item.
+   */
+  public function deleteQueueItem($item) {
+    if (!empty($item)) {
+      db_delete('salesforce_queue')
+      ->condition('item_id', $item['item_id'])
+      ->execute();
+    }
+  }
+
+  /**
+   * Make different queue items have the same format.
+   */
+  public function formatQueueItem($item) {
+    $this->assertTrue(is_object($item->sobject), 'Received an expected queue item for Salesforce Queue.');
+    if (is_object($item)) {
+      $item = (array) $item;
+      return $item;
+    }
+    return array();
+  }
+
+  /**
+   * Helper to compare what was submitted to what was sent to the queue.
+   */
+  public function compareSubmissionQueueItem($edit, $item, $operation) {
+    if (!empty($item)) {
+      $this->assertTrue(isset($item['operation']), 'Operation not set in SalesforceQueue queue item.');
+      if (isset($item['operation'])) {
+        $this->assertEqual($item['operation'], $operation, 'The ' . $item['operation'] . ' operation was sent to SalesforceQueue when ' . $operation . ' was expected.');
+      }
+      $this->assertTrue((isset($item['sobject']) && is_object($item['sobject'])), 'sObject not built properly in SalesforceQueue queue item.');
+      if (isset($item['sobject']) && is_object($item['sobject'])) {
+        $fields = $item['sobject']->fields;
+        $this->assertEqual($fields['FirstName'], $edit['submitted[first_name]'], 'first_name SalesforceQueue data matches submitted data.');
+        $this->assertEqual($fields['LastName'], $edit['submitted[last_name]'], 'last_name SalesforceQueue data matches submitted data.');
+        $this->assertEqual($fields['Email'], $edit['submitted[email]'], 'email SalesforceQueue data matches submitted data.');
+      }
+    }
+  }
+
+  /**
+   * Helper to generate random submissions for a given webform.
+   */
+  public function generateSubmissions($nid, $count = 25) {
+    $i = 0;
+    while ($i <= $count) {
+      $i++;
+      $edit = array(
+        'submitted[first_name]' => $this->randomName(),
+        'submitted[last_name]' => $this->randomName(),
+        'submitted[email]' => $this->randomName() . '@' . $this->randomName() . '.com',
+      );
+      $this->drupalGet('node/' . $nid);
+      $this->drupalPost(NULL, $edit, 'Submit');
+    }
+  }
+}

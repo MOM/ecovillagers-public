@@ -1,0 +1,1177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sage Payments WSDL Interface
+  URL: https://gateway.sagepayments.net/web_services/wsVault/wsVault.asmx?WSDL
+  Generated on 2013-12-01 13:45:00 +0000.
+-->
+<wsdl:definitions xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/" xmlns:tm="http://microsoft.com/wsdl/mime/textMatching/" xmlns:soapenc="http://schemas.xmlsoap.org/soap/encoding/" xmlns:mime="http://schemas.xmlsoap.org/wsdl/mime/" xmlns:tns="https://www.sagepayments.net/web_services/wsVault/wsVault" xmlns:s1="https://www.sagepayments.net/web_services/wsVault/wsVault/AbstractTypes" xmlns:s="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://schemas.xmlsoap.org/wsdl/soap12/" xmlns:http="http://schemas.xmlsoap.org/wsdl/http/" targetNamespace="https://www.sagepayments.net/web_services/wsVault/wsVault" xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/">
+  <wsdl:types>
+    <s:schema elementFormDefault="qualified" targetNamespace="https://www.sagepayments.net/web_services/wsVault/wsVault">
+      <s:element name="INSERT_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="DATA" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="INSERT_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="INSERT_DATAResult" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="UPDATE_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="DATA" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="UPDATE_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="1" maxOccurs="1" name="UPDATE_DATAResult" type="s:boolean" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="SELECT_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="SELECT_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="SELECT_DATAResult" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="DELETE_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="DELETE_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="1" maxOccurs="1" name="DELETE_DATAResult" type="s:boolean" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VERIFY_SERVICE">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="VERIFY_SERVICEResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="1" maxOccurs="1" name="VERIFY_SERVICEResult" type="s:boolean" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="INSERT_CREDIT_CARD_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="CARDNUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="EXPIRATION_DATE" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="INSERT_CREDIT_CARD_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="INSERT_CREDIT_CARD_DATAResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="UPDATE_CREDIT_CARD_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="CARDNUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="EXPIRATION_DATE" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="UPDATE_CREDIT_CARD_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="UPDATE_CREDIT_CARD_DATAResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="UPDATE_CREDIT_CARD_EXPIRATION_DATE">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="EXPIRATION_DATE" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="UPDATE_CREDIT_CARD_EXPIRATION_DATEResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="UPDATE_CREDIT_CARD_EXPIRATION_DATEResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="INSERT_BULK_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="DATA" type="tns:ArrayOfString" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:complexType name="ArrayOfString">
+        <s:sequence>
+          <s:element minOccurs="0" maxOccurs="unbounded" name="string" nillable="true" type="s:string" />
+        </s:sequence>
+      </s:complexType>
+      <s:element name="INSERT_BULK_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="INSERT_BULK_DATAResult" type="tns:ArrayOfBULK_RESULT" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:complexType name="ArrayOfBULK_RESULT">
+        <s:sequence>
+          <s:element minOccurs="0" maxOccurs="unbounded" name="BULK_RESULT" type="tns:BULK_RESULT" />
+        </s:sequence>
+      </s:complexType>
+      <s:complexType name="BULK_RESULT">
+        <s:sequence>
+          <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+          <s:element minOccurs="0" maxOccurs="1" name="Data" type="s:string" />
+        </s:sequence>
+      </s:complexType>
+      <s:element name="SELECT_BULK_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="tns:ArrayOfString" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="SELECT_BULK_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="SELECT_BULK_DATAResult" type="tns:ArrayOfBULK_RESULT" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="INSERT_VIRTUAL_CHECK_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="ROUTING_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="ACCOUNT_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ACCT_TYPE" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="INSERT_VIRTUAL_CHECK_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="INSERT_VIRTUAL_CHECK_DATAResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="UPDATE_VIRTUAL_CHECK_DATA">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="M_ID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="M_KEY" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="GUID" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="ROUTING_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="ACCOUNT_NUMBER" type="s:string" />
+            <s:element minOccurs="0" maxOccurs="1" name="C_ACCT_TYPE" type="s:string" />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="UPDATE_VIRTUAL_CHECK_DATAResponse">
+        <s:complexType>
+          <s:sequence>
+            <s:element minOccurs="0" maxOccurs="1" name="UPDATE_VIRTUAL_CHECK_DATAResult">
+              <s:complexType>
+                <s:sequence>
+                  <s:element ref="s:schema" />
+                  <s:any />
+                </s:sequence>
+              </s:complexType>
+            </s:element>
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="string" nillable="true" type="s:string" />
+      <s:element name="boolean" type="s:boolean" />
+      <s:element name="DataSet" nillable="true">
+        <s:complexType>
+          <s:sequence>
+            <s:element ref="s:schema" />
+            <s:any />
+          </s:sequence>
+        </s:complexType>
+      </s:element>
+      <s:element name="ArrayOfBULK_RESULT" nillable="true" type="tns:ArrayOfBULK_RESULT" />
+    </s:schema>
+    <s:schema targetNamespace="https://www.sagepayments.net/web_services/wsVault/wsVault/AbstractTypes">
+      <s:import namespace="http://schemas.xmlsoap.org/soap/encoding/" />
+      <s:complexType name="StringArray">
+        <s:complexContent mixed="false">
+          <s:restriction base="soapenc:Array">
+            <s:sequence>
+              <s:element minOccurs="0" maxOccurs="unbounded" name="String" type="s:string" />
+            </s:sequence>
+          </s:restriction>
+        </s:complexContent>
+      </s:complexType>
+    </s:schema>
+  </wsdl:types>
+  <wsdl:message name="INSERT_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:INSERT_DATA" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:INSERT_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:UPDATE_DATA" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:UPDATE_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:SELECT_DATA" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:SELECT_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="DELETE_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:DELETE_DATA" />
+  </wsdl:message>
+  <wsdl:message name="DELETE_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:DELETE_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="VERIFY_SERVICESoapIn">
+    <wsdl:part name="parameters" element="tns:VERIFY_SERVICE" />
+  </wsdl:message>
+  <wsdl:message name="VERIFY_SERVICESoapOut">
+    <wsdl:part name="parameters" element="tns:VERIFY_SERVICEResponse" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_CREDIT_CARD_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:INSERT_CREDIT_CARD_DATA" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_CREDIT_CARD_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:INSERT_CREDIT_CARD_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:UPDATE_CREDIT_CARD_DATA" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:UPDATE_CREDIT_CARD_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_EXPIRATION_DATESoapIn">
+    <wsdl:part name="parameters" element="tns:UPDATE_CREDIT_CARD_EXPIRATION_DATE" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_EXPIRATION_DATESoapOut">
+    <wsdl:part name="parameters" element="tns:UPDATE_CREDIT_CARD_EXPIRATION_DATEResponse" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_BULK_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:INSERT_BULK_DATA" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_BULK_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:INSERT_BULK_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_BULK_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:SELECT_BULK_DATA" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_BULK_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:SELECT_BULK_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_VIRTUAL_CHECK_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:INSERT_VIRTUAL_CHECK_DATA" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_VIRTUAL_CHECK_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:INSERT_VIRTUAL_CHECK_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_VIRTUAL_CHECK_DATASoapIn">
+    <wsdl:part name="parameters" element="tns:UPDATE_VIRTUAL_CHECK_DATA" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_VIRTUAL_CHECK_DATASoapOut">
+    <wsdl:part name="parameters" element="tns:UPDATE_VIRTUAL_CHECK_DATAResponse" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="DATA" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="DATA" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:boolean" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:string" />
+  </wsdl:message>
+  <wsdl:message name="DELETE_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="DELETE_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:boolean" />
+  </wsdl:message>
+  <wsdl:message name="VERIFY_SERVICEHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VERIFY_SERVICEHttpGetOut">
+    <wsdl:part name="Body" element="tns:boolean" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_CREDIT_CARD_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="CARDNUMBER" type="s:string" />
+    <wsdl:part name="EXPIRATION_DATE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_CREDIT_CARD_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="CARDNUMBER" type="s:string" />
+    <wsdl:part name="EXPIRATION_DATE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_EXPIRATION_DATEHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="EXPIRATION_DATE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_EXPIRATION_DATEHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_BULK_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="DATA" type="s1:StringArray" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_BULK_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:ArrayOfBULK_RESULT" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_BULK_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s1:StringArray" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_BULK_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:ArrayOfBULK_RESULT" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_VIRTUAL_CHECK_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="ROUTING_NUMBER" type="s:string" />
+    <wsdl:part name="ACCOUNT_NUMBER" type="s:string" />
+    <wsdl:part name="C_ACCT_TYPE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_VIRTUAL_CHECK_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_VIRTUAL_CHECK_DATAHttpGetIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="ROUTING_NUMBER" type="s:string" />
+    <wsdl:part name="ACCOUNT_NUMBER" type="s:string" />
+    <wsdl:part name="C_ACCT_TYPE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_VIRTUAL_CHECK_DATAHttpGetOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="DATA" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="DATA" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:boolean" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:string" />
+  </wsdl:message>
+  <wsdl:message name="DELETE_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="DELETE_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:boolean" />
+  </wsdl:message>
+  <wsdl:message name="VERIFY_SERVICEHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="VERIFY_SERVICEHttpPostOut">
+    <wsdl:part name="Body" element="tns:boolean" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_CREDIT_CARD_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="CARDNUMBER" type="s:string" />
+    <wsdl:part name="EXPIRATION_DATE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_CREDIT_CARD_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="CARDNUMBER" type="s:string" />
+    <wsdl:part name="EXPIRATION_DATE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_EXPIRATION_DATEHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="EXPIRATION_DATE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_CREDIT_CARD_EXPIRATION_DATEHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_BULK_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="DATA" type="s1:StringArray" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_BULK_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:ArrayOfBULK_RESULT" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_BULK_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s1:StringArray" />
+  </wsdl:message>
+  <wsdl:message name="SELECT_BULK_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:ArrayOfBULK_RESULT" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_VIRTUAL_CHECK_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="ROUTING_NUMBER" type="s:string" />
+    <wsdl:part name="ACCOUNT_NUMBER" type="s:string" />
+    <wsdl:part name="C_ACCT_TYPE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="INSERT_VIRTUAL_CHECK_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_VIRTUAL_CHECK_DATAHttpPostIn">
+    <wsdl:part name="M_ID" type="s:string" />
+    <wsdl:part name="M_KEY" type="s:string" />
+    <wsdl:part name="GUID" type="s:string" />
+    <wsdl:part name="ROUTING_NUMBER" type="s:string" />
+    <wsdl:part name="ACCOUNT_NUMBER" type="s:string" />
+    <wsdl:part name="C_ACCT_TYPE" type="s:string" />
+  </wsdl:message>
+  <wsdl:message name="UPDATE_VIRTUAL_CHECK_DATAHttpPostOut">
+    <wsdl:part name="Body" element="tns:DataSet" />
+  </wsdl:message>
+  <wsdl:portType name="wsVaultSoap">
+    <wsdl:operation name="INSERT_DATA">
+      <wsdl:input message="tns:INSERT_DATASoapIn" />
+      <wsdl:output message="tns:INSERT_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_DATA">
+      <wsdl:input message="tns:UPDATE_DATASoapIn" />
+      <wsdl:output message="tns:UPDATE_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_DATA">
+      <wsdl:input message="tns:SELECT_DATASoapIn" />
+      <wsdl:output message="tns:SELECT_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="DELETE_DATA">
+      <wsdl:input message="tns:DELETE_DATASoapIn" />
+      <wsdl:output message="tns:DELETE_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VERIFY_SERVICE">
+      <wsdl:input message="tns:VERIFY_SERVICESoapIn" />
+      <wsdl:output message="tns:VERIFY_SERVICESoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_CREDIT_CARD_DATA">
+      <wsdl:input message="tns:INSERT_CREDIT_CARD_DATASoapIn" />
+      <wsdl:output message="tns:INSERT_CREDIT_CARD_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_DATA">
+      <wsdl:input message="tns:UPDATE_CREDIT_CARD_DATASoapIn" />
+      <wsdl:output message="tns:UPDATE_CREDIT_CARD_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_EXPIRATION_DATE">
+      <wsdl:input message="tns:UPDATE_CREDIT_CARD_EXPIRATION_DATESoapIn" />
+      <wsdl:output message="tns:UPDATE_CREDIT_CARD_EXPIRATION_DATESoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_BULK_DATA">
+      <wsdl:input message="tns:INSERT_BULK_DATASoapIn" />
+      <wsdl:output message="tns:INSERT_BULK_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_BULK_DATA">
+      <wsdl:input message="tns:SELECT_BULK_DATASoapIn" />
+      <wsdl:output message="tns:SELECT_BULK_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_VIRTUAL_CHECK_DATA">
+      <wsdl:input message="tns:INSERT_VIRTUAL_CHECK_DATASoapIn" />
+      <wsdl:output message="tns:INSERT_VIRTUAL_CHECK_DATASoapOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_VIRTUAL_CHECK_DATA">
+      <wsdl:input message="tns:UPDATE_VIRTUAL_CHECK_DATASoapIn" />
+      <wsdl:output message="tns:UPDATE_VIRTUAL_CHECK_DATASoapOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:portType name="wsVaultHttpGet">
+    <wsdl:operation name="INSERT_DATA">
+      <wsdl:input message="tns:INSERT_DATAHttpGetIn" />
+      <wsdl:output message="tns:INSERT_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_DATA">
+      <wsdl:input message="tns:UPDATE_DATAHttpGetIn" />
+      <wsdl:output message="tns:UPDATE_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_DATA">
+      <wsdl:input message="tns:SELECT_DATAHttpGetIn" />
+      <wsdl:output message="tns:SELECT_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="DELETE_DATA">
+      <wsdl:input message="tns:DELETE_DATAHttpGetIn" />
+      <wsdl:output message="tns:DELETE_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VERIFY_SERVICE">
+      <wsdl:input message="tns:VERIFY_SERVICEHttpGetIn" />
+      <wsdl:output message="tns:VERIFY_SERVICEHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_CREDIT_CARD_DATA">
+      <wsdl:input message="tns:INSERT_CREDIT_CARD_DATAHttpGetIn" />
+      <wsdl:output message="tns:INSERT_CREDIT_CARD_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_DATA">
+      <wsdl:input message="tns:UPDATE_CREDIT_CARD_DATAHttpGetIn" />
+      <wsdl:output message="tns:UPDATE_CREDIT_CARD_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_EXPIRATION_DATE">
+      <wsdl:input message="tns:UPDATE_CREDIT_CARD_EXPIRATION_DATEHttpGetIn" />
+      <wsdl:output message="tns:UPDATE_CREDIT_CARD_EXPIRATION_DATEHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_BULK_DATA">
+      <wsdl:input message="tns:INSERT_BULK_DATAHttpGetIn" />
+      <wsdl:output message="tns:INSERT_BULK_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_BULK_DATA">
+      <wsdl:input message="tns:SELECT_BULK_DATAHttpGetIn" />
+      <wsdl:output message="tns:SELECT_BULK_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_VIRTUAL_CHECK_DATA">
+      <wsdl:input message="tns:INSERT_VIRTUAL_CHECK_DATAHttpGetIn" />
+      <wsdl:output message="tns:INSERT_VIRTUAL_CHECK_DATAHttpGetOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_VIRTUAL_CHECK_DATA">
+      <wsdl:input message="tns:UPDATE_VIRTUAL_CHECK_DATAHttpGetIn" />
+      <wsdl:output message="tns:UPDATE_VIRTUAL_CHECK_DATAHttpGetOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:portType name="wsVaultHttpPost">
+    <wsdl:operation name="INSERT_DATA">
+      <wsdl:input message="tns:INSERT_DATAHttpPostIn" />
+      <wsdl:output message="tns:INSERT_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_DATA">
+      <wsdl:input message="tns:UPDATE_DATAHttpPostIn" />
+      <wsdl:output message="tns:UPDATE_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_DATA">
+      <wsdl:input message="tns:SELECT_DATAHttpPostIn" />
+      <wsdl:output message="tns:SELECT_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="DELETE_DATA">
+      <wsdl:input message="tns:DELETE_DATAHttpPostIn" />
+      <wsdl:output message="tns:DELETE_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="VERIFY_SERVICE">
+      <wsdl:input message="tns:VERIFY_SERVICEHttpPostIn" />
+      <wsdl:output message="tns:VERIFY_SERVICEHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_CREDIT_CARD_DATA">
+      <wsdl:input message="tns:INSERT_CREDIT_CARD_DATAHttpPostIn" />
+      <wsdl:output message="tns:INSERT_CREDIT_CARD_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_DATA">
+      <wsdl:input message="tns:UPDATE_CREDIT_CARD_DATAHttpPostIn" />
+      <wsdl:output message="tns:UPDATE_CREDIT_CARD_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_EXPIRATION_DATE">
+      <wsdl:input message="tns:UPDATE_CREDIT_CARD_EXPIRATION_DATEHttpPostIn" />
+      <wsdl:output message="tns:UPDATE_CREDIT_CARD_EXPIRATION_DATEHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_BULK_DATA">
+      <wsdl:input message="tns:INSERT_BULK_DATAHttpPostIn" />
+      <wsdl:output message="tns:INSERT_BULK_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_BULK_DATA">
+      <wsdl:input message="tns:SELECT_BULK_DATAHttpPostIn" />
+      <wsdl:output message="tns:SELECT_BULK_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_VIRTUAL_CHECK_DATA">
+      <wsdl:input message="tns:INSERT_VIRTUAL_CHECK_DATAHttpPostIn" />
+      <wsdl:output message="tns:INSERT_VIRTUAL_CHECK_DATAHttpPostOut" />
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_VIRTUAL_CHECK_DATA">
+      <wsdl:input message="tns:UPDATE_VIRTUAL_CHECK_DATAHttpPostIn" />
+      <wsdl:output message="tns:UPDATE_VIRTUAL_CHECK_DATAHttpPostOut" />
+    </wsdl:operation>
+  </wsdl:portType>
+  <wsdl:binding name="wsVaultSoap" type="tns:wsVaultSoap">
+    <soap:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="INSERT_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/INSERT_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/UPDATE_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/SELECT_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="DELETE_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/DELETE_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VERIFY_SERVICE">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/VERIFY_SERVICE" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_CREDIT_CARD_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/INSERT_CREDIT_CARD_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/UPDATE_CREDIT_CARD_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_EXPIRATION_DATE">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/UPDATE_CREDIT_CARD_EXPIRATION_DATE" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_BULK_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/INSERT_BULK_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_BULK_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/SELECT_BULK_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_VIRTUAL_CHECK_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/INSERT_VIRTUAL_CHECK_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_VIRTUAL_CHECK_DATA">
+      <soap:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/UPDATE_VIRTUAL_CHECK_DATA" style="document" />
+      <wsdl:input>
+        <soap:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="wsVaultSoap12" type="tns:wsVaultSoap">
+    <soap12:binding transport="http://schemas.xmlsoap.org/soap/http" />
+    <wsdl:operation name="INSERT_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/INSERT_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/UPDATE_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/SELECT_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="DELETE_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/DELETE_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VERIFY_SERVICE">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/VERIFY_SERVICE" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_CREDIT_CARD_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/INSERT_CREDIT_CARD_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/UPDATE_CREDIT_CARD_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_EXPIRATION_DATE">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/UPDATE_CREDIT_CARD_EXPIRATION_DATE" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_BULK_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/INSERT_BULK_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_BULK_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/SELECT_BULK_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_VIRTUAL_CHECK_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/INSERT_VIRTUAL_CHECK_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_VIRTUAL_CHECK_DATA">
+      <soap12:operation soapAction="https://www.sagepayments.net/web_services/wsVault/wsVault/UPDATE_VIRTUAL_CHECK_DATA" style="document" />
+      <wsdl:input>
+        <soap12:body use="literal" />
+      </wsdl:input>
+      <wsdl:output>
+        <soap12:body use="literal" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="wsVaultHttpGet" type="tns:wsVaultHttpGet">
+    <http:binding verb="GET" />
+    <wsdl:operation name="INSERT_DATA">
+      <http:operation location="/INSERT_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_DATA">
+      <http:operation location="/UPDATE_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_DATA">
+      <http:operation location="/SELECT_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="DELETE_DATA">
+      <http:operation location="/DELETE_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VERIFY_SERVICE">
+      <http:operation location="/VERIFY_SERVICE" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_CREDIT_CARD_DATA">
+      <http:operation location="/INSERT_CREDIT_CARD_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_DATA">
+      <http:operation location="/UPDATE_CREDIT_CARD_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_EXPIRATION_DATE">
+      <http:operation location="/UPDATE_CREDIT_CARD_EXPIRATION_DATE" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_BULK_DATA">
+      <http:operation location="/INSERT_BULK_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_BULK_DATA">
+      <http:operation location="/SELECT_BULK_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_VIRTUAL_CHECK_DATA">
+      <http:operation location="/INSERT_VIRTUAL_CHECK_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_VIRTUAL_CHECK_DATA">
+      <http:operation location="/UPDATE_VIRTUAL_CHECK_DATA" />
+      <wsdl:input>
+        <http:urlEncoded />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:binding name="wsVaultHttpPost" type="tns:wsVaultHttpPost">
+    <http:binding verb="POST" />
+    <wsdl:operation name="INSERT_DATA">
+      <http:operation location="/INSERT_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_DATA">
+      <http:operation location="/UPDATE_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_DATA">
+      <http:operation location="/SELECT_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="DELETE_DATA">
+      <http:operation location="/DELETE_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="VERIFY_SERVICE">
+      <http:operation location="/VERIFY_SERVICE" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_CREDIT_CARD_DATA">
+      <http:operation location="/INSERT_CREDIT_CARD_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_DATA">
+      <http:operation location="/UPDATE_CREDIT_CARD_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_CREDIT_CARD_EXPIRATION_DATE">
+      <http:operation location="/UPDATE_CREDIT_CARD_EXPIRATION_DATE" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_BULK_DATA">
+      <http:operation location="/INSERT_BULK_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="SELECT_BULK_DATA">
+      <http:operation location="/SELECT_BULK_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="INSERT_VIRTUAL_CHECK_DATA">
+      <http:operation location="/INSERT_VIRTUAL_CHECK_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="UPDATE_VIRTUAL_CHECK_DATA">
+      <http:operation location="/UPDATE_VIRTUAL_CHECK_DATA" />
+      <wsdl:input>
+        <mime:content type="application/x-www-form-urlencoded" />
+      </wsdl:input>
+      <wsdl:output>
+        <mime:mimeXml part="Body" />
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+  <wsdl:service name="wsVault">
+    <wsdl:port name="wsVaultSoap" binding="tns:wsVaultSoap">
+      <soap:address location="https://gateway.sagepayments.net/web_services/wsVault/wsVault.asmx" />
+    </wsdl:port>
+    <wsdl:port name="wsVaultSoap12" binding="tns:wsVaultSoap12">
+      <soap12:address location="https://gateway.sagepayments.net/web_services/wsVault/wsVault.asmx" />
+    </wsdl:port>
+    <wsdl:port name="wsVaultHttpGet" binding="tns:wsVaultHttpGet">
+      <http:address location="https://gateway.sagepayments.net/web_services/wsVault/wsVault.asmx" />
+    </wsdl:port>
+    <wsdl:port name="wsVaultHttpPost" binding="tns:wsVaultHttpPost">
+      <http:address location="https://gateway.sagepayments.net/web_services/wsVault/wsVault.asmx" />
+    </wsdl:port>
+  </wsdl:service>
+</wsdl:definitions>

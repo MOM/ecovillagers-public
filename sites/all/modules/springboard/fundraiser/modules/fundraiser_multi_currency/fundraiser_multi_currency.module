@@ -1,0 +1,8 @@
+<?php
+/**
+ * @file
+ * This module is deprecated.
+ *
+ * This file is left so fundraiser can safely uninstall this module.
+ * Eventually this fill will get removed.
+ */

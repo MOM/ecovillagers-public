@@ -1,0 +1,41 @@
+{ "commerce_payment_authnet_aim" : {
+    "LABEL" : "Authorize.Net AIM - Credit Card",
+    "PLUGIN" : "reaction rule",
+    "REQUIRES" : [ "commerce_payment" ],
+    "ON" : [ "commerce_payment_methods" ],
+    "DO" : [
+      { "commerce_payment_enable_authnet_aim" : {
+          "commerce_order" : [ "commerce-order" ],
+          "payment_method" : { "value" : {
+              "method_id" : "authnet_aim",
+              "settings" : {
+                "login" : "",
+                "tran_key" : "",
+                "txn_mode" : "developer",
+                "txn_type" : "auth_capture",
+                "card_types" : {
+                  "visa" : 0,
+                  "mastercard" : 0,
+                  "amex" : 0,
+                  "discover" : 0,
+                  "dc" : 0,
+                  "dci" : 0,
+                  "cb" : 0,
+                  "jcb" : 0,
+                  "maestro" : 0,
+                  "visaelectron" : 0,
+                  "laser" : 0,
+                  "solo" : 0,
+                  "switch" : 0
+                },
+                "cardonfile" : 1,
+                "email_customer" : 0,
+                "log" : { "request" : "request", "response" : "response" }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}

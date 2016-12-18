@@ -1,0 +1,221 @@
+<?php
+/**
+ * @file
+ * Fundraiser module web tests, test creating and submitting a form.
+ */
+
+// Include the setup test class.
+module_load_include('test', 'fundraiser', 'tests/fundraiser.setup');
+
+/**
+ * Setup and tear down web class. Does nothing else.
+ */
+class FundraiserWebformFunctionalTest extends FundraiserSetup {
+
+  /**
+   * Implements getInfo(). Declares this test class to fundraiser testing.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser Webform functional tests',
+      'description' => 'Tests fundraiser webform behavior.',
+      'group' => 'Fundraiser',
+    );
+  }
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp($addtional_modules = array()) {
+    // hijack mail system
+    variable_set('mail_system', array('default-system' => 'TestingMailSystem'));
+
+    // Call the parent to set all of the base modules up.
+    $additional_modules = array(
+      'webform_confirmations', // For token testing.
+      'email_wrappers',
+      'ctools',
+    );
+    parent::setUp($additional_modules);
+  }
+
+  // tests
+  public function testFundraiserWebform() {
+    $permissions = array(
+      'administer site configuration',
+      'administer fundraiser',
+      'create webform content',
+      'edit own webform content',
+      'create email_wrapper content',
+      'edit own email_wrapper content',
+      'access all webform results',
+      'create donation_form content',
+      'edit any donation_form content',
+      'configure webform emails',
+    );
+    $this->checkPermissions(array('create donation_form content', 'edit any donation_form content'), TRUE);
+    $this->privileged_user = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->privileged_user);
+
+    // set up donation form
+
+    $node->default_amount = 20; // Set a different default than normal.
+    $created_node = $this->createDonationForm($node);
+    $node = node_load($created_node->nid);
+    $this->drupalGet('node/' . $node->nid);
+    // create email wrapper node 2 (success)
+    $settings = array(
+      'nid' => $node->nid,
+      'wrapper_nid' => 2,
+      'title' => 'Donation Successful',
+      'subject' => 'Donation successful',
+      'from_email' => 'donationsuccess@example.com',
+      'from_name' => 'Donation Successful',
+      'html_message' => 'Your donation was successful (HTML) first_name:[donation:first_name] last_name:[donation:last_name] address:[donation:address] city:[donation:city] state:[donation:state] zip:[donation:zip] last four:[donation:card_number]',
+      'text_message' => 'Your donation was successful (text) first_name:[donation:first_name] last_name:[donation:last_name] address:[donation:address] city:[donation:city] state:[donation:state] zip:[donation:zip] last four:[donation:card_number]',
+      'send_on_settings' => 1, // send on donation success.
+      'mail_component' => $this->getMailComponentCid($node),
+    );
+
+    $this->createEmailWrapper($settings);
+    $this->createWebformEmail($settings);
+    $this->drupalGet('node/' . $node->nid . '/webform/emails/1');
+
+    // create email wrapper node 3 (fail)
+    $settings = array(
+      'nid' => $node->nid,
+      'wrapper_nid' => 3,
+      'title' => 'Donation Failed',
+      'subject' => 'Donation failed',
+      'from_email' => 'donationfailed@example.com',
+      'from_name' => 'Donation failed',
+      'html_message' => 'Your donation failed (HTML)',
+      'text_message' => 'Your donation failed (text)',
+      'send_on_settings' => 2, // send on donation fail.
+      'mail_component' => $this->getMailComponentCid($node),
+    );
+    $this->createEmailWrapper($settings);
+    $this->createWebformEmail($settings);
+    $this->drupalGet('node/' . $node->nid . '/webform/emails/2');
+
+
+    // submit donation form (successful)
+    $donation_settings = array(
+      'submitted[donor_information][first_name]' => 'Keyser',
+      'submitted[donor_information][last_name]' => 'Soze',
+      'submitted[donor_information][mail]' => 'example@example.com',
+      'submitted[billing_information][address]' => '12345 test dr',
+      'submitted[billing_information][address_line_2]' => $this->randomName(5),
+      'submitted[billing_information][city]' => 'Greensboro',
+    );
+    $this->submitDonation($node->nid, $donation_settings);
+    $mails = $this->drupalGetMails();
+    $mail_numbers_legit = (count($mails) == 1);
+    $this->assertTrue($mail_numbers_legit, t('Mail count legit after successful donation'));
+    $to_legit = ($mails[0]['to'] == 'example@example.com');
+    $this->assertTrue($to_legit, t('Recipient address correct'));
+    $from_legit = ($mails[0]['from'] == '"Donation Successful" <donationsuccess@example.com>');
+    $this->assertTrue($from_legit, t('From address correct'));
+    $send_legit = ($mails[0]['send'] == 1);
+    $this->assertTrue($send_legit, t('Send status correct'));
+
+    $subject_legit = ($mails[0]['subject'] == 'Donation successful');
+    $this->assertTrue($subject_legit, t('Mail subject correct'));
+
+    // confirm order token replacement
+    $this->assertTrue(strpos($mails[0]['body'], 'first_name:Keyser'), t('Token replacement: donation first name replaced correctly'));
+    $this->assertTrue(strpos($mails[0]['body'], 'last_name:Soze'), t('Token replacement: donation last name replaced correctly'));
+    $this->assertTrue(strpos($mails[0]['body'], 'address:12345 test dr'), t('Token replacement: donation address replaced correctly'));
+    $this->assertTrue(strpos($mails[0]['body'], 'city:Greensboro'), t('Token replacement: donation city name replaced correctly'));
+    $this->assertTrue(strpos($mails[0]['body'], 'state:NC'), t('Token replacement: state replaced correctly'));
+    $this->assertTrue(strpos($mails[0]['body'], 'zip:11111'), t('Token replacement: donation zip/postal code replaced correctly'));
+    $this->assertTrue(strpos($mails[0]['body'], 'four:1111'), t('Token replacement: card last four replaced correctly'));
+
+    // nuke mail cache in preparation for next step.
+    variable_set('drupal_test_email_collector', array());
+
+    // submit donation form (fail)
+    $this->submitDonation($node->nid, array('submitted[payment_information][payment_fields][credit][card_number]' => '000000000000000'));
+    $mails = $this->drupalGetMails();
+    $mail_numbers_still_legit = (count($mails) == 1);
+    $this->assertTrue($mail_numbers_still_legit, t('Mail count legit after failed donation'));
+
+    $to_legit = ($mails[0]['to'] == 'example@example.com');
+    $this->assertTrue($to_legit, t('Recipient address correct'));
+    $from_legit = ($mails[0]['from'] == '"Donation failed" <donationfailed@example.com>');
+    $this->assertTrue($from_legit, t('From address correct'));
+    $send_legit = ($mails[0]['send'] == 1);
+    $this->assertTrue($send_legit, t('Send status correct'));
+
+    $subject_legit = ($mails[0]['subject'] == 'Donation failed');
+    $this->assertTrue($subject_legit, t('Mail subject correct'));
+
+
+  }
+
+  private function createEmailWrapper($settings = array()) {
+    $edit = array(
+      'title' => isset($settings['title']) ? $settings['title'] : 'Test Email Wrapper',
+      'email_wrapper_from_name[und][0][value]' => isset($settings['from_name']) ? $settings['from_name'] : 'Email Wrappers Test',
+      'email_wrapper_from_email[und][0][value]' => isset($settings['from_email']) ? $settings['from_email'] : 'from@example.com',
+      'email_wrapper_reply_email[und][0][value]' => isset($settings['reply_email']) ? $settings['reply_email'] : 'replyto@example.com',
+      'email_wrapper_subject[und][0][value]' => isset($settings['subject']) ? $settings['subject'] : 'Test webform submission mail',
+      'email_wrapper_bcc_email[und][0][value]' => isset($settings['bcc_email']) ? $settings['bcc_email'] : 'bcc0@example.com',
+      'email_wrapper_html_template[und][0][value]' => isset($settings['html_template']) ? $settings['html_template'] : '<p>Thanks for the submission (HTML)</p>%html_message',
+      'email_wrapper_html_template[und][0][format]' => 'filtered_html',
+      'email_wrapper_html_message[und][0][value]' => isset($settings['html_message']) ? $settings['html_message'] : '<p>This is an html message</p>',
+      'email_wrapper_html_message[und][0][format]' => 'filtered_html',
+      'email_wrapper_text_template[und][0][value]' => isset($settings['text_template']) ? $settings['text_template'] : 'Thanks for the submission (text) %text_message',
+      'email_wrapper_text_message[und][0][value]' => isset($settings['text_message']) ? $settings['text_message'] : 'This is a text message',
+    );
+    $this->drupalPost('node/add/email-wrapper', $edit, t('Save'));
+  }
+
+  private function createWebformEmail($settings) {
+    $nid = $settings['nid'];
+    // create email
+    $edit = array(
+      'email_custom' => '',
+      'email_option' => 'component',
+      'email_component' => $settings['mail_component'],
+    );
+    $this->drupalPost("node/$nid/webform/emails", $edit, t('Add'));
+
+    $edit['email_wrappers_email_template'] = $settings['wrapper_nid'];
+    // BUG: I think this is required to rebuilt the form cache with the extra fields, but
+    // it's throwing exceptions and I don't know why.
+    $this->drupalPostAJAX(NULL, $edit, 'email_wrappers_email_template');
+
+    // save
+    $edit = array(
+      'email_wrappers_email_template' => $settings['wrapper_nid'],
+      'send_on_settings' => $settings['send_on_settings'],
+      'email_custom' => '',
+      'email_option' => 'component',
+      // 'email_component' => 1,
+      'templates[default]' => '',
+      'email_wrappers_bcc' => 'bcc0@example.com',
+      'subject_option' => 'custom',
+      'subject_custom' => isset($settings['subject']) ? $settings['subject'] : 'Test webform custom subject',
+      // 'subject_component' => 1,
+      'from_address_option' => 'custom',
+      'from_address_custom' => isset($settings['from_address']) ? $settings['from_address'] : 'from@example.com',
+      // 'from_address_component' => 1,
+      'from_name_option' => 'custom',
+      'from_name_custom' => isset($settings['from_name']) ? $settings['from_name'] : 'Email Templates Test',
+      //'from_name_component' => 1,
+      'email_wrappers_html_message' => isset($settings['html_message']) ? $settings['html_message'] : '<p>Customized html message</p>',
+      'email_wrappers_text_message' => isset($settings['text_message']) ? $settings['text_message'] : 'Customized text message',
+    );
+    $this->drupalPost(NULL, $edit, t('Save e-mail settings'));
+  }
+
+  private function getMailComponentCid($node) {
+    foreach ($node->webform['components'] as $cid => $component) {
+      if ($component['form_key'] == 'mail') {
+        return $cid;
+      }
+    }
+    return FALSE;
+  }
+}

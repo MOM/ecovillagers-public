@@ -1,0 +1,533 @@
+<?php
+
+/**
+ * @file
+ * This is the file description for springboard_ga module.
+ *
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_ga_menu() {
+  $items = array();
+  $items['admin/springboard/options/ga'] = array(
+    'title' => 'Google Analytics Tracking Configuration',
+    'description' => 'Configuration for the Springboard GA Tracking module.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_ga_settings_form'),
+    'access arguments' => array('administer springboard'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_springboard_admin_admin_menu_items_alter().
+ */
+function springboard_ga_springboard_admin_admin_menu_items_alter(&$items) {
+  // Marketing & Analytics > Analytics Integraiton.
+  $items['admin/springboard/marketing-analytics']['_children']['admin/springboard/options/ga'] = array(
+    'link_path' => 'admin/springboard/options/ga',
+    'link_title' => 'Analytics Integration',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 4,
+  );
+  // Settings > Settings > Analytics Configuration.
+  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/config/system/googleanalytics'] = array(
+    'link_path' => 'admin/config/system/googleanalytics',
+    'link_title' => 'Analytics Configuration',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 8,
+  );
+  // Settings > Settings > Analytics Integraiton.
+  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/options/ga'] = array(
+    'link_path' => 'admin/springboard/options/ga',
+    'link_title' => 'Analytics Integration',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => 8,
+  );
+}
+
+/**
+ * Main settings form for the module
+ */
+function springboard_ga_settings_form($form, &$form_state) {
+  $default_settings = _springboard_ga_default_values();
+
+  // Show a warning message if the webform confirmation pages are ignored by the GA module
+  $page_match = FALSE;
+  $visibility = variable_get('googleanalytics_visibility_pages', 0);
+  $setting_pages = variable_get('googleanalytics_pages', GOOGLEANALYTICS_PAGES);
+  if (!empty($setting_pages)) {
+    $pages = drupal_strtolower($setting_pages);
+    if ($visibility < 2) {
+      $path = 'node/123/done';
+      $page_match = drupal_match_path($path, $pages);
+      $page_match = !($visibility xor $page_match);
+      if ($page_match === FALSE) {
+        drupal_set_message(t('The Google Analytics code has been !ga_admin to not appear on webform confirmation pages in the page visibility settings.',
+          array('!ga_admin' => l('configured', 'admin/config/system/googleanalytics'))), 'warning');
+      }
+    }
+  }
+
+  $form['springboard_ga_node_configuration'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Enable per node configurations of Google Analytics Tracking for Donations',
+    '#default_value' => variable_get('springboard_ga_node_configuration', 0),
+  );
+
+  // Add the transaction fields
+  $form['springboard_ga_trans'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Transaction Defaults',
+    '#description' => 'Populate default values for transactions. A token list is available below.',
+  ) + _springboard_ga_transaction_form_fields($default_settings['springboard_ga_trans']);
+
+  // Add the item fields
+  $form['springboard_ga_item'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Item Defaults',
+    '#description' => 'Populate default values for transactions. A token list is available below.',
+  ) +  _springboard_ga_item_form_fields($default_settings['springboard_ga_item']);
+
+  // Add the token help
+  $form['springboard_ga_tokens_message']['tokens'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Tracking Replacement Tokens'),
+    '#description' => t('The following tokens are available for any of the Item fields.'),
+    '#collapsible' => TRUE,
+    '#collapsed' => TRUE,
+  );
+  $token_set = array('donation', 'user', 'node');
+  $form['springboard_ga_tokens_message']['tokens']['token_help'] = array(
+    '#type' => 'item',
+    '#title' => t('Drupal tokens'),
+    '#description' => theme('token_tree', array('token_types' => $token_set, 'recursion_limit' => 2, 'click_insert' => FALSE)),
+  );
+  return system_settings_form($form);
+}
+
+/**
+ * Implements hook_form_base_alter
+ *
+ * Add the GA tracking fields to donation form types
+ */
+function springboard_ga_form_node_form_alter(&$form, &$form_state) {
+  if (fundraiser_is_donation_type($form['#node']->type) && variable_get('springboard_ga_node_configuration', 0)) {
+    // If there's nothing set yet, like for a new node use the default values
+    if (empty($form['#node']->springboard_ga)) {
+      $form['#node']->springboard_ga = _springboard_ga_default_values();
+    }
+
+    // Add the submit handler
+    $form['#submit'][] = 'springboard_ga_nodeform_submit';
+
+    $form['springboard_ga'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('E-commerce tracking'),
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#tree' => TRUE,
+      '#group' => 'additional_settings',
+    );
+    $form['springboard_ga']['springboard_ga_node_configuration'] = array(
+      '#type' => 'checkbox',
+      '#title' => 'Override Default GA Tracking for this Donation Form',
+      '#default_value' => $form['#node']->springboard_ga['springboard_ga_node_configuration'],
+    );
+
+    // Add the transaction fields
+    $form['springboard_ga']['springboard_ga_trans'] = array(
+      '#type' => 'fieldset',
+      '#title' => 'Transaction Defaults',
+      '#description' => 'Populate default values for transactions. A token list is available below.',
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    ) +  _springboard_ga_transaction_form_fields($form['#node']->springboard_ga['springboard_ga_trans']);
+
+    // Disable these fields if the checkbox is not checked
+    foreach (element_children($form['springboard_ga']['springboard_ga_trans']) as $field_name) {
+      $form['springboard_ga']['springboard_ga_trans'][$field_name]['#states'] = array(
+        'disabled' => array(
+          ':input[name="springboard_ga[springboard_ga_node_configuration]"]' => array('checked' => FALSE),
+        ),
+      );
+    }
+
+    // Add the item fields
+    $form['springboard_ga']['springboard_ga_item'] = array(
+      '#type' => 'fieldset',
+      '#title' => 'Item Defaults',
+      '#description' => 'Populate default values for transactions. A token list is available below.',
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    ) + _springboard_ga_item_form_fields($form['#node']->springboard_ga['springboard_ga_item']);
+
+    // Disable these fields if the checkbox is not checked
+    foreach (element_children($form['springboard_ga']['springboard_ga_item']) as $field_name) {
+      $form['springboard_ga']['springboard_ga_item'][$field_name]['#states'] = array(
+        'disabled' => array(
+          ':input[name="springboard_ga[springboard_ga_node_configuration]"]' => array('checked' => FALSE),
+        ),
+      );
+    }
+
+    // Add the token help
+    $token_set = array('donation', 'user', 'node');
+    $form['springboard_ga']['springboard_ga_tokens_message']['tokens']['token_help'] = array(
+      '#type' => 'item',
+      '#title' => t('Drupal tokens'),
+      '#description' => theme('token_tree', array('token_types' => $token_set, 'recursion_limit' => 2, 'click_insert' => FALSE)),
+    );
+  }
+}
+
+/**
+ * Handle the node submit
+ */
+function springboard_ga_nodeform_submit($form, &$form_state) {
+  global $user;
+  if (!empty($form_state['values']['springboard_ga'])) {
+    $existing = db_query('SELECT nid FROM springboard_ga WHERE nid = :nid', array(':nid' => $form_state['values']['nid']))->fetchField();
+    // If the flag has been set to override then save this record
+    if ($form_state['values']['springboard_ga']['springboard_ga_node_configuration'] == 1) {
+      $record = array(
+        'nid' => $form_state['values']['nid'],
+        'settings' => $form_state['values']['springboard_ga'],
+      );
+      // Update an existing record
+      if ($existing) {
+        drupal_write_record('springboard_ga', $record, array('nid'));
+      }
+      // Write a new record to the database
+      else {
+        $record['uid'] = $user->uid;
+        drupal_write_record('springboard_ga', $record);
+      }
+    }
+    // Not overridden, delete an existing record
+    elseif ($existing) {
+      db_delete('springboard_ga')
+        ->condition('nid', $form_state['values']['nid'])
+        ->execute();
+    }
+  }
+}
+
+/**
+ * Implmements hook_node_load
+ *
+ * Add the GA Tracking code to the donation form types
+ */
+function springboard_ga_node_load($nodes, $types) {
+  $donation_types = fundraiser_get_donation_types();
+
+  $nids = array();
+  // Loop through the nodes and pull out the nids of the donation forms
+  foreach ($nodes as $node) {
+    if ($donation_types[$node->type]) {
+      $nids[] = $node->nid;
+    }
+  }
+
+  // If we have donation form nodes add the springboard ga settings
+  if (!empty($nids)) {
+    // Use the nids to search the database for custom settings
+    $result = db_query('SELECT nid, uid, settings FROM {springboard_ga} WHERE nid IN(:nids)', array(':nids' => $nids))->fetchAllAssoc('nid');
+    foreach ($nids as $nid) {
+      if (!empty($result[$nid])) {
+        $settings = unserialize($result[$nid]->settings);
+        // If node configurations are enabled and this node has one use those settings
+        if (variable_get('springboard_ga_node_configuration', 0) && $settings['springboard_ga_node_configuration'] == 1) {
+          $nodes[$nid]->springboard_ga = $settings;
+        }
+      }
+
+      // For donation forms without custom settings use the site-wide ones
+      if (empty($nodes[$nid]->springboard_ga)) {
+        $nodes[$nid]->springboard_ga = _springboard_ga_default_values();
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_node_delete
+ */
+function springboard_ga_node_delete($node) {
+  if (fundraiser_is_donation_type($node->type)) {
+    db_delete('springboard_ga')->condition('nid', $node->nid)->execute();
+  }
+}
+
+/**
+ * Implements hook_preprocess_webform_confirmation
+ */
+function springboard_ga_preprocess_webform_confirmation(&$vars) {
+  if (fundraiser_is_donation_type($vars['node']->type) && !empty($vars['node']->springboard_ga)) {
+    global $conf;
+    $script = _springboard_ga_js_build($vars['node'], 'asynch');
+    // Standard Drupal token replace
+    $token_set = array('node' => $vars['node']);
+    drupal_alter('webform_confirmations_token_replace', $token_set, $vars['sid']);
+    $script = token_replace($script, $token_set);
+    // Replace webform tokens for the submission.
+    module_load_include('inc', 'webform', 'includes/webform.submissions');
+    $submission = webform_get_submission($vars['node']->nid, $vars['sid']);
+    $script = _webform_filter_values($script, $vars['node'], $submission, NULL, FALSE, TRUE);
+    // Add the script to the main GA module's global after script variable
+    if (!isset($conf['googleanalytics_codesnippet_after'])) {
+      variable_set('googleanalytics_codesnippet_after', '');
+    }
+    $conf['googleanalytics_codesnippet_after'] .= $script;
+  }
+}
+
+/**
+ * Returns fields for setting the default transaction values
+ */
+function _springboard_ga_transaction_form_fields($settings) {
+  $form['springboard_ga_trans_transaction_id'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Transaction ID'),
+    '#description' => t('Internal unique transaction ID number for this transaction.'),
+    '#max_length' => 100,
+    '#size' => 20,
+    '#required' => TRUE,
+    '#default_value' => $settings['springboard_ga_trans_transaction_id'],
+  );
+  $form['springboard_ga_trans_affiliation'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Affiliation'),
+    '#description' => t('Partner or store affiliation.'),
+    '#max_length' => 100,
+    '#size' => 20,
+    '#required' => FALSE,
+    '#default_value' => $settings['springboard_ga_trans_affiliation'],
+  );
+  $form['springboard_ga_trans_total'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Total'),
+    '#description' => t('Total dollar amount of the transaction. Does not include tax and shipping and should only be considered the "grand total" if you explicitly include shipping and tax.'),
+    '#max_length' => 100,
+    '#size' => 10,
+    '#required' => TRUE,
+    '#default_value' => $settings['springboard_ga_trans_total'],
+  );
+  $form['springboard_ga_trans_tax'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Tax'),
+    '#description' => t('Tax amount of the transaction.'),
+    '#max_length' => 100,
+    '#size' => 10,
+    '#required' => FALSE,
+    '#default_value' => $settings['springboard_ga_trans_tax'],
+  );
+  $form['springboard_ga_trans_shipping'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Shipping'),
+    '#description' => t('Shipping charge for the transaction.'),
+    '#max_length' => 100,
+    '#size' => 10,
+    '#required' => FALSE,
+    '#default_value' => $settings['springboard_ga_trans_shipping'],
+  );
+  $form['springboard_ga_trans_city'] = array(
+    '#type' => 'textfield',
+    '#title' => t('City'),
+    '#description' => t('City to associate with transaction.'),
+    '#max_length' => 100,
+    '#size' => 25,
+    '#required' => FALSE,
+    '#default_value' => $settings['springboard_ga_trans_city'],
+  );
+  $form['springboard_ga_trans_state'] = array(
+    '#type' => 'textfield',
+    '#title' => t('State'),
+    '#description' => t('State to associate with transaction.'),
+    '#max_length' => 100,
+    '#size' => 25,
+    '#required' => FALSE,
+    '#default_value' => $settings['springboard_ga_trans_state'],
+  );
+  $form['springboard_ga_trans_country'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Country'),
+    '#description' => t('Country to associate with transaction.'),
+    '#max_length' => 100,
+    '#size' => 40,
+    '#required' => FALSE,
+    '#default_value' => $settings['springboard_ga_trans_country'],
+  );
+  return $form;
+}
+
+/**
+ * Returns fields for setting the default item values
+ */
+function _springboard_ga_item_form_fields($settings) {
+  $form['springboard_ga_item_order_id'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Order ID'),
+    '#description' => t('Optional Order ID of the transaction to associate with item.'),
+    '#max_length' => 100,
+    '#size' => 20,
+    '#required' => TRUE,
+    '#default_value' => $settings['springboard_ga_item_order_id'],
+  );
+  $form['springboard_ga_item_sku'] = array(
+    '#type' => 'textfield',
+    '#title' => t('SKU Code'),
+    '#description' => t("Item's SKU code."),
+    '#max_length' => 100,
+    '#size' => 20,
+    '#required' => TRUE,
+    '#default_value' => $settings['springboard_ga_item_sku'],
+  );
+  $form['springboard_ga_item_name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Name'),
+    '#description' => t('Product name. Required to see data in the product detail report.'),
+    '#max_length' => 255,
+    '#size' => 40,
+    '#required' => TRUE,
+    '#default_value' => $settings['springboard_ga_item_name'],
+  );
+  $form['springboard_ga_item_category'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Category'),
+    '#description' => t('Product category.'),
+    '#max_length' => 255,
+    '#size' => 40,
+    '#required' => TRUE,
+    '#default_value' => $settings['springboard_ga_item_category'],
+  );
+  $form['springboard_ga_item_price'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Price'),
+    '#description' => t('Product price.'),
+    '#max_length' => 100,
+    '#size' => 10,
+    '#required' => TRUE,
+    '#default_value' => $settings['springboard_ga_item_price'],
+  );
+  $form['springboard_ga_item_quantity'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Quantity'),
+    '#description' => t('Product quantity.'),
+    '#max_length' => 100,
+    '#size' => 5,
+    '#required' => TRUE,
+    '#default_value' => $settings['springboard_ga_item_quantity'],
+  );
+  return $form;
+}
+
+/**
+ * Returns the default GA values for a node
+ */
+function _springboard_ga_default_values() {
+  return array(
+    'springboard_ga_node_configuration' => 0,
+    'springboard_ga_trans' => array(
+      'springboard_ga_trans_transaction_id' => variable_get('springboard_ga_item_order_id', '[donation:did]'),
+      'springboard_ga_trans_affiliation' => variable_get('springboard_ga_trans_affiliation', ''),
+      'springboard_ga_trans_total' => variable_get('springboard_ga_trans_total', '[donation:amount]'),
+      'springboard_ga_trans_tax' => variable_get('springboard_ga_trans_tax', ''),
+      'springboard_ga_trans_shipping' => variable_get('springboard_ga_trans_shipping', ''),
+      'springboard_ga_trans_city' => variable_get('springboard_ga_trans_city', '[donation:city]'),
+      'springboard_ga_trans_state' => variable_get('springboard_ga_trans_state', '[donation:state]'),
+      'springboard_ga_trans_country' => variable_get('springboard_ga_trans_country', '[donation:country]'),
+    ),
+    'springboard_ga_item' => array(
+      'springboard_ga_item_order_id' => variable_get('springboard_ga_item_order_id', '[donation:did]'),
+      'springboard_ga_item_sku' => variable_get('springboard_ga_item_sku', '[donation:node:nid]'),
+      'springboard_ga_item_name' => variable_get('springboard_ga_item_name', '[donation:node:title]'),
+      'springboard_ga_item_category' => variable_get('springboard_ga_item_category', 'Donation'),
+      'springboard_ga_item_price' => variable_get('springboard_ga_item_price', '[donation:amount]'),
+      'springboard_ga_item_quantity' => variable_get('springboard_ga_item_quantity', '1'),
+    ),
+  );
+}
+
+/**
+ * Build the JS GA tracking snippets
+ */
+function _springboard_ga_js_build($node, $type = 'asynch') {
+  if ($type == 'asynch') {
+    $js = "\n" . _springboard_ga_js_add_trans($node->springboard_ga['springboard_ga_trans'], 'asynch');
+    $js .= "\n" . _springboard_ga_js_add_item($node->springboard_ga['springboard_ga_item'], 'asynch');
+    $js .= "\n_gaq.push(['_trackTrans']);\n";
+  }
+  else {
+    $js = <<<EOS
+    try{
+      var springboard_ga_pageTracker = _gat._getTracker("UA-40474837-1");
+      springboard_ga_pageTracker._trackPageview();
+EOS;
+    $js .= "\n" . _springboard_ga_js_add_trans($node->springboard_ga['springboard_ga_trans'], 'traditional');
+    $js .= "\n" . _springboard_ga_js_add_item($node->springboard_ga['springboard_ga_item'], 'traditional');
+    $js .= <<<EOS
+
+      springboard_ga_pageTracker._trackTrans();
+    } catch(err) {}
+EOS;
+  }
+  return $js;
+}
+
+/**
+ * Build the transaction tracking code
+ */
+function _springboard_ga_js_add_trans($values, $type = 'asynch') {
+  $jsq = '"' . $values['springboard_ga_trans_transaction_id'] . '",';
+  $jsq .= '"' . $values['springboard_ga_trans_affiliation'] . '",';
+  $jsq .= '"' . $values['springboard_ga_trans_total'] . '",';
+  $jsq .= '"' . $values['springboard_ga_trans_tax'] . '",';
+  $jsq .= '"' . $values['springboard_ga_trans_shipping'] . '",';
+  $jsq .= '"' . $values['springboard_ga_trans_city'] . '",';
+  $jsq .= '"' . $values['springboard_ga_trans_state'] . '",';
+  $jsq .= '"' . $values['springboard_ga_trans_country'] . '"';
+  if ($type == 'asynch') {
+    $js = "_gaq.push(['_addTrans',";
+    $js .= $jsq;
+    $js .= "]);";
+  }
+  else {
+    $js = "\nspringboard_ga_pageTracker._addTrans(";
+    $js .= $jsq;
+    $js .= ");";
+  }
+  return $js;
+}
+
+/*
+ * Build the item tracking code
+ */
+function _springboard_ga_js_add_item($values, $type = 'asynch') {
+  $jsq = '"' . $values['springboard_ga_item_order_id'] . '",';
+  $jsq .= '"' . $values['springboard_ga_item_sku'] . '",';
+  $jsq .= '"' . $values['springboard_ga_item_name'] . '",';
+  $jsq .= '"' . $values['springboard_ga_item_category'] . '",';
+  $jsq .= '"' . $values['springboard_ga_item_price'] . '",';
+  $jsq .= '"' . $values['springboard_ga_item_quantity'] . '"';
+  if ($type == 'asynch') {
+    $js = "_gaq.push(['_addItem',";
+    $js .= $jsq;
+    $js .= "]);";
+  }
+  else {
+    $js = "springboard_ga_pageTracker._addItem(";
+    $js .= $jsq;
+    $js .= ");";
+  }
+  return $js;
+}

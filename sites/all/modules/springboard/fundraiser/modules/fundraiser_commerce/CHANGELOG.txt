@@ -1,0 +1,4 @@
+
+fundraiser_commerce 7.x-3.0, 2013-01-316
+------------------------------
+Initial D7 port.

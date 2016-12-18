@@ -1,0 +1,15 @@
+core = "7.x"
+description = "Allows users to create page templates that can then be assigned to nodes."
+name = "Page Wrappers"
+version = 7.x-4.x-dev
+package = "Jackson River Springboard - extras"
+
+configure = admin/config/content/page-wrappers
+
+dependencies[] = ctools
+
+files[] = tests/page_wrappers.test
+files[] = tests/page_wrappers.ruleset.test
+files[] = page_wrappers.install
+files[] = page_wrappers.module
+files[] = page_wrappers.admin.inc

@@ -1,0 +1,174 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_log
+ */
+
+module_load_include('test', 'salesforce_log', 'tests/salesforce_log');
+
+/**
+ * Tests basic set up for triggering events on Salesforce watchdog logs.
+ */
+class SalesforceLogAdminTestCase extends SalesforceLogTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Salesforce Log Admin',
+      'description' => 'Confirm the Salesforce admin screens are working.',
+      'group' => 'Salesforce Log',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    $permissions = array_merge($permissions, array(
+      'view salesforce batch logs',
+    ));
+    parent::setUp($modules, $permissions);
+
+    // Path to config page.
+    $this->logAdminPath = 'admin/reports/salesforce';
+    $this->logAdminQueuePath = 'admin/reports/salesforce/queue';
+    $this->logAdminBatchPath = 'admin/reports/salesforce/batch';
+    $this->logAdminItemPath = 'admin/reports/salesforce/item';
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Test the main admin screen.
+   */
+  public function testAdminScreen() {
+    $this->drupalGet($this->logAdminPath);
+    $this->assertResponse(200, 'The main log admin page appears.');
+    // Confirm the links are on the page.
+    $this->assertLinkByHref($this->logAdminQueuePath, 0, 'Link to queue log appears.');
+    $this->assertLinkByHref($this->logAdminBatchPath, 0, 'Link to batch log appears.');
+    $this->assertLinkByHref($this->logAdminItemPath, 0, 'Link to item log appears.');
+  }
+
+  /**
+   * Test the queue admin screen.
+   */
+  public function testAdminQueueScreen() {
+    $this->drupalGet($this->logAdminQueuePath);
+    $this->assertResponse(200, 'The queue log admin page appears.');
+
+    // Testing the delete action.
+    $queue = salesforce_queue_load();
+    // Create a queue item to delete.
+    $this->createQueueItems($queue, 1);
+    $items = $queue->claimBatch();
+    $delete_item_id = $items[0]->item_id;
+    $queue->releaseBatch('', TRUE);
+    $this->drupalPost($this->logAdminQueuePath,
+      array(
+        'operation' => 'action::views_bulk_operations_delete_item',
+        'views_bulk_operations[0]' => TRUE),
+      t('Execute')
+    );
+    $this->drupalPost(NULL, array(), t('Confirm'));
+    $items = $queue->claimBatch();
+    $this->assertTrue(empty($items), 'The VBO delete action deleted the item.');
+
+    // Testing the requeue action.
+    // Set the max retries to 1 to quickly force errors.
+    global $conf;
+    $conf['salesforce_queue_max_retries'] = 1;
+    $this->salesforceConnect();
+    $queue = salesforce_queue_load();
+    $processor = salesforce_queue_load_processor($queue);
+    // Create opportunities we know will fail.
+    $this->createQueueItems($queue, 3, array('CREATE'), array('Account', 'Contact'));
+    $items = $queue->claimBatch();
+    // Create an array of drupal ids from the failed items.
+    foreach ($items as $item) {
+      $failed_drupal_ids[] = $item->drupal_id;
+    }
+    sort($failed_drupal_ids);
+    $queue->releaseBatch('', TRUE);
+    $processor->process();
+    $processor->process();
+    // Submit the VBO requeue action form.
+    $this->drupalPost($this->logAdminQueuePath,
+      array(
+        'operation' => 'action::salesforce_queue_salesforce_queue_item_requeue_action',
+        'views_bulk_operations[0]' => TRUE,
+        'views_bulk_operations[1]' => TRUE,
+        'views_bulk_operations[2]' => TRUE,
+      ),
+      t('Execute')
+    );
+    $this->drupalPost(NULL, array(), t('Confirm'));
+    $queue = salesforce_queue_load('new');
+    $items = $queue->claimBatch();
+    // Create an array of requeued items.
+    foreach ($items as $item) {
+      $requeued_drupal_ids[] = $item->drupal_id;
+    }
+    sort($requeued_drupal_ids);
+    // Compare the drupal_ids arrays to confirm they match.
+    $diff = array_diff($failed_drupal_ids, $requeued_drupal_ids);
+    $this->assertTrue(empty($diff), 'The VBO requeue action requeued the items. ');
+  }
+
+  /**
+   * Test the batch admin screen.
+   */
+  public function testAdminBatchScreen() {
+    $this->drupalGet($this->logAdminBatchPath);
+    $this->assertResponse(200, 'The batch log admin page appears.');
+  }
+
+  /**
+   * Test the item admin screen.
+   */
+  public function testAdminItemScreen() {
+    $this->drupalGet($this->logAdminItemPath);
+    $this->assertResponse(200, 'The item log admin page appears.');
+  }
+
+  /**
+   * Test item logging.
+   */
+  public function testItemLogging() {
+    // Set the max retries to 1 to quickly force errors.
+    global $conf;
+    $conf['salesforce_queue_max_retries'] = 1;
+    $this->salesforceConnect();
+    // Initiate a processor.
+    $queue = salesforce_queue_load();
+    $processor = salesforce_queue_load_processor($queue);
+
+    // Create oppurtinities we know will fail.
+    $this->createQueueItems($queue, 5, array('CREATE'), array('Account', 'Contact'));
+
+    // Create items we know will pass.
+    $this->createQueueItems($queue, 15, array('CREATE'), array('Opportunity'));
+
+    $processor->process();
+
+    // Confirm the items were logged.
+    $count = db_query("SELECT COUNT(*) FROM {salesforce_log_item} WHERE object_type IN ('Account', 'Contact')")->fetchField();
+    $this->assertEqual(15, $count, '15 Account and Contact items were logged.');
+
+    // Confirm the oppurtunities were logged.
+    $count = db_query("SELECT COUNT(*) FROM {salesforce_log_item} WHERE object_type = 'Opportunity'")->fetchField();
+    $this->assertEqual(5, $count, '5 Opportunity items were logged.');
+
+    // Confirm the opportunities failed.
+    $count = db_query("SELECT COUNT(*) FROM {salesforce_log_item} WHERE object_type = 'Opportunity' AND status = 'failed'")->fetchField();
+    $this->assertEqual(5, $count, 'The 5 Opportunity items were correctly logged as failed.');
+  }
+}

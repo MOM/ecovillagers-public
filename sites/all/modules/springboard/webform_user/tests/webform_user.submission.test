@@ -1,0 +1,252 @@
+<?php
+/**
+ * @file
+ * Test the webform user form submissions.
+ */
+
+/**
+ * Tests webform_user submissions.
+ */
+class WebformUserSubmissionTestCase extends WebformUserTestSetup {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Webform User Submission'),
+      'description' => t('Test the submission functionality of webform user.'),
+      'group' => t('Webform User'),
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($additional_modules = array()) {
+    parent::setUp($additional_modules);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Tests that a new account is created.
+   *
+   * A new user should be craeted when an anonymous user with anon-matching
+   * email address submits a webform user form.
+   */
+  public function testWebformUserAnonymousSubmission() {
+    // Create a form for testing.
+    $this->webformUserCreateNode();
+
+    // Load the form and verify all fields are present.
+    $this->drupalGet('node/1');
+
+    // Visible fields.
+    $this->assertFieldById('edit-submitted-mail', $value = '', $message = 'E-mail address field is present on form.');
+    $this->assertFieldById('edit-submitted-sbp-first-name', $value = '', $message = 'First name field is present on form.');
+    $this->assertFieldById('edit-submitted-sbp-last-name', $value = '', $message = 'Last name field is present on form.');
+    $this->assertFieldById('edit-submitted-sbp-address', $value = '', $message = 'Address field is present on form.');
+    $this->assertFieldById('edit-submitted-sbp-address-line-2', $value = '', $message = 'Address Line 2 field is present on form.');
+    $this->assertFieldById('edit-submitted-sbp-city', $value = '', $message = 'City field is present on form.');
+    $this->assertFieldById('edit-submitted-sbp-state', $value = '', $message = 'State/Province field is present on form.');
+    $this->assertFieldById('edit-submitted-sbp-country', $value = '', $message = 'Country field is present on form.');
+    $this->assertFieldById('edit-submitted-sbp-zip', $value = '', $message = 'Postal Code field is present on form.');
+
+    // Hidden fields.
+    $this->assertFieldByName('submitted[sbp_ms]', $value = '', $message = 'Market Source field is present on form.');
+    $this->assertFieldByName('submitted[sbp_cid]', $value = '', $message = 'Campaign Id field is present on form.');
+    $this->assertFieldByName('submitted[sbp_referrer]', $value = '', $message = 'Referrer field is present on form.');
+    $this->assertFieldByName('submitted[sbp_initial_referrer]', $value = '', $message = 'Initial Referrer field is present on form.');
+    $this->assertFieldByName('submitted[sbp_search_engine]', $value = '', $message = 'Search Engine field is present on form.');
+    $this->assertFieldByName('submitted[sbp_search_string]', $value = '', $message = 'Search String field is present on form.');
+    $this->assertFieldByName('submitted[sbp_user_agent]', $value = '', $message = 'User Agent field is present on form.');
+
+    // Fill the form out and submit it.
+    $edit = array(
+      'submitted[mail]' => 'john.doe@example.com',
+      'submitted[sbp_first_name]' => 'John',
+      'submitted[sbp_last_name]' => 'Doe',
+      'submitted[sbp_address]' => '100 Elm Street',
+      'submitted[sbp_address_line_2]' => '',
+      'submitted[sbp_city]' => 'Springfield',
+      'submitted[sbp_state]' => 'VA',
+      'submitted[sbp_country]' => 'US',
+      'submitted[sbp_zip]' => '55555',
+      'submitted[sbp_ms]' => 'ms',
+      'submitted[sbp_cid]' => 'cid',
+      'submitted[sbp_referrer]' => 'http://local',
+      'submitted[sbp_initial_referrer]' => 'http://local',
+      'submitted[sbp_search_engine]' => 'google',
+      'submitted[sbp_search_string]' => 'search_string',
+      'submitted[sbp_user_agent]' => 'user_agent',
+    );
+
+    $this->drupalPost('node/1', $edit, 'Submit');
+
+    // Get the language off the node before checking the user entity field
+    // values.
+    $node = node_load(1);
+    $lang = $node->language;
+
+    // Check to see if the user was created.
+    $user = user_load_by_mail('john.doe@example.com');
+
+    $this->assertEqual('john.doe@example.com', $user->mail, 'Created user\'s email address is john.doe@example.com.');
+    $this->assertEqual('John', $user->sbp_first_name[$lang][0]['value'], 'Created user\'s first name is John.');
+    $this->assertEqual('Doe', $user->sbp_last_name[$lang][0]['value'], 'Created user\'s last name is Doe.');
+    $this->assertEqual('100 Elm Street', $user->sbp_address[$lang][0]['value'], 'Created user\'s address is 100 Elm Street.');
+    $this->assertTrue(empty($user->sbp_address_line_2), 'Created user\'s address line 2 is blank.');
+    $this->assertEqual('Springfield', $user->sbp_city[$lang][0]['value'], 'Created user\'s city is Springfield.');
+    $this->assertEqual('VA', $user->sbp_state[$lang][0]['value'], 'Created user\'s state is VA.');
+    $this->assertEqual('US', $user->sbp_country[$lang][0]['value'], 'Created user\'s country is US.');
+    $this->assertEqual('55555', $user->sbp_zip[$lang][0]['value'], 'Created user\'s zip code is 55555.');
+    $this->assertEqual('ms', $user->sbp_ms[$lang][0]['value'], 'Created user\'s market source is ms.');
+    $this->assertEqual('cid', $user->sbp_cid[$lang][0]['value'], 'Created user\'s campaign id is cid.');
+    $this->assertEqual('http://local', $user->sbp_referrer[$lang][0]['value'], 'Created user\'s referrer is http://local.');
+    $this->assertEqual('http://local', $user->sbp_initial_referrer[$lang][0]['value'], 'Created user\'s initial referrer is http://local.');
+    $this->assertEqual('google', $user->sbp_search_engine[$lang][0]['value'], 'Created user\'s search engine is google.');
+    $this->assertEqual('search_string', $user->sbp_search_string[$lang][0]['value'], 'Created user\'s search string is search_string.');
+    $this->assertEqual('user_agent', $user->sbp_user_agent[$lang][0]['value'], 'Created user\'s user agent is user_agent.');
+  }
+
+  /**
+   * Verify that an existing user is updated.
+   *
+   * Existing user should be updated when a form is submitted by an
+   * anonymous user with a matching email address.
+   */
+  public function testWebformUserAnonymousWithExistingEmail() {
+    // Create a form for testing.
+    $this->webformUserCreateNode();
+
+    // Create a user to test with.
+    $user = $this->webformUserCreateUser();
+
+    // Assert initial values.
+    $this->assertEqual('Ralph', $user->sbp_first_name[LANGUAGE_NONE][0]['value'], 'Existing user\'s first name is Ralph.');
+    $this->assertEqual('Mouth', $user->sbp_last_name[LANGUAGE_NONE][0]['value'], 'Existing user\'s last name is Mouth.');
+    $this->assertEqual('129 3rd Street', $user->sbp_address[LANGUAGE_NONE][0]['value'], 'Existing user\'s address is 500 3rd Street.');
+    $this->assertEqual('', $user->sbp_address_line_2[LANGUAGE_NONE][0]['value'], 'Existing user\'s address line 2 is blank.');
+    $this->assertEqual('Milwaukee', $user->sbp_city[LANGUAGE_NONE][0]['value'], 'Existing user\'s city is Milwaukee.');
+    $this->assertEqual('WI', $user->sbp_state[LANGUAGE_NONE][0]['value'], 'Existing user\'s state is WI.');
+    $this->assertEqual('US', $user->sbp_country[LANGUAGE_NONE][0]['value'], 'Existing user\'s country is US.');
+    $this->assertEqual('55555', $user->sbp_zip[LANGUAGE_NONE][0]['value'], 'Existing user\'s zip code is 55555.');
+
+    $this->drupalGet('node/1');
+
+    // Fill the form out and submit it.
+    $edit = array(
+      'submitted[mail]' => $user->mail,
+      'submitted[sbp_first_name]' => 'First',
+      'submitted[sbp_last_name]' => 'Last',
+      'submitted[sbp_address]' => 'Address',
+      'submitted[sbp_address_line_2]' => 'Address line 2',
+      'submitted[sbp_city]' => 'City',
+      'submitted[sbp_state]' => 'DC',
+      'submitted[sbp_country]' => 'US',
+      'submitted[sbp_zip]' => '11111',
+      'submitted[sbp_ms]' => 'ms',
+      'submitted[sbp_cid]' => 'cid',
+      'submitted[sbp_referrer]' => 'http://local',
+      'submitted[sbp_initial_referrer]' => 'http://local',
+      'submitted[sbp_search_engine]' => 'google',
+      'submitted[sbp_search_string]' => 'search_string',
+      'submitted[sbp_user_agent]' => 'user_agent',
+    );
+
+    $this->drupalPost('node/1', $edit, 'Submit');
+
+    // Get the language off the node before checking the user entity field
+    // values.
+    $node = node_load(1);
+    $lang = $node->language;
+
+    // Check to see if the existing user was updated.
+    $user = user_load_by_mail($user->mail);
+
+    $this->assertEqual('First', $user->sbp_first_name[$lang][0]['value'], 'Existing user\'s first name updated correctly.');
+    $this->assertEqual('Last', $user->sbp_last_name[$lang][0]['value'], 'Existing user\'s last name updated correctly.');
+    $this->assertEqual('Address', $user->sbp_address[$lang][0]['value'], 'Existing user\'s address updated correctly.');
+    $this->assertEqual('Address line 2', $user->sbp_address_line_2[$lang][0]['value'], 'Existing user\'s address line 2 updated correctly..');
+    $this->assertEqual('City', $user->sbp_city[$lang][0]['value'], 'Existing user\'s city is updated correctly.');
+    $this->assertEqual('DC', $user->sbp_state[$lang][0]['value'], 'Existing user\'s state updated correctly.');
+    $this->assertEqual('US', $user->sbp_country[$lang][0]['value'], 'Existing user\'s country updated correctly.');
+    $this->assertEqual('11111', $user->sbp_zip[$lang][0]['value'], 'Existing user\'s zip code updated correctly.');
+    $this->assertEqual('ms', $user->sbp_ms[$lang][0]['value'], 'Existing user\'s market source updated correctly.');
+    $this->assertEqual('cid', $user->sbp_cid[$lang][0]['value'], 'Existing user\'s campaign id updated correctly.');
+    $this->assertEqual('http://local', $user->sbp_referrer[$lang][0]['value'], 'Existing user\'s referrer updated correctly.');
+    $this->assertEqual('http://local', $user->sbp_initial_referrer[$lang][0]['value'], 'Existing user\'s initial referrer updated correctly.');
+    $this->assertEqual('google', $user->sbp_search_engine[$lang][0]['value'], 'Existing user\'s search engine updated correctly.');
+    $this->assertEqual('search_string', $user->sbp_search_string[$lang][0]['value'], 'Existing user\'s search string updated correctly.');
+    $this->assertEqual('user_agent', $user->sbp_user_agent[$lang][0]['value'], 'Existing user\'s user agent updated correctly.');
+
+  }
+
+  /**
+   * Test that a form is prepopulated for an authenticated user.
+   */
+  public function testWebformUserAuthenticatedFormRender() {
+    // Create a form for testing.
+    $this->webformUserCreateNode();
+
+    // Create a user to test with.
+    $user = $this->webformUserCreateUser();
+
+    // Log the user in and request a form.
+    $this->drupalLogin($user);
+
+    // Load the form and verify all fields are present.
+    $this->drupalGet('node/1');
+
+    // Make sure fields were prepopulated correctly.
+    $this->assertFieldById('edit-submitted-mail', $user->mail, 'E-mail address field is correctly populated.');
+    $this->assertFieldById('edit-submitted-sbp-first-name', 'Ralph', 'First field is correctly populated.');
+    $this->assertFieldById('edit-submitted-sbp-last-name', 'Mouth', 'Last name field is correctly populated.');
+    $this->assertFieldById('edit-submitted-sbp-address', '129 3rd Street', 'Address field is correctly populated.');
+    $this->assertFieldById('edit-submitted-sbp-address-line-2', '', 'Address Line 2 field is correctly populated.');
+    $this->assertFieldById('edit-submitted-sbp-city', 'Milwaukee', 'City field is correctly populated.');
+    $this->assertFieldById('edit-submitted-sbp-state', 'WI', 'State/Province field is correctly populated.');
+    $this->assertFieldById('edit-submitted-sbp-country', 'US', 'Country field is correctly populated.');
+    $this->assertFieldById('edit-submitted-sbp-zip', '55555', 'Postal Code field is correctly populated.');
+  }
+
+  /**
+   * Tests the new account notification email feature.
+   */
+  public function testWebformUserEmailNotification() {
+    // Create a form for testing.
+    $this->webformUserCreateNode();
+
+    // Set the send new user email option on the form.
+    db_update('webform_user')
+      ->fields(array(
+        'send_new_user_email' => 1,
+      ))
+      ->condition('nid', 1, '=')
+      ->execute();
+
+    $this->drupalGet('node/1');
+
+    // Fill the form out and submit it.
+    $edit = array(
+      'submitted[mail]' => 'john.doe@example.com',
+      'submitted[sbp_first_name]' => 'First',
+      'submitted[sbp_last_name]' => 'Last',
+    );
+
+    // Submit the form.
+    $this->drupalPost('node/1', $edit, 'Submit');
+
+    // Get the emails being sent, there should only be 1!
+    $emails = $this->drupalGetMails();
+    $this->assertEqual('john.doe@example.com', $emails[0]['to'], 'New account email addressed to john.doe@example.com.');
+    $this->assertEqual('register_no_approval_required', $emails[0]['key'], 'Email key is register_no_approval_required.');
+  }
+
+}

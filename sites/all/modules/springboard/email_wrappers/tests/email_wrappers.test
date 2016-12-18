@@ -1,0 +1,225 @@
+<?php
+
+/**
+ * @file
+ * Common functions for all the secure prepopulate tests.
+ */
+
+class EmailWrappersTestCase extends AJAXTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Email Wrappers',
+      'description' => 'Email Wrappers functional tests.',
+      'group' => 'Email Wrappers',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp() {
+    parent::setUp(array('webform', 'email_wrappers', 'ctools'));
+    // jam email system
+    variable_set('mail_system', array('default-system' => 'TestingMailSystem'));
+
+    $this->privileged_user = $this->drupalCreateUser(array(
+      'administer site configuration',
+      'create webform content',
+      'create email_wrapper content',
+      'edit own webform content',
+      'edit own email_wrapper content',
+      'access all webform results',
+    ));
+    $this->drupalLogin($this->privileged_user);
+  }
+
+  public function testEmailWrappersSettings() {
+    //create test webform
+    $this->WebformCreate();
+
+    // create test email wrapper
+    $edit = array(
+      'title' => 'Test Email Wrapper',
+      'email_wrapper_from_name[und][0][value]' => 'Email Wrappers Test',
+      'email_wrapper_from_email[und][0][value]' => 'from@example.com',
+      'email_wrapper_reply_email[und][0][value]' => 'replyto@example.com',
+      'email_wrapper_subject[und][0][value]' => 'Test webform submission mail',
+      'email_wrapper_bcc_email[und][0][value]' => 'bcc0@example.com',
+      //'email_wrapper_bcc_email[und][1][value]' => 'bcc1@example.com',
+      'email_wrapper_html_template[und][0][value]' => '<p>Thanks for the submission (HTML)</p>%html_message',
+      'email_wrapper_html_template[und][0][format]' => 'filtered_html',
+      'email_wrapper_html_message[und][0][value]' => '<p>This is an html message</p>',
+      'email_wrapper_html_message[und][0][format]' => 'filtered_html',
+      'email_wrapper_text_template[und][0][value]' => 'Thanks for the submission (text) %text_message',
+      'email_wrapper_text_message[und][0][value]' => 'This is a text message',
+    );
+    $this->drupalPost('node/add/email-wrapper', $edit, t('Save'));
+    $email_wrapper = node_load(2);
+    $this->assertFalse($email_wrapper->status, t('Email Wrapper unpublished by default'));
+
+    // confirm preview button?
+
+    // Confirm settingsf UI available.
+    $this->drupalGet('node/1/webform/emails');
+
+    // create email
+    $edit = array(
+      'email_custom' => '',
+      'email_option' => 'component',
+      'email_component' => 1,
+    );
+    $this->drupalPost('node/1/webform/emails', $edit, t('Add'));
+    // confirm settings ui available
+    $this->assertOptionSelected('edit-email-wrappers-email-template', 0, t('Email template selection field present on form with no default selected.'));
+
+    // Confirm ajax commands are correct.
+    $edit['email_wrappers_email_template'] = 2;
+    $commands = $this->drupalPostAJAX(NULL, $edit, 'email_wrappers_email_template');
+
+    $expected = array(
+      'command' => 'invoke',
+      'selector' => 'input[name=email_wrappers_bcc]',
+      'method' => 'val',
+      'arguments' => array(
+        0 => 'bcc0@example.com',
+      ),
+    );
+    $this->assertCommand($commands, $expected, 'BCC default inherited from template selection');
+
+    $expected = array(
+      'command' => 'invoke',
+      'selector' => 'input[name=subject_custom]',
+      'method' => 'val',
+      'arguments' => array(
+        0 => 'Test webform submission mail',
+      ),
+    );
+    $this->assertCommand($commands, $expected, 'Subject default inherited from template selection');
+
+    $expected = array (
+      'command' => 'invoke',
+      'selector' => 'input[name=from_address_custom]',
+      'method' => 'val',
+      'arguments' => array(
+        0 => 'from@example.com',
+      ),
+    );
+    $this->assertCommand($commands, $expected, 'From address default inherited from template selection');
+
+    $expected = array(
+      'command' => 'invoke',
+      'selector' => 'input[name=from_name_custom]',
+      'method' => 'val',
+      'arguments' => array(
+        0 => 'Email Wrappers Test',
+      ),
+    );
+    $this->assertCommand($commands, $expected, 'From name default inherited from template selection');
+
+    $expected = array(
+      'command' => 'invoke',
+      'selector' => 'textarea[name=email_wrappers_html_message]',
+      'method' => 'val',
+      'arguments' => array(
+         0 => '<p>This is an html message</p>',
+       ),
+    );
+    $this->assertCommand($commands, $expected, 'HTML message default inherited from template selection');
+
+    $expected = array(
+      'command' => 'invoke',
+      'selector' => 'textarea[name=email_wrappers_text_message]',
+      'method' => 'val',
+      'arguments' => array(
+        0 => 'This is a text message',
+      ),
+    );
+    $this->assertCommand($commands, $expected, 'Text message default inherited from template selection');
+
+    // save
+    $edit = array(
+      'email_wrappers_email_template' => 2,
+      'email_custom' => '',
+      'email_option' => 'component',
+      'email_component' => 1,
+      'templates[default]' => '',
+      'email_wrappers_bcc' => 'bcc0@example.com',
+      'subject_option' => 'custom',
+      'subject_custom' => 'Test webform custom subject',
+      // 'subject_component' => 1,
+      'from_address_option' => 'custom',
+      'from_address_custom' => 'from@example.com',
+      'from_address_component' => 1,
+      'from_name_option' => 'custom',
+      'from_name_custom' => 'Email Wrappers Test',
+      //'from_name_component' => 1,
+      'email_wrappers_html_message' => '<p>Customized html message</p>',
+      'email_wrappers_text_message' => 'Customized text message',
+    );
+    $this->drupalPost(NULL, $edit, t('Save e-mail settings'));
+
+    // submit webform
+    $this->WebformPost();
+
+    // confirm email sent
+    $mails = $this->drupalGetMails();
+    foreach ($mails as $mail) {
+      if ($mail['id'] == 'webform_submission') {
+        $this->assertEqual($mail['subject'], 'Test webform custom subject', 'Email subject matches.');
+
+        $multipart_legit = strpos($mail['body'], 'multi-part message in MIME format');
+        $this->assertTrue($multipart_legit, t('Email is in multipart MIME format'));
+
+        $html_template_legit = strpos($mail['body'], 'Thanks for the submission (HTML)');
+        $this->assertTrue($html_template_legit, t('Email html template rendered'));
+
+        $html_message_legit = strpos($mail['body'], 'Customized html message');
+        $this->assertTrue($html_message_legit, t('Email html message populated'));
+
+        $text_template_legit = strpos($mail['body'], 'Thanks for the submission (text)');
+        $this->assertTrue($text_template_legit, t('Email text template rendered'));
+
+        $text_message_legit = strpos($mail['body'], 'Customized text message');
+        $this->assertTrue($text_message_legit, t('Email text message populated'));
+      }
+    }
+    // confirm mail headers (type, to, from, replyto, bcc)
+    // confirm html content
+    // confirm text content
+
+
+
+  }
+
+  private function WebformCreate() {
+    $edit = array();
+    $edit['title'] = 'Webform Confirmation test webform';
+    $edit["body[und][0][value]"] = $this->randomName(16);
+    $this->drupalPost('node/add/webform', $edit, t('Save'));
+    // test webform is now node 1
+    // add webform component
+    $component = array(
+      'nid' => 1,
+      'cid' => 1,
+      'pid' => 0,
+      'form_key' => 'mail',
+      'type' => 'email',
+      'name' => 'Email address',
+      'value' => '',
+      'extra' => serialize(array(
+        'description' => '',
+        'private' => '',
+      )),
+      'mandatory' => '',
+    );
+    drupal_write_record('webform_component', $component);
+  }
+
+  private function WebformPost() {
+    $edit = array();
+    $edit["submitted[mail]"] = 'example@example.com';
+    $this->drupalPost('node/1', $edit, t('Submit'), array(), array(), 'webform-client-form-1');
+  }
+
+}

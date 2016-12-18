@@ -1,0 +1,57 @@
+<?php
+
+/**
+ * Implements hook_update_N().
+ *
+ * Remove non-p2p prefaced fields and add the new ones.
+ */
+function springboard_p2p_campaign_update_7002() {
+
+  // Delete the fields we don't want from the DB, we've created new ones and replaced them in the slideshow view as well.
+  $fields_to_delete = array(
+    'field_external_link',
+    'field_landing_page_slider_link',
+    'field_landing_page_slider_text',
+  );
+  foreach ($fields_to_delete as $field_name) {
+    field_delete_field($field_name);
+    watchdog('springboard_p2p_campaign', 'Deleted the :field_name field from all content type instances.', array(':field_name' => $field_name));
+  }
+
+  /**
+   * The fields aren't really deleted until the purge function runs, ordinarily
+   * during cron.  Count the number of fields we need to purge, and add five in
+   * case a few other miscellaneous fields are in there somehow.
+   */
+  field_purge_batch(count($fields_to_delete) + 5);
+
+  // In case of field type change, revert the feature
+  features_revert(array('springboard_p2p_campaign' => array('field')));
+}
+
+/**
+ * Implements hook_update_N().
+ *
+ * Remove the suggested donation amount field because it's the incorrect field type.
+ */
+function springboard_p2p_campaign_update_7003() {
+  // Delete the fields we don't want from the DB.
+  $fields_to_delete = array(
+    'field_p2p_suggested_donation',
+  );
+
+  foreach ($fields_to_delete as $field_name) {
+    field_delete_field($field_name);
+    watchdog('springboard_p2p_personal_campaign', 'Deleted the :field_name field from all content type instances.', array(':field_name' => $field_name));
+  }
+
+  /**
+   * The fields aren't really deleted until the purge function runs, ordinarily
+   * during cron.  Count the number of fields we need to purge, and add five in
+   * case a few other miscellaneous fields are in there somehow.
+   */
+  field_purge_batch(count($fields_to_delete) + 5);
+
+  // In case of field type change, revert the feature
+  features_revert(array('springboard_p2p_campaign' => array('field')));
+}

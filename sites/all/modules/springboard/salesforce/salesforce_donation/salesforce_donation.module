@@ -1,0 +1,888 @@
+<?php
+
+/**
+ * @file
+ * Manages webform to Salesforce mappings.
+ */
+
+/**
+ * @name core_drupal_hooks
+ * @{
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function salesforce_donation_permission() {
+  return array(
+    'map salesforce to donation' => array(
+      'title' => t('Map Salesforce objects to donations'),
+      'description' => t('Configure the mapping of Salesforce objects with fundraisers so donations can sync with Salesforce.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function salesforce_donation_menu() {
+  $items['admin/config/salesforce/salesforce-donation'] = array(
+    'title' => 'Donation',
+    'description' => 'Configure how the Salesforce integration will work with donation objects.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('salesforce_donation_settings'),
+    'access arguments' => array('administer salesforce'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Menu callback. Configure salesforce_donation module.
+ */
+function salesforce_donation_settings($form, &$form_state) {
+  // Provide a stages mapping for given stages from the charging modules.
+  $form['sf_donation_stages'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Map Salesforce Stages to Donation States'),
+    '#description' => t('Donations in particular states can be mapped to
+      specific Salesforce stages. By default donations that have been
+      successfully processed are mapped to Stage Posted. If those settings are
+      all you need, then you do not need to map additional stages.'),
+  );
+
+  $sfapi = salesforce_get_api();
+  $object_info = $sfapi->objectDescribe('Opportunity');
+  $stages = array();
+  if (isset($object_info['fields'])) {
+    foreach ($object_info['fields'] as $field) {
+      if (isset($field['name']) && $field['name'] == 'StageName' && isset($field['picklistValues'])) {
+        foreach ($field['picklistValues'] as $pick) {
+          $stages[] = $pick['value'];
+        }
+      }
+    }
+  }
+  $available_statuses = module_invoke_all('salesforce_donation_statuses');
+  if (empty($available_statuses)) {
+    $available_statuses = array();
+  }
+  // Add at index 0.
+  array_unshift($available_statuses, '-- Not mapped --');
+  $mapped_stages = variable_get('salesforce_donation_mapped_stages', salesforce_donation_default_stage_map());
+  foreach ($stages as $stage) {
+    $form['sf_donation_stages']['sf_donation_' . $stage] = array(
+      '#title' => t('@stage Stage:', array('@stage' => $stage)),
+      '#type' => 'select',
+      '#multiple' => FALSE,
+      '#options' => $available_statuses,
+      '#default_value' => isset($mapped_stages[$stage]) ? $mapped_stages[$stage] : '',
+    );
+  }
+  $form['sf_donation_stages']['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Update Stage Map'),
+    '#submit' => array('salesforce_donation_settings_stage_map_submit'),
+  );
+
+  // Build a default fieldmap.
+  // NID is dummy value, no real node here. Maps are saved/mapped per
+  // nid x module handlers (here salesforce_donation). So to pull the default
+  // back out, we just pull -1 nid for this module. Since, otherwise this
+  // operates as 'normal', we shouldn't have to tweak the form mmuch.
+  $node = new stdClass();
+  $node->nid = -1;
+  module_load_include('inc', 'salesforce_genmap', 'includes/salesforce_genmap.map');
+  $form_state['build_info']['args'][0] = $node;
+  $form += salesforce_genmap_map_form($form, $form_state, $node, 'salesforce_donation');
+  $form['salesforce_object_info']['#description'] = t('Provide a default map for Salesforce donations.');
+  // Swap out the afterbuild function to avoid errs from failed include file.
+  if (isset($form['#after_build']) && is_array($form['#after_build'])) {
+    $form['#after_build'] = array_diff($form['#after_build'], array('salesforce_genmap_map_form_after_build'));
+  }
+  else {
+    $form['#after_build'] = array();
+  }
+  $form['#after_build'][] = 'salesforce_donation_map_form_after_build';
+  return $form;
+}
+
+/**
+ * After build callback to add CSS.
+ */
+function salesforce_donation_map_form_after_build($form, &$form_state) {
+  module_load_include('inc', 'salesforce_genmap', 'includes/salesforce_genmap.map');
+  return salesforce_genmap_map_form_after_build($form, $form_state);
+}
+
+/**
+ * Default commerce stage map.
+ */
+function salesforce_donation_default_stage_map() {
+  return array(
+    'Posted' => 'payment_received',
+    'Withdrawn' => 'canceled',
+    'Pledged' => 'pending_future_payment',
+    'Partially Refunded' => 'partially_refunded',
+    'Refunded' => 'refunded',
+    'Skipped' => 'skipped',
+  );
+}
+
+/**
+ * Submit callback for settings form.
+ */
+function salesforce_donation_settings_stage_map_submit($form, &$form_state) {
+  $sfapi = salesforce_get_api();
+  $object_info = $sfapi->objectDescribe('Opportunity');
+  $stages = array();
+  if (isset($object_info['fields'])) {
+    foreach ($object_info['fields'] as $field) {
+      if (isset($field['name']) && $field['name'] == 'StageName' && isset($field['picklistValues'])) {
+        foreach ($field['picklistValues'] as $pick) {
+          $stages[] = $pick['value'];
+        }
+      }
+    }
+  }
+
+  $mapped_stages = array();
+  foreach ($stages as $stage) {
+    $mapped_stages[$stage] = isset($form_state['values']['sf_donation_stages']['sf_donation_' . $stage]) ?
+      $form_state['values']['sf_donation_stages']['sf_donation_' . $stage] : '';
+  }
+  variable_set('salesforce_donation_mapped_stages', $mapped_stages);
+}
+
+/**
+ * Validate callback for settings form.
+ */
+function salesforce_donation_settings_validate($form, &$form_state) {
+  module_load_include('inc', 'salesforce_genmap', 'includes/salesforce_genmap.map');
+  salesforce_genmap_map_form_validate($form, $form_state);
+}
+
+/**
+ * Submit callback for settings form.
+ */
+function salesforce_donation_settings_submit($form, &$form_state) {
+  module_load_include('inc', 'salesforce_genmap', 'includes/salesforce_genmap.map');
+  salesforce_genmap_map_form_submit($form, $form_state);
+}
+
+/**
+ * Implements hook_node_insert().
+ *
+ * Insert a copy of the default map when a Fundraiser node is created.
+ */
+function salesforce_donation_node_insert($node) {
+  // If node is a donation type.
+  if (fundraiser_is_donation_type($node->type)) {
+    // And if we have a default map.
+    $nid = -1;
+    if (!empty($node->clone_from_original_nid)) {
+      $nid = $node->clone_from_original_nid;
+    }
+    $map = salesforce_genmap_load_map($nid, 'salesforce_donation');
+    if (!empty($map)) {
+      // Copy the map to the node.
+      unset($map->mid);
+      $map->nid = $node->nid;
+      salesforce_genmap_save_map($map, 'salesforce_donation');
+    }
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ *
+ * Insert a copy of the default map when a Fundraiser node is created.
+ */
+function salesforce_donation_node_delete($node) {
+  // If node is a donation type.
+  if (fundraiser_is_donation_type($node->type)) {
+    salesforce_genmap_delete_map($node->nid, 'salesforce_donation');
+  }
+}
+
+/**
+ * @} core_drupal_hooks
+ */
+
+/**
+ * @name salesforce_queue_hooks
+ * @{
+ */
+
+/**
+ * Implements hook_salesforce_queue_refresh_queue_item().
+ */
+function salesforce_donation_salesforce_queue_refresh_queue_item($item) {
+  if ($item->module == 'salesforce_donation' && $item->delta == 'donation') {
+    $did = $item->drupal_id;
+    if ($donation = fundraiser_donation_get_donation($did)) {
+      // Simulate the original donation event to rebuild and requeue.
+      salesforce_donation_fundraiser_donation_success($donation);
+      return TRUE;
+    }
+    return FALSE;
+  }
+  // Recurring Donation items
+  else if ($item->module == 'fundraiser_sustainers' && $item->delta == 'recurring_donation') {
+    $did = $item->drupal_id;
+    if ($donation = fundraiser_donation_get_donation($did)) {
+      salesforce_genmap_send_object_to_queue(
+        'fundraiser_sustainers', 'insert',
+        $donation->node, $donation->did, $donation, 'recurring_donation'
+      );
+      return TRUE;
+    }
+    return FALSE;
+  }
+}
+
+/**
+ * @} salesforce_queue_hooks
+ */
+
+/**
+ * @name salesforce_genmap_hooks
+ * @{
+ * @TODO: review these, we may need to act on create instead of success
+ */
+
+/**
+ * Implements hook_fundraiser_donation_success().
+ */
+function salesforce_donation_fundraiser_donation_success($donation) {
+  // Reload donation to be sure to get everything we need from submission table
+  // then send to queue.
+  $donation = fundraiser_donation_get_donation($donation->did, TRUE);
+  // Since this is called at the end of a standalone processing, or after a
+  // recurring donation is processed: upsert.
+  if ($donation->donation['recurs_monthly'] == TRUE && $donation->status_charged == 1
+     && !empty($donation->master_did) && $donation->did != $donation->master_did) {
+    // This is part of a recurring set, already sent up once - update now.
+    salesforce_genmap_send_object_to_queue('salesforce_donation', 'update', $donation->node, $donation->did, $donation, 'donation');
+  }
+  else {
+    // This is standalone, or the first in a recurring set.
+    salesforce_genmap_send_object_to_queue('salesforce_donation', 'insert', $donation->node, $donation->did, $donation, 'donation');
+  }
+}
+
+/**
+ * Implements hook_fundraiser_refund_success().
+ */
+function salesforce_donation_fundraiser_refund_success($refund) {
+  // Reload donation to be sure to get everything we need from submission table
+  // then send to queue.
+  $donation = fundraiser_donation_get_donation($refund->did, TRUE);
+  $donation->is_refund = TRUE;
+  // This is standalone, or the first in a recurring set.
+  salesforce_genmap_send_object_to_queue('salesforce_donation', 'insert', $donation->node, $donation->did, $donation, 'donation');
+}
+
+
+/**
+ * Implements hook_fundraiser_donation_cancel().
+ *
+ * Recurring donations that have been canceled should be added to the queue.
+ */
+function salesforce_donation_fundraiser_donation_cancel($donation) {
+  // It's necessary at this point to invoke the fundraiser_donation_get_donation
+  // hook, but we don't want to load the sustainer data from the database and
+  // overwrite unsaved data. Cache the recurring property in a variable here.
+  $recurring = $donation->recurring;
+  $donation = fundraiser_donation_get_donation($donation->did);
+  $donation->recurring = $recurring;
+
+  $donation->status = isset($donation->recurring->auto_canceled) ? 'auto_canceled' : 'canceled';
+  salesforce_genmap_send_object_to_queue('salesforce_donation', 'update', $donation->node, $donation->did, $donation, 'donation');
+}
+
+/**
+ * Implements hook_fundraiser_sustainers_donation_fail().
+ *
+ * Recurring donations that fail should be exported to Salesforce with
+ * a new status.
+ */
+function salesforce_donation_fundraiser_sustainers_donation_fail($donation) {
+  $stages = variable_get('salesforce_donation_mapped_stages', salesforce_donation_default_stage_map());
+  foreach ($stages as $salesforce_name => $commerce_name) {
+    if ($commerce_name == 'failed') {
+       $stage = $salesforce_name;
+    }
+  }
+
+  // If a failed stage is mapped, re-queue the failed transaction for export.
+  if (isset($stage)) {
+    // Reload donation to be sure to get the most recent data.
+    $donation = fundraiser_donation_get_donation($donation->did, TRUE);
+    $donation->recurring->sf_stagename = $stage;
+
+    salesforce_genmap_send_object_to_queue('salesforce_donation', 'update', $donation->node, $donation->did, $donation, 'donation');
+  }
+  else {
+    $donation->recurring->sf_stagename = 'Donation failed, but stage could not be mapped.';
+    watchdog('salesforce_donation', 'Sustainer payment failure for donation @id will not be exported
+      to Salesforce because the failed order status has not been mapped to an appropriate Opportunity stage. If you wish to export failed sustainer payments you need to add a failed stage in Salesforce and map it on the Salesforce donation settings page.', array('@id' => $donation->did), WATCHDOG_DEBUG, l('Salesforce donation settings', 'admin/config/salesforce/salesforce-donation'));
+  }
+}
+
+/**
+ * Implements hook_fundraiser_donation_delete().
+ *
+ * Donations that have been deleted should be added to the queue.
+ */
+function salesforce_donation_fundraiser_donation_delete($donation) {
+  salesforce_donation_fundraiser_donation_cancel($donation);
+}
+
+/**
+ * Implements hook_fundraiser_sustainers_future_order_insert().
+ *
+ * Queue up pending donations for export to Salesforce.
+ */
+function salesforce_donation_fundraiser_sustainers_future_order_insert($donation) {
+  salesforce_genmap_send_object_to_queue('salesforce_donation', 'insert', $donation->node, $donation->did, $donation, 'donation');
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_item_alter().
+ */
+function salesforce_donation_salesforce_genmap_map_item_alter(&$item, $donation) {
+  // Modify the recurring donation object with the corrected item.
+  if ($item['module'] == 'salesforce_donation' && $item['delta'] == 'donation' && $item['operation'] == 'insert') {
+    if (isset($donation->is_refund) && $donation->is_refund == TRUE) {
+      // Remove the dedupe field from item. This will force a create.
+      if (!empty($item['dedupe_field'])) {
+        $item['dedupe_field'] = '';
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_salesforce_genmap_info().
+ */
+function salesforce_donation_salesforce_genmap_info() {
+  $types = fundraiser_get_donation_types();
+  $donation_types = array();
+  foreach ($types as $type => $is_donation) {
+    if ($is_donation) {
+      $donation_types[] = $type;
+    }
+  }
+  $items['salesforce_donation'] = array(
+    'type' => 'donation',
+    'label' => 'Donation',
+    'access callback' => 'salesforce_donation_map_page_access',
+    'supported content types' => $donation_types,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_salesforce_genmap_info_alter().
+ */
+function salesforce_donation_salesforce_genmap_info_alter(&$items) {
+  // If salesforce_webform exists.
+  if (module_exists('fundraiser_webform')) {
+    // Strip out webform module support for donation types.
+    $types = fundraiser_get_donation_types();
+    $donation_types = array();
+    foreach ($types as $type => $is_donation) {
+      if ($is_donation) {
+        $donation_types[] = $type;
+      }
+    }
+    $webform_types = webform_variable_get('webform_node_types');
+    $removed_donation_types = array_diff($webform_types, $donation_types);
+    $items['webform']['supported content types'] = $removed_donation_types;
+  }
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_fields().
+ *
+ * @param object $donation
+ *   A donation object
+ * @param Entity $map
+ *   A Salesforce map entity
+ *
+ * @return array
+ *   A set of fields mapped to value.
+ */
+function salesforce_donation_salesforce_genmap_map_fields(stdClass $donation, Entity $map, $node, $op) {
+  $fields = array();
+  // Donation properties map.
+  if (isset($map->field_map['salesforce_donation_map'])) {
+    if (isset($map->field_map['salesforce_donation_map']['did'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['did'];
+      $fields[$sf_field] = $donation->did;
+    }
+    if (isset($map->field_map['salesforce_donation_map']['gateway'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['gateway'];
+      $fields[$sf_field] = isset($donation->gateway['id']) ? $donation->gateway['id'] : '';
+    }
+    if (isset($map->field_map['salesforce_donation_map']['gateway_name'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['gateway_name'];
+      $fields[$sf_field] = isset($donation->gateway['title']) ? $donation->gateway['title'] : '';
+    }
+    if (isset($map->field_map['salesforce_donation_map']['txn_id'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['txn_id'];
+      $fields[$sf_field] = $donation->txn_id;
+    }
+    if (isset($map->field_map['salesforce_donation_map']['status'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['status'];
+      $fields[$sf_field] = $donation->status;
+    }
+    if (isset($map->field_map['salesforce_donation_map']['hostname'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['hostname'];
+      $fields[$sf_field] = $donation->donation['hostname'];
+    }
+  }
+
+  // And lastly, the reconstructed data fields. Information derived from the
+  // current fields.
+  if (isset($map->field_map['salesforce_donation_map'])) {
+    if (isset($map->field_map['salesforce_donation_map']['close_date'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['close_date'];
+      // Set by charging module.
+      $fields[$sf_field] = isset($donation->close_date) ? $donation->close_date : '';
+      if (!empty($fields[$sf_field])) {
+        $fields[$sf_field] = gmdate('c', strtotime($fields[$sf_field]));
+      }
+    }
+    if (isset($map->field_map['salesforce_donation_map']['transaction_date'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['transaction_date'];
+      // Set by charging module, else not set - so empty.
+      $fields[$sf_field] = isset($donation->transaction_date) ? $donation->transaction_date : '';
+      if (!empty($fields[$sf_field])) {
+        $fields[$sf_field] = gmdate('c', strtotime($fields[$sf_field]));
+      }
+    }
+    if (isset($map->field_map['salesforce_donation_map']['form_URL'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['form_URL'];
+      $fields[$sf_field] = $donation->form_url;
+    }
+    if (isset($map->field_map['salesforce_donation_map']['probability'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['probability'];
+      $fields[$sf_field] = 100;
+    }
+
+    if (isset($map->field_map['salesforce_donation_map']['stage'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['stage'];
+      $stage = 'Posted';
+      $mapped_stages = variable_get('salesforce_donation_mapped_stages', salesforce_donation_default_stage_map());
+      if (!empty($mapped_stages)) {
+        if (in_array($donation->status, $mapped_stages)) {
+          $flipped_stages = array_flip($mapped_stages);
+          $stage = $flipped_stages[$donation->status];
+        }
+      }
+      $fields[$sf_field] = $stage;
+    }
+
+    if (isset($map->field_map['salesforce_donation_map']['user_salesforce_account_id'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['user_salesforce_account_id'];
+      $fields[$sf_field] = '[Account:user:' . $donation->uid . ']';
+    }
+    if (isset($map->field_map['salesforce_donation_map']['user_salesforce_contact_id'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['user_salesforce_contact_id'];
+      $fields[$sf_field] = '[Contact:user:' . $donation->uid . ']';
+    }
+    if (isset($map->field_map['salesforce_donation_map']['full_name'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['full_name'];
+      $date = isset($donation->transaction_date) ? strtotime($donation->transaction_date) : '';
+      if (empty($date)) {
+        $date = isset($donation->close_date) ? strtotime($donation->close_date) : '';
+      }
+      if (empty($date)) {
+        $date = strtotime('now');
+      }
+      $fields[$sf_field] = t('Donation - !first !last (!date)',
+        array(
+          '!first' => $donation->donation['first_name'],
+          '!last' => $donation->donation['last_name'],
+          '!date' => gmdate('Y-m-d H:i:s\Z', $date),
+        ));
+    }
+  }
+
+  // Donation fields map.
+  // Grab the regular set of donation fields first.
+  $donation_fields = _fundraiser_get_field_fields();
+  foreach ($donation_fields as $form_key => $donation_field) {
+    if (isset($map->field_map['salesforce_donation_map'][$form_key])) {
+      if (isset($donation->donation[$form_key])) {
+        $sf_field = $map->field_map['salesforce_donation_map'][$form_key];
+        $fields[$sf_field] = $donation->donation[$form_key];
+      }
+    }
+  }
+  // Donation payment fields map.
+  // Depending on the payment method any number of additional fields may exist.
+  // So we need to add them here. Since which fields have values is completely
+  // dependant on the individual user's choice at time of donation we can't
+  // anticipate which one will have a value and which one won't.
+  // So we need to check for all type that MAY be configured at any point based
+  // on available methods. Methods are defined within the associated active
+  // gateways.
+  foreach ($donation->donation['payment_fields'] as $payment_method => $payment_fields) {
+    if (is_array($payment_fields)) {
+      foreach ($payment_fields as $key => $value) {
+        if (isset($map->field_map['salesforce_donation_map'][$key])) {
+          $sf_field = $map->field_map['salesforce_donation_map'][$key];
+          $fields[$sf_field] = $value;
+        }
+      }
+    }
+  }
+
+  // Reset the currency to just the code.
+  if (isset($map->field_map['salesforce_donation_map']['currency'])) {
+    if (isset($donation->donation['currency'])) {
+      $sf_field = $map->field_map['salesforce_donation_map']['currency'];
+      $fields[$sf_field] = $donation->donation['currency']['code'];
+    }
+  }
+
+  // Salesforce webform map.
+  if (isset($donation->submission_data)) {
+    foreach ($donation->submission_data as $form_key => $submission_value) {
+      if (isset($map->field_map['salesforce_webform_map'][$form_key])) {
+        $sf_field = $map->field_map['salesforce_webform_map'][$form_key];
+        $fields[$sf_field] = is_array($submission_value) ? serialize($submission_value) : $submission_value;
+      }
+    }
+  }
+  // Node properties map.
+  if (isset($map->field_map['salesforce_node_map'])) {
+    if (isset($map->field_map['salesforce_node_map']['nid'])) {
+      $sf_field = $map->field_map['salesforce_node_map']['nid'];
+      $fields[$sf_field] = $donation->nid;
+    }
+    if (isset($map->field_map['salesforce_node_map']['title'])) {
+      $sf_field = $map->field_map['salesforce_node_map']['title'];
+      $fields[$sf_field] = $donation->node->title;
+    }
+    if (isset($map->field_map['salesforce_node_map']['internal_name'])) {
+      $sf_field = $map->field_map['salesforce_node_map']['internal_name'];
+      $fields[$sf_field] = $donation->node->field_fundraiser_internal_name[$donation->node->language][0]['value'];
+    }
+  }
+  // User properties map.
+  if (isset($map->field_map['salesforce_user_map'])) {
+    if (isset($map->field_map['salesforce_user_map']['uid'])) {
+      $sf_field = $map->field_map['salesforce_user_map']['uid'];
+      $fields[$sf_field] = $donation->uid;
+    }
+    if (isset($map->field_map['salesforce_user_map']['name'])) {
+      $sf_field = $map->field_map['salesforce_user_map']['name'];
+      $fields[$sf_field] = $donation->user->name;
+    }
+    if (isset($map->field_map['salesforce_user_map']['email'])) {
+      $sf_field = $map->field_map['salesforce_user_map']['email'];
+      $fields[$sf_field] = $donation->user->email;
+    }
+  }
+  // Submission properties map.
+  if (isset($map->field_map['salesforce_submission_map'])) {
+    if (isset($map->field_map['salesforce_submission_map']['sid'])) {
+      $sf_field = $map->field_map['salesforce_submission_map']['sid'];
+      // If sid = 0, then no submission id (may be created by sustainer).
+      $fields[$sf_field] = $donation->sid;
+    }
+    if (isset($map->field_map['salesforce_submission_map']['date'])) {
+      $sf_field = $map->field_map['salesforce_submission_map']['date'];
+      $fields[$sf_field] = REQUEST_TIME;
+    }
+  }
+  // Detect refund, if this is a donation object representing a refund:
+  if (!empty($donation->is_refund) && $donation->is_refund == TRUE) {
+    $fields['Amount'] = $donation->donation['amount'];
+    if (is_array($donation->refunds)) {
+      // Get the latest reason and amount.
+      foreach ($donation->refunds as $refund) {
+        $fields['Cancellation_Reason__c'] = $refund->reason;
+        $fields['Amount'] = $fields['Amount'] - $refund->amount;
+        $fields['Transaction_Date_Time__c']  = gmdate('c', $refund->changed);
+        $fields['CloseDate']  = gmdate('c', $refund->changed);
+      }
+
+      //$fields['Parent_Donation__c'] = '[Opportunity:donation:' . $donation->did . ']';
+      $fields['Probability'] = 0;
+      // Remove the donation id mapping if it's been set. No dupes for refunds!
+      if (isset($map->field_map['salesforce_donation_map']['did'])) {
+        $sf_field = $map->field_map['salesforce_donation_map']['did'];
+        unset($fields[$sf_field]);
+      }
+    }
+  }
+
+  // If the donation was canceled append the reason because it's not
+  // currently mappable.
+  if (($donation->status == 'canceled' || $donation->status == 'auto_canceled') && !empty($donation->recurring)) {
+    $fields['Cancellation_Reason__c'] = $donation->recurring->cancellation_reason;
+  }
+
+  return $fields;
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_fields_alter()
+ */
+function salesforce_donation_salesforce_genmap_map_fields_alter(&$fields, $context) {
+  if ($context['module'] == 'salesforce_donation') {
+    $donation = $context['object'];
+    if (($donation->status == 'canceled' || $donation->status == 'auto_canceled') && !empty($donation->recurring)) {
+      $fields['Cancellation_Reason__c'] = $donation->recurring->cancellation_reason;
+    }
+  }
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_field_info().
+ *
+ * @param object $node
+ *   Provide a node object
+ *
+ * @return array
+ *   A set of fields to be used in mapping form.
+ */
+function salesforce_donation_salesforce_genmap_map_field_info($node) {
+  // Build an array of fields to map against.
+  // Nested by category. If the category allows for dedupes, note that.
+  $fields = array();
+  $fields['salesforce_donation_map'] = array(
+    '#type' => 'donation',
+    '#label' => t('Donation Field'),
+    '#dedupe' => TRUE,
+    '#fields' => array(
+      'did' => t('Donation ID'),
+      'gateway' => t('Gateway ID'),
+      'gateway_name' => t('Gateway Name'),
+      'txn_id' => t('Transaction ID'),
+      'status' => t('Payment Status'),
+      'hostname' => t('IP address'),
+    ),
+  );
+
+  // And lastly, the additional data fields. Information that comes from
+  // donation circumstances.
+  $fields['salesforce_donation_map']['#fields']['close_date'] = t('Close date');
+  $fields['salesforce_donation_map']['#fields']['transaction_date'] = t('Transaction date');
+  $fields['salesforce_donation_map']['#fields']['form_URL'] = t('Form URL');
+  $fields['salesforce_donation_map']['#fields']['probability'] = t('Probability');
+  $fields['salesforce_donation_map']['#fields']['stage'] = t('Stage');
+  $fields['salesforce_donation_map']['#fields']['user_salesforce_account_id'] = t('User Salesforce Account ID');
+  $fields['salesforce_donation_map']['#fields']['user_salesforce_contact_id'] = t('User Salesforce Contact ID');
+  $fields['salesforce_donation_map']['#fields']['full_name'] = t('Full name');
+
+  // Additional donation fields.
+  // Grab the regular set of donation fields.
+  $donation_fields = _fundraiser_get_field_fields();
+  foreach ($donation_fields as $form_key => $donation_field) {
+    // Skip if this is a fieldset type.
+    // Payment fields are individualized below, so don't include here.
+    if ($donation_field['#type'] != 'fieldset'
+       && $donation_field['#type'] != 'payment_fields'
+       && $form_key != 'other_amount') {
+      $fields['salesforce_donation_map']['#fields'][$form_key] = $donation_field['#title'] .
+        ' (' . $donation_field['#type'] . ')';
+    }
+  }
+  // Depending on the payment method any number of additional fields may exist.
+  // So we need to add them here. Since which fields have values is completely
+  // dependant on the individual user's choice at time of donation we can't
+  // anticipate which one will have a value and which one won't.
+  // So we need to check for all type that MAY be configured at any point based
+  // on available methods. Methods are defined within the associated active
+  // gateways. So, we looks up each form and field per form.
+  if (module_exists('fundraiser_webform') && $node->nid != -1) {
+    // Find the payment methods component.
+    $payment_method_component = _fundraiser_webform_get_component_by_nid_key($node->nid, array('payment_method'));
+    $payment_method_field = $node->webform['components'][$payment_method_component->cid];
+    // Use the enabled payment methods to create the payment fields.
+    if (!empty($payment_method_field['extra']['payment_methods'])) {
+      $payment_methods = array_filter($payment_method_field['extra']['payment_methods'],
+        '_fundraiser_webform_payment_method_array_filter_enabled');
+    }
+    // Loop through the payment methods and add fields for each type.
+    foreach ($payment_methods as $payment_method => $config) {
+      // Find the given gateway idea for this, pull from
+      // _fundraiser_gateway_info($gateway_id) for fields.
+      $gateway_info = _fundraiser_gateway_info($config['id']);
+      // Check against the gateway config for a specific form to go with this
+      // payment gateway.
+      if (isset($gateway_info['form callback'])) {
+        $form_func = $gateway_info['form callback'];
+        if (function_exists($form_func)) {
+          $gateway_form = $form_func($payment_method, $config);
+        }
+      }
+      // Note: fields can be nested down.
+      $field_set = _salesforce_donation_get_form_fields($gateway_form);
+      foreach ($field_set as $field_key => $field_title) {
+        $fields['salesforce_donation_map']['#fields'][$field_key] = $field_title . ' (' . t('Payment field') . ')';
+      }
+    }
+  }
+  elseif (module_exists('fundraiser_webform') && $node->nid == -1) {
+    // If node is -1, then we're working with default.
+    // We go with the CC defaults, anything else can be added by other modules
+    // on drupal_alter.
+    $fields['salesforce_donation_map']['#fields']['card_number'] = t('Credit card last 4') . ' (' . t('Default payment field') . ')';
+    $fields['salesforce_donation_map']['#fields']['card_expiration_month'] = t('Expiration month') . ' (' . t('Default payment field') . ')';
+    $fields['salesforce_donation_map']['#fields']['card_expiration_year'] = t('Expiration year') . ' (' . t('Default payment field') . ')';
+    $fields['salesforce_donation_map']['#fields']['card_type'] = t('Card type') . ' (' . t('Default payment field') . ')';
+  }
+
+  // Webform component fields.
+  // If node is -1, then we're working with default. No webform comps.
+  if (module_exists('fundraiser_webform') && $node->nid != -1) {
+    $fields['salesforce_webform_map'] = array(
+      '#type' => 'webform',
+      '#label' => t('Webform Component'),
+      '#dedupe' => FALSE,
+      '#fields' => array(),
+    );
+    $wf_components = $node->webform['components'];
+    $donation_field_keys = array_keys($donation_fields);
+    foreach ($wf_components as $cid => $component) {
+      if ($component['type'] != 'fieldset' && !in_array($component['form_key'], $donation_field_keys)) {
+        $form_key = $component['form_key'];
+        $fields['salesforce_webform_map']['#fields'][$form_key] = $component['name'] . ' (' . $component['type'] . ')';
+      }
+    }
+  }
+  elseif (module_exists('fundraiser_webform') && module_exists('market_source') && $node->nid == -1) {
+    $fields['salesforce_webform_map'] = array(
+      '#type' => 'webform',
+      '#label' => t('Webform Component'),
+      '#dedupe' => FALSE,
+      '#fields' => array(),
+    );
+    // If node is -1, then we're working with default.
+    // We go with the CC defaults, anything else can be added by other modules
+    // on drupal_alter.
+    $fields['salesforce_webform_map']['#fields']['cid'] = t('Campaign ID') . ' (' . t('Default webform field') . ')';
+    $fields['salesforce_webform_map']['#fields']['ms'] = t('Market Source') . ' (' . t('Default webform field') . ')';
+    $fields['salesforce_webform_map']['#fields']['referrer'] = t('Referrer') . ' (' . t('Default webform field') . ')';
+    $fields['salesforce_webform_map']['#fields']['initial_referrer'] = t('Initial Referrer') . ' (' . t('Default webform field') . ')';
+    $fields['salesforce_webform_map']['#fields']['search_engine'] = t('Search Engine') . ' (' . t('Default webform field') . ')';
+    $fields['salesforce_webform_map']['#fields']['search_string'] = t('Search String') . ' (' . t('Default webform field') . ')';
+    $fields['salesforce_webform_map']['#fields']['user_agent'] = t('User Agent') . ' (' . t('Default webform field') . ')';
+  }
+
+  // Node fields.
+  $fields['salesforce_node_map'] = array(
+    '#type' => 'node',
+    '#label' => t('Node Property'),
+    '#dedupe' => FALSE,
+    '#fields' => array(
+      'nid' => t('Node ID'),
+      'title' => t('Node Title'),
+      'internal_name' => t('Internal Name'),
+    ),
+  );
+  // User fields.
+  $fields['salesforce_user_map'] = array(
+    '#type' => 'user',
+    '#label' => t('User Property'),
+    '#dedupe' => FALSE,
+    '#fields' => array(
+      'uid' => t('User ID'),
+      'name' => t('User Name'),
+      'email' => t('User Email'),
+    ),
+  );
+  // Submission fields.
+  $fields['salesforce_submission_map'] = array(
+    '#type' => 'submission',
+    '#label' => t('Submission Property'),
+    '#dedupe' => FALSE,
+    '#fields' => array(
+      'sid' => t('Submission ID'),
+      'date' => t('Submission Date'),
+    ),
+  );
+  // And return the fields for the map to generate the form.
+  return $fields;
+}
+
+/**
+ * Helper function, given a form, get all submission values NOT fieldset.
+ *
+ * WARNING: Recursion here.
+ */
+function _salesforce_donation_get_form_fields($form, $fields = array()) {
+  foreach (element_children($form) as $field_name) {
+    if (isset($form[$field_name]['#type']) && $form[$field_name]['#type'] != 'fieldset') {
+      $mappable = isset($form[$field_name]['#salesforce_mappable']) ? $form[$field_name]['#salesforce_mappable'] : TRUE;
+      if ($mappable) {
+        $label = isset($form[$field_name]['#title']) ? $form[$field_name]['#title'] : $field_name;
+        $label = isset($form[$field_name]['#salesforce_label']) ? $form[$field_name]['#salesforce_label'] : $label;
+        $fields[$field_name] = $label;
+      }
+    }
+    else {
+      $fields = _salesforce_donation_get_form_fields($form[$field_name], $fields);
+    }
+  }
+  return $fields;
+}
+
+/**
+ * @} salesforce_genmap_hooks
+ */
+
+/**
+ * Access callback to reach the mapping page.
+ */
+function salesforce_donation_map_page_access($node, $module) {
+  if ($node !== FALSE
+     && fundraiser_is_donation_type($node->type)
+     && user_access('map salesforce to donation')
+    ) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function salesforce_donation_entity_update($entity, $type) {
+  // Updating the mapping entity will require having all of the queue items
+  // regenerated so the new mapping configuration can be applied to them.
+  if ($type == 'salesforce_genmap_map' && $entity->map_handler == 'salesforce_donation') {
+    $queue = salesforce_queue_load();
+    $query = db_select('salesforce_queue', 'q');
+    // Map dids, to drupal id to get access to donation nids.
+    $query->join('fundraiser_donation', 'fd', 'q.drupal_id = fd.did');
+    $query->fields('q')
+      ->condition('q.module', 'salesforce_donation')
+      // Limit to the donation nids matching this node.
+      ->condition('fd.nid', $entity->nid)
+      ->condition('q.object_type', $entity->salesforce_object_type);
+    $result = $query->execute();
+    foreach ($result as $item) {
+      // Get the original submission and requeue it.
+      $donation = fundraiser_donation_get_donation($item->drupal_id, TRUE);
+      $op = '';
+      if (in_array($item->operation, array('UPSERT', 'UPDATE'))) {
+        $op = 'update';
+      }
+      elseif ($item->operation == 'CREATE') {
+        $op = 'insert';
+      }
+      elseif ($item->operation == 'DELETE') {
+        $op = 'delete';
+      }
+      salesforce_genmap_send_object_to_queue('salesforce_donation', $op, $donation->node, $donation->did, $donation, 'donation');
+    }
+  }
+}

@@ -1,0 +1,44 @@
+<?php
+
+/**
+ * @file
+ * Simple tests for salesforce_mapping
+ */
+
+module_load_include('test', 'salesforce_mapping', 'tests/salesforce_mapping.entities');
+
+/**
+ * Tests basic set up for mapping salesforce objects to webforms.
+ */
+class SalesforceMappingAlterEntitiesTestCase extends SalesforceMappingEntitiesTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Map Entities Alter',
+      'description' => 'Ensure that the map and object entities function properly after altering.',
+      'group' => 'Salesforce Mapping',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array(), $permissions = array()) {
+    // Enable salesforce_genmap and run all of the entities tests again.
+    $modules = array_merge($modules, array(
+      'salesforce_sync',
+      'salesforce_genmap',
+    ));
+    parent::setUp($modules, $permissions);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+}

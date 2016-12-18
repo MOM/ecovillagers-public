@@ -1,0 +1,14 @@
+name = Region Tokens
+description = Provides tokens with the content of one or more block regions.
+package = Other
+version = 7.x-1.0-rc3
+core = 7.x
+
+dependencies[] = token
+
+; Information added by drupal.org packaging script on 2013-10-03
+version = "7.x-1.0-rc3"
+core = "7.x"
+project = "region_tokens"
+datestamp = "1380815861"
+

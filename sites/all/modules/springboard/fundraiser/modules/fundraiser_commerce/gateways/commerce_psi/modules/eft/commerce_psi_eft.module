@@ -1,0 +1,220 @@
+<?php
+
+/**
+ * Implements hook_commerce_payment_method_info().
+ */
+function commerce_psi_eft_commerce_payment_method_info() {
+  $payment_methods = array();
+
+  $payment_methods['commerce_psi_eft'] = array(
+    'base' => 'commerce_psi_eft',
+    'title' => t('Payment Solutions Inc. - EFT'),
+    'short_title' => t('PSI EFT'),
+    'display_title' => t('Electronic Funds Transfer'),
+    'description' => t('Payment Solutions Inc. - Electronic Funds Transfer.'),
+  );
+
+  return $payment_methods;
+}
+
+/**
+ * Returns the default settings for the Payment Solutions Inc. payment method.
+ */
+function commerce_psi_eft_default_settings() {
+  return _commerce_psi_default_settings();
+}
+
+/**
+ * Payment method callback: settings form.
+ */
+function commerce_psi_eft_settings_form($settings = array()) {
+  // Merge default settings into the stored settings array.
+  $settings = (array) $settings + commerce_psi_eft_default_settings();
+  $form = _commerce_psi_settings_form($settings);
+  return $form;
+}
+
+/**
+ * Payment method callback: checkout form.
+ */
+function commerce_psi_eft_submit_form($payment_method, $pane_values = array(), $checkout_pane = NULL, $order = NULL) {
+  $form = array();
+  $form['bank_account']['bank_name'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Bank Name'),
+    '#required' => TRUE,
+  );
+  $form['bank_account']['routing_number'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Routing Number'),
+    '#required' => TRUE,
+  );
+  $form['bank_account']['account_number'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Account Number'),
+    '#required' => TRUE,
+  );
+  $form['bank_account']['confirm_account_number'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Confirm Account Number'),
+    '#required' => TRUE,
+  );
+  $form['bank_account']['account_type'] = array(
+    '#type' => 'select',
+    '#title' => t('Account Type'),
+    '#options' => array(
+      'Checking' => 'Checking',
+      'Savings' => 'Savings',
+    ),
+    '#required' => TRUE,
+  );
+
+  return $form;
+}
+
+/**
+ * Payment method callback: checkout form validation.
+ */
+function commerce_psi_eft_submit_form_validate($payment_method, $pane_form, $pane_values, $order, $form_parents = array()) {
+  $prefix = implode('][', $form_parents) . '][';
+  // Validate the account number fields
+  if (!ctype_digit($pane_values['bank_account']['routing_number']) || strlen($pane_values['bank_account']['routing_number']) > 9) {
+    form_set_error($prefix . 'routing_number', t('The routing number should be a 9 digit numeric value.'));
+  }
+
+  if (!ctype_digit($pane_values['bank_account']['account_number'])) {
+    form_set_error($prefix . 'account_number', t('The account number should only contain numeric values.'));
+  }
+
+  if ($pane_values['bank_account']['account_number'] != $pane_values['bank_account']['confirm_account_number']) {
+    form_set_error($prefix . 'account_number', t('The account numbers do not match.'));
+    form_set_error($prefix . 'confirm_account_number');
+  }
+}
+
+/**
+ * Payment method callback: checkout form submission.
+ */
+function commerce_psi_eft_submit_form_submit($payment_method, $pane_form, $pane_values, $order, $charge) {
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+  // Build a name-value pair array for this transaction.
+  $nvp['Amount'] = commerce_currency_amount_to_decimal($charge['amount'], $charge['currency_code']);
+
+  // Prepare the billing address for use in the request.
+  $nvp['Donor'] = _commerce_psi_build_donor($order, $payment_method);
+  if (empty($nvp['Donor'])) {
+    drupal_set_message(t('There was an error processing this payment. Please try again.'), 'error');
+    return FALSE;
+  }
+
+  $nvp['BankAccount'] = array(
+    'AccountNumber' => $pane_values['bank_account']['account_number'],
+    'RoutingNumber' => $pane_values['bank_account']['routing_number'],
+    'BankName' => $pane_values['bank_account']['bank_name'],
+    'Type' => $pane_values['bank_account']['account_type'],
+    'BankState' => $nvp['Donor']['StateProvince'],
+    'BankCity' => $nvp['Donor']['City'],
+  );
+
+  // Build a description for the order.
+  $description = array();
+
+  foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    if (in_array($line_item_wrapper->type->value(), commerce_product_line_item_types())) {
+      $description[] = round($line_item_wrapper->quantity->value(), 2) . 'x ' . $line_item_wrapper->line_item_label->value();
+    }
+  }
+
+  // Set the frequency if that value has been passed
+  $nvp['PayType'] = 'OneTime';
+  if (!empty($pane_values['frequency'])) {
+    $nvp['Frequency'] = $pane_values['frequency'];
+    $nvp['PayType'] = 'Sustainer';
+  }
+
+  $nvp['ProcessDateTime'] = date('c');
+  $nvp['PayCode'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['pay_code'], $order), 0, 20);
+  $nvp['ProgramCode'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['program_code'], $order), 0, 12);
+  $nvp['SourceCode'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['source_code'], $order), 0, 12);
+  $nvp['MarketSource'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['market_source'], $order), 0, 100);
+  $nvp['ClientTransactionId'] = $order->order_id;
+
+  // Allow modules to alter the values sent to PSI
+  $context = array(
+    'payment_method' => $payment_method,
+    'type' => 'eft',
+  );
+  drupal_alter('commerce_psi_request', $nvp, $context);
+
+  // Log the request if specified.
+  if ($payment_method['settings']['log']['request'] === 'request') {
+    // Mask the credit card number and CVV.
+    $log_nvp = $nvp;
+    if (!empty($log_nvp['BankAccount']['AccountNumber'])) {
+      $log_nvp['BankAccount']['AccountNumber'] = str_repeat('X', strlen($log_nvp['BankAccount']['AccountNumber']) - 4) . substr($log_nvp['BankAccount']['AccountNumber'], -4);
+    }
+
+    if (!empty($log_nvp['BankAccount']['RoutingNumber'])) {
+      $log_nvp['BankAccount']['RoutingNumber'] = str_repeat('X', strlen($log_nvp['BankAccount']['RoutingNumber']) - 4) . substr($log_nvp['BankAccount']['RoutingNumber'], -4);
+    }
+
+    watchdog('commerce_psi', 'PSI request: !param', array('!param' => '<pre>' . check_plain(print_r($log_nvp, TRUE)) . '</pre>'), WATCHDOG_DEBUG);
+  }
+
+  // Prepare a transaction object
+  $transaction = commerce_payment_transaction_new('commerce_psi_eft', $order->order_id);
+  $transaction->instance_id = $payment_method['instance_id'];
+  $transaction->amount = $charge['amount'];
+  $transaction->currency_code = $charge['currency_code'];
+  $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
+
+  // Submit the request to PSI
+  $response = _commerce_psi_request($payment_method, $nvp, 'eft');
+
+  // If no response bail out and ask them to try again
+  if (empty($response)) {
+    $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
+    $transaction->message = 'The PSI API did not respond.';
+    commerce_payment_transaction_save($transaction);
+    drupal_set_message(t('There was an error processing this payment. Please try again.'), 'error');
+    return FALSE;
+  }
+
+  $transaction->payload[REQUEST_TIME] = $response;
+  $transaction->remote_id = $response->ClientTransactionId;
+
+  // Mark as success if we get back a 1 or 4
+  if (in_array((int) $response->ResponseCode, array(1, 4))) {
+    $success = TRUE;
+  }
+  else {
+    $success = FALSE;
+  }
+
+  $transaction->status  = $success ? COMMERCE_PAYMENT_STATUS_SUCCESS : COMMERCE_PAYMENT_STATUS_FAILURE;
+  $transaction->remote_status = $response->Approved;
+
+  // Build the response message.
+  $transaction->message = '<b>!status:</b> !response_message Response code: !response_code; Reason code: !reason_code';
+  $transaction->message_variables = array(
+    '!status' => $success ? t('APPROVED') : t('FAILED'),
+    '!response_message' => check_plain($response->ResponseMessage),
+    '!response_code' => $response->ResponseCode,
+    '!reason_code' => $response->ReasonCode,
+  );
+
+  // Save the transaction information.
+  commerce_payment_transaction_save($transaction);
+
+  // Log the response if specified.
+  if ($payment_method['settings']['log']['response'] === 'response') {
+    watchdog('commerce_psi', 'PSI response: !param', array('!param' => '<pre>' . check_plain(print_r($response, TRUE)) . '</pre>', WATCHDOG_DEBUG));
+  }
+
+  // If the payment failed, display an error and rebuild the form.
+  if (!$success) {
+    drupal_set_message(t('We received the following error processing your account. Please enter your information again or try a different account.'), 'error');
+    drupal_set_message(check_plain($response->ResponseMessage), 'error');
+    return FALSE;
+  }
+}

@@ -1,0 +1,392 @@
+<?php
+
+/**
+ * @file
+ * Focuses on synchronization controls for Salesforce integration.
+ */
+
+
+// Load extended modules include files.
+_salesforce_sync_load_extended_modules();
+
+/**
+ * @defgroup salesforce_sync_rules Sync Rule Options with Salesforce
+ * @{
+ */
+
+// Always replace the recipient record, or record's field, with the incoming
+// data.
+define('SALESFORCE_SYNC_RULE_ALWAYS', 'always');
+
+// Only insert the incoming data if the recipient record, or record's field, has
+// no data.
+define('SALESFORCE_SYNC_RULE_BLANK', 'blank');
+
+// Add the incoming data to the end of the current recipient record, or record's
+// field.
+define('SALESFORCE_SYNC_RULE_APPEND', 'append');
+
+// Never place the incoming data in the recipient record, or record's field.
+define('SALESFORCE_SYNC_RULE_NEVER', 'never');
+
+/**
+ * @} salesforce_queue_sync_rules
+ */
+
+
+/**
+ * @defgroup salesforce_sync_var_default Default Variables for Salesforce Sync
+ * @{
+ */
+
+// The maximum length of a query string that can be sent to Salesforce.
+define('SALESFORCE_SYNC_MAX_QUERY_LENGTH_DEFAULT', 10000);
+
+// The maximum amount of items that can be sent to Salesforce in one call.
+define('SALESFORCE_SYNC_MAX_BATCH_SIZE_DEFAULT', 200);
+
+// The maximum records that can be fetched from Salesforce in one call.
+define('SALESFORCE_SYNC_MAX_RETRIEVE_SIZE_DEFAULT', 2000);
+
+// The maximum quantity of records that can ever be retrieved.
+define('SALESFORCE_SYNC_QUERY_LIMIT_DEFAULT', 4000);
+
+// The default setting for truncating long strings.
+define('SALESFORCE_SYNC_TRUNCATE_LONG_STRINGS_DEFAULT', FALSE);
+
+/**
+ * @}
+ */
+
+
+/**
+ * @defgroup salesforce_sync_item_fail_responses Item fail responses
+ * @{
+ * When an item fails, one of the following reasons is given for its failure.
+ */
+
+// Item failed when it was attempted to be created in Salesforce.
+define('SALESFORCE_SYNC_ITEM_FAIL_CREATE', 'Item failed CREATE.');
+
+// Item failed when it attempted an upsert in Salesforce.
+define('SALESFORCE_SYNC_ITEM_FAIL_UPSERT', 'Item failed UPSERT.');
+
+// Item failed when it attempted an update in Salesforce.
+define('SALESFORCE_SYNC_ITEM_FAIL_UPDATE', 'Item failed UPDATE.');
+
+// Item failed when it was attempted to be deleted in Salesforce.
+define('SALESFORCE_SYNC_ITEM_FAIL_DELETE', 'Item failed DELETE.');
+
+// Item failed when it was attempted to be undeleted in Salesforce.
+define('SALESFORCE_SYNC_ITEM_FAIL_UNDELETE', 'Item failed UNDELETE.');
+
+// The entire batch failed to be processed due to some error with Salesforce.
+define('SALESFORCE_SYNC_ITEM_FAIL_BATCH', 'Batch threw exception.');
+
+// The batch failed to be processed because we could not get a connection.
+define('SALESFORCE_SYNC_ITEM_FAIL_SOAP', 'SOAP not established.');
+
+// The batch failed to be processed because we could not get a connection.
+define('SALESFORCE_SYNC_ITEM_FAIL_TOKEN_BATCH', 'No items ready to sync in the batch.');
+
+// The batch failed to be processed because we could not get a connection.
+define('SALESFORCE_SYNC_ITEM_FAIL_TOKEN', 'Item failed due to bad token.');
+
+/**
+ * @} salesforce_sync_item_fail_responces
+ */
+
+
+/**
+ * Implements hook_entity_info().
+ */
+function salesforce_sync_entity_info() {
+  return array(
+    // Maps Salesforce records to Drupal records.
+    'salesforce_sync_map' => array(
+      'label' => t('Salesforce Record Map'),
+      'entity class' => 'Entity',
+      'controller class' => 'EntityAPIController',
+      'base table' => 'salesforce_sync_map',
+      'entity keys' => array(
+        'id' => 'rmid',
+      ),
+      'fieldable' => FALSE,
+      'exportable' => FALSE,
+      'module' => 'salesforce_sync',
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function salesforce_sync_menu() {
+  $items['admin/config/salesforce/salesforce-sync'] = array(
+    'title' => 'Synchronize',
+    'description' => 'Configuration settings for syncing with Salesforce.',
+    'page callback' => 'salesforce_sync_admin_page',
+    'access arguments' => array('administer salesforce sync'),
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'includes/salesforce_sync.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function salesforce_sync_permission() {
+  $permissions = array(
+    'administer salesforce sync' => array(
+      'description' => t('Configure settings for syncing with Salesforce.'),
+      'title' => t('Configure Salesforce Sync'),
+      'restrict access' => TRUE,
+    ),
+  );
+  $extended_modules = _salesforce_sync_get_extended_modules_list();
+  foreach ($extended_modules as $module) {
+    $module_perms = module_invoke($module, 'salesforce_sync_permission');
+    if (!empty($module_perms) && is_array($module_perms)) {
+      $permissions += $module_perms;
+    }
+  }
+  return $permissions;
+}
+
+/**
+ * Implements hook_salesforce_queue_create_item_alter().
+ */
+function salesforce_sync_salesforce_queue_create_item_alter(&$item) {
+  // When adding queue items, ensure that the sfid is in the sobject.
+  if (($item['operation'] == 'UPDATE' || $item['operation'] == 'DELETE') && !isset($item['sobject']->Id)) {
+    $record = salesforce_sync_load_map($item);
+    if (!empty($record) && isset($record->sfid)) {
+      $item['sobject']->Id = $record->sfid;
+    }
+  }
+}
+
+/**
+ * Implements hook_salesforce_sync_pass_item().
+ */
+function salesforce_sync_salesforce_sync_pass_item($item, $result) {
+  // If data was sent to Salesforce directly related to a specific Drupal
+  // record, map the Drupal record to the Salesforce record.
+  if (isset($item->module) && isset($item->delta) && isset($item->drupal_id)) {
+    $record = array(
+      'sfid' => $result->id,
+      'module' => $item->module,
+      'delta' => $item->delta,
+      'drupal_id' => $item->drupal_id,
+      'object_type' => $item->object_type,
+    );
+    switch ($item->operation) {
+      // Create record maps on new items.
+      case 'CREATE':
+      case 'UPSERT':
+        salesforce_sync_save_map($record);
+        break;
+
+      // Delete record maps on removed items.
+      case 'DELETE':
+        salesforce_sync_delete_map($record);
+        break;
+    }
+  }
+}
+
+
+/**
+ * @defgroup salesforce_sync_map_crud CRUD API for Record Mapping
+ * @{
+ */
+
+/**
+ * Creates and saves a Salesforce record map.
+ *
+ * @param mixed $record
+ *   Can be an array of values or a salesforce_sync_map entity object
+ *
+ * @return bool
+ *   SAVED_NEW or SAVED_UPDATED depending on the operation performed. Otherwise,
+ *   FALSE is returned if the record could not be saved.
+ */
+function salesforce_sync_save_map($record) {
+  if (is_array($record)) {
+    // Allow sending an array and updating an existing entity with the values.
+    $entity = salesforce_sync_load_map($record);
+    if ($entity) {
+      foreach ($record as $key => $value) {
+        $entity->$key = $value;
+      }
+      $record = $entity;
+    }
+    else {
+      // Create a new entity object, but does not yet add to the database.
+      $record = entity_create('salesforce_sync_map', $record);
+    }
+  }
+  if ($record->entityType() == 'salesforce_sync_map') {
+    // Adds the data to the database.
+    return entity_save('salesforce_sync_map', $record);
+  }
+  return FALSE;
+}
+
+/**
+ * Retreives a Salesforce record map.
+ *
+ * @param mixed $record
+ *   Can be an array of values or a salesforce_sync_map entity object
+ *
+ * @return bool|object
+ *   The entity object you requested
+ */
+function salesforce_sync_load_map($record) {
+  $rmid = _salesforce_sync_get_rmid($record);
+  if (!empty($rmid)) {
+    $entities = entity_load('salesforce_sync_map', array($rmid));
+    if (isset($entities[$rmid])) {
+      return $entities[$rmid];
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Deletes a Salesforce record map.
+ *
+ * @param mixed $record
+ *   Can be an array of values or a salesforce_sync_map entity object
+ *
+ * @return bool
+ *   TRUE if the delete performed as expected, FALSE if the delete could not
+ *   work as expected.
+ */
+function salesforce_sync_delete_map($record) {
+  $rmid = _salesforce_sync_get_rmid($record);
+  if (!empty($rmid)) {
+    $result = entity_delete('salesforce_sync_map', $rmid);
+    if ($result === FALSE) {
+      // entity_delete() only returns FALSE. Otherwise it has no return value.
+      return FALSE;
+    }
+    return TRUE;
+  }
+}
+
+/**
+ * Implements hook_salesforce_log_info().
+ */
+function salesforce_sync_salesforce_log_info() {
+  return array(
+    'watchdog' => array(
+      'sync-01' => t('Item failed to sync'),
+      'sync-02' => t('Item failed to delete'),
+      'sync-03' => t('Batch failed to sync'),
+      'sync-04' => t('Fetch records by Id failed'),
+      'sync-05' => t('Fetch records by Id gave bad results'),
+      'sync-06' => t('Salesforce query failed'),
+      'sync-07' => t('Salesforce query could not fetch all'),
+      'sync-08' => t('Query cannot be shortened under max length'),
+      'sync-10' => t('SalesforceAPI is unauthorized'),
+      'sync-11' => t('SalesforceSoapPartner is unusable'),
+      'sync-12' => t('Empty query condition provided'),
+    ),
+  );
+}
+
+/**
+ * Helper to grab the record id of a map.
+ */
+function _salesforce_sync_get_rmid($item) {
+  if (isset($item->rmid) && !empty($item->rmid)) {
+    return $item->rmid;
+  }
+  if (is_object($item)) {
+    $record = (array) clone($item);
+  }
+  else {
+    $record = $item;
+  }
+  if (isset($record['sobject']->Id)) {
+    return db_select('salesforce_sync_map', 'm')
+      ->fields('m', array('rmid'))
+      ->condition('sfid', $record['sobject']->Id)
+      ->execute()
+      ->fetchField();
+  }
+  else {
+    return db_select('salesforce_sync_map', 'm')
+      ->fields('m', array('rmid'))
+      ->condition('module', $record['module'])
+      ->condition('delta', $record['delta'])
+      ->condition('drupal_id', $record['drupal_id'])
+      ->condition('object_type', $record['object_type'])
+      ->execute()
+      ->fetchField();
+  }
+}
+
+/**
+ * Helper to grab all sync item records based on drupal type.
+ */
+function _salesforce_sync_get_synced_items($drupal_id, $module, $delta) {
+  $items = db_select('salesforce_sync_map', 'm')
+    ->fields('m')
+    ->condition('drupal_id', $drupal_id)
+    ->condition('module', $module)
+    ->condition('delta', $delta)
+    ->execute()
+    ->fetchAll();
+
+  return $items;
+}
+
+/**
+ * @} salesforce_sync_map_crud
+ */
+
+/**
+ * Helper to get list of modules being extended.
+ */
+function _salesforce_sync_get_extended_modules_list() {
+  $modules = array();
+
+  // Drupal function file_scan_directory() uses the opendir() approach which
+  // does not work if the path contains symlinks.  Using scandir() to be more
+  // flexible.
+  $cache = cache_get('salesforce_sync_extended_modules');
+  if (empty($cache)) {
+    $path = drupal_get_path('module', 'salesforce_sync') . '/includes/modules';
+    if (is_dir($path)) {
+      $files = scandir($path);
+      foreach ($files as $file) {
+        if (!in_array($file, array('.', '..')) && substr($file, -4) == '.inc') {
+          $modules[] = substr($file, 0, -4);
+        }
+      }
+    }
+    cache_set('salesforce_sync_extended_modules', $modules);
+  }
+  else {
+    $modules = $cache->data;
+  }
+  return $modules;
+}
+
+/**
+ * Helper to load the include files for the modules we extend.
+ */
+function _salesforce_sync_load_extended_modules($module = '') {
+  if (empty($module)) {
+    $modules = _salesforce_sync_get_extended_modules_list();
+  }
+  else {
+    $modules = array($module);
+  }
+  foreach ($modules as $module) {
+    module_load_include('inc', 'salesforce_sync', 'includes/modules/' . $module);
+  }
+}

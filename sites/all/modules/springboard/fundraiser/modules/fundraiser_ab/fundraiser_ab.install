@@ -1,0 +1,142 @@
+<?php
+/**
+ * @file
+ */
+
+/**
+ * Update the system weight of the webform_ab module to be heavier than fundraiser_webform
+ */
+function fundraiser_ab_install() {
+  $weight = db_query("SELECT weight FROM {system} WHERE name = 'fundraiser_webform'")->fetchField();
+
+  db_update('system')
+    ->fields(array('weight' => $weight + 1))
+    ->condition('name', 'webform_ab', '=')
+    ->execute();
+}
+
+/**
+ * Implements hook_schema()
+ */
+function fundraiser_ab_schema() {
+  $schema = array();
+
+  $schema['fundraiser_ab_stats'] = array(
+    'description' => t('Store totaled information about '),
+    'fields' => array(
+      'test_nid' => array(
+        'description' => t('Multivariate Testing test node nid'),
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'webform_nid' => array(
+        'description' => t('Webform nid'),
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'total_donations' => array(
+        'description' => t('Total amount of money donated'),
+        'type' => 'float',
+        'size' => 'big',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+      'donation_count' => array(
+        'description' => t('Total number of donations made'),
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+      'total_sustainer_donations' => array(
+        'description' => t('Total amount of money donated by sustainers'),
+        'type' => 'float',
+        'size' => 'big',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+      'sustainer_count' => array(
+        'description' => t('Total number of donations made that were sustainers'),
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+    ),
+    'unique keys' => array(
+      'test_nid_webform_nid' => array('test_nid', 'webform_nid'),
+    ),
+    'indexes' => array(
+      'test_nid' => array('test_nid'),
+      'webform_nid' => array('webform_nid'),
+    ),
+  );
+
+  return $schema;
+}
+
+/**
+ * Install stats table
+ */
+function fundraiser_ab_update_6200() {
+  $schema = array(
+    'description' => t('Store totaled information about '),
+    'fields' => array(
+      'test_nid' => array(
+        'description' => t('Multivariate Testing test node nid'),
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'webform_nid' => array(
+        'description' => t('Webform nid'),
+        'type' => 'int',
+        'not null' => TRUE,
+      ),
+      'total_donations' => array(
+        'description' => t('Total amount of money donated'),
+        'type' => 'float',
+        'size' => 'big',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+      'donation_count' => array(
+        'description' => t('Total number of donations made'),
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+      'total_sustainer_donations' => array(
+        'description' => t('Total amount of money donated by sustainers'),
+        'type' => 'float',
+        'size' => 'big',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+      'sustainer_count' => array(
+        'description' => t('Total number of donations made that were sustainers'),
+        'type' => 'int',
+        'default' => 0,
+        'not null' => TRUE,
+      ),
+    ),
+    'unique keys' => array(
+      'test_nid_webform_nid' => array('test_nid', 'webform_nid'),
+    ),
+    'indexes' => array(
+      'test_nid' => array('test_nid'),
+      'webform_nid' => array('webform_nid'),
+    ),
+  );
+
+  db_create_table('fundraiser_ab_stats', $schema);
+}
+
+/**
+ * Update the system weight of the webform_ab module to be heavier than fundraiser_webform
+ */
+function fundraiser_ab_update_7001() {
+  $weight = db_query("SELECT weight FROM {system} WHERE name = 'fundraiser_webform'")->fetchField();
+
+  db_update('system')
+    ->fields(array('weight' => $weight + 1))
+    ->condition('name', 'webform_ab', '=')
+    ->execute();
+}

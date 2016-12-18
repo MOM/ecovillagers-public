@@ -1,0 +1,23 @@
+name = Salesforce Log
+description =  Log batch processing of Salesforce data.
+package = Salesforce
+core = 7.x
+version = 7.x-4.x-dev
+
+dependencies[] = salesforce_queue
+dependencies[] = salesforce_sync
+dependencies[] = views
+dependencies[] = views_bulk_operations
+
+configure = admin/config/salesforce/salesforce-log
+
+; Views handlers
+files[] = includes/salesforce_log_handler_filter_operation.inc
+files[] = includes/salesforce_log_handler_filter_queue.inc
+files[] = includes/salesforce_log_handler_filter_module.inc
+files[] = includes/salesforce_log_handler_filter_object_type.inc
+files[] = includes/salesforce_log_handler_field_sobject.inc
+files[] = includes/salesforce_log_handler_field_drupal_id.inc
+files[] = tests/salesforce_log.test
+files[] = tests/salesforce_log.rules.test
+files[] = tests/salesforce_log.admin.test

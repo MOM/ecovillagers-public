@@ -1,0 +1,205 @@
+<?php
+/**
+ * @file
+ * Test suite for Authnet payment gateway.
+ */
+
+class FundraiserCommerceGatewayAuthnetTest extends FundraiserCommerceGatewayTestSetup {
+  protected $privileged_user;
+
+  public static function getInfo() {
+    return array(
+      'name' => 'Fundraiser Commerce Authorize.net Gateway',
+      'description' => 'Confirm the Authorize.net gateway can process a donation. Requires manual çconfiguration of fundraiser_commerce/tests/authnet.rule',
+      'group' => 'Fundraiser',
+    );
+  }
+
+  public function setUp($modules = array(), $permissions = array()) {
+    $modules = array_merge($modules, array(
+      'fundraiser_sustainers',
+      'commerce_authnet',
+    ));
+    parent::setUp($modules);
+    $file = DRUPAL_ROOT . '/' . drupal_get_path('module', 'fundraiser_commerce') . '/tests/authnet.rule';
+    $config = file_get_contents($file);
+    $this->_importGatewayRule($config);
+  }
+
+  /**
+   * Tests the billing update forms for updates to address, card expiration and
+   * card number.
+   */
+  public function testCreditCardTransactions() {
+    $edit = array(
+      'gateways[credit][id]' => 'authnet_aim|commerce_payment_authnet_aim',
+    );
+    $this->drupalPost('node/' . $this->donation_form->nid . '/edit', $edit, t('Save'));
+    $this->drupalGet('node/' . $this->donation_form->nid);
+
+    $cards = $this->getCreditCards();
+
+    foreach ($cards as $card_type => $card) {
+      $this->drupalGet('node/' . $this->donation_form->nid);
+      $post = array(
+        'submitted[payment_information][payment_fields][credit][card_number]' => $card['card_number'],
+        'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]' => $card['card_expiration_month'],
+        'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]' => $card['card_expiration_year'],
+        'submitted[payment_information][payment_fields][credit][card_cvv]' => $card['card_cvv'],
+      );
+
+      // Submit the donation form with each card.
+      $this->submitDonation($this->donation_form->nid, $post);
+
+      // Parse the confirmation page url because it contains the sid which will
+      // allow us to load up the donation.
+      $url = drupal_parse_url($this->url);
+      $sid = $url['query']['sid'];
+
+      // Load the donation using the sid on the confirmation page.
+      $donation = _fundraiser_webform_get_donation_by_sid($sid);
+
+      // Get the card on file profile for this donation and make sure it matches
+      // what was submitted.
+      $card_data = _fundraiser_commerce_donation_cardonfile_card($donation);
+
+      $this->assertEqual($donation->donation['payment_fields']['credit']['card_number'], $card_data->card_number, 'Correct card number is stored for donation.');
+      $this->assertEqual($donation->donation['payment_fields']['credit']['card_expiration_month'], $card_data->card_exp_month, 'Correct card expiration month is stored for donation.');
+      $this->assertEqual($donation->donation['payment_fields']['credit']['card_expiration_year'], $card_data->card_exp_year, 'Correct card expiration year is stored for donation.');
+      $this->assertEqual($donation->data['cardonfile'], $card_data->card_id, 'Correct commerce profile is stored with the donation.');
+      $this->assertEqual($donation->uid, $card_data->uid, 'Donation and card on file profile have same uid.');
+
+      // Ensure payment profile in authorize also matches.
+      $payment_profile = $this->getPaymentProfile($card_data, $donation);
+      $this->assertEqual(substr($payment_profile->paymentProfile->payment->creditCard->cardNumber, -4), $card_data->card_number, 'Correct card number is stored in payment profile in authorize.net.');
+    }
+
+    $post = array(
+      'submitted[payment_information][recurs_monthly][recurs]' => 'recurs',
+      'submitted[payment_information][payment_fields][credit][card_number]' => $cards['visa']['card_number'],
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_month]' => $cards['visa']['card_expiration_month'],
+      'submitted[payment_information][payment_fields][credit][expiration_date][card_expiration_year]' => $cards['visa']['card_expiration_year'],
+      'submitted[payment_information][payment_fields][credit][card_cvv]' => $cards['visa']['card_cvv'],
+    );
+
+
+    // TODO: This should be a separate test case (and it was). However simpletest throws
+    // an exception for some reason if this is in it's own test case. Boo.
+    entity_get_controller('commerce_cardonfile')->resetCache();
+
+    // Create a recurring donation.
+    $this->submitDonation($this->donation_form->nid, $post);
+    $url = drupal_parse_url($this->url);
+    $sid = $url['query']['sid'];
+
+    // Load the donation using the sid on the confirmation page.
+    $donation = _fundraiser_webform_get_donation_by_sid($sid);
+
+    $card_data = _fundraiser_commerce_donation_cardonfile_card($donation);
+
+    // Get the update page, check that all forms are in place.
+    $this->drupalGet('user/' . $this->privileged_user->uid . '/recurring_overview/' . $donation->did);
+
+    // Same card, new address to simulate a move.
+    $post = array(
+      'address' => 'UPDATED ADDRESS',
+      'address_line_2' => '',
+      'city' => 'UPDATED CITY',
+      'state' => 'VA',
+      'zip' => '12345',
+      'payment_fields[credit][card_number]' => $cards['visa']['card_number'],
+      'payment_fields[credit][expiration_date][card_expiration_month]' => $cards['visa']['card_expiration_month'],
+      'payment_fields[credit][expiration_date][card_expiration_year]' => $cards['visa']['card_expiration_year'],
+      'payment_fields[credit][card_cvv]' => $cards['visa']['card_cvv'],
+    );
+
+    $this->drupalPost('user/' . $this->privileged_user->uid . '/recurring_overview/' . $donation->did, $post, t('Save changes'));
+
+    // Get the payment profile from authorize.net.
+    $payment_profile = $this->getPaymentProfile($card_data, $donation);
+
+    // Assert address information
+    $this->assertEqual('UPDATED ADDRESS', $payment_profile->paymentProfile->billTo->address, 'Address correctly updated in authorize.net payment profile.');
+    $this->assertEqual('UPDATED CITY', $payment_profile->paymentProfile->billTo->city, 'City correctly updated in authorize.net payment profile.');
+    $this->assertEqual('VA', $payment_profile->paymentProfile->billTo->state, 'State correctly updated in authorize.net payment profile.');
+    $this->assertEqual('12345', $payment_profile->paymentProfile->billTo->zip, 'Zip correctly updated in authorize.net payment profile.');
+    $this->assertEqual(substr($payment_profile->paymentProfile->payment->creditCard->cardNumber, -4), $card_data->card_number, 'Correct card number is stored in payment profile in authorize.net.');
+
+    // Same address, new card expiration date to simulate a card renewal.
+    $this->drupalGet('user/' . $this->privileged_user->uid . '/recurring_overview/' . $donation->did);
+
+    // Updated card info.
+    $two_years_from_now = date_add(new DateTime(), date_interval_create_from_date_string('2 years'));
+    $expiration_year = date_format($two_years_from_now, 'Y');
+    $expiration_month = 6;
+
+    $post = array(
+      'payment_fields[credit][card_number]' => $cards['visa']['card_number'],
+      'payment_fields[credit][expiration_date][card_expiration_month]' => $expiration_month,
+      'payment_fields[credit][expiration_date][card_expiration_year]' => $expiration_year,
+      'payment_fields[credit][card_cvv]' => $cards['visa']['card_cvv'],
+    );
+
+    $this->drupalPost('user/' . $this->privileged_user->uid . '/recurring_overview/' . $donation->did, $post, t('Save changes'));
+
+    // Reset the card on file cache otherwise we'll get stale data
+    // since we're doing all of this in a single request.
+    entity_get_controller('commerce_cardonfile')->resetCache();
+
+    // Reload the donation to get any changes that were made.
+    $donation = fundraiser_donation_get_donation($donation->did, TRUE);
+    $card_data = _fundraiser_commerce_donation_cardonfile_card($donation);
+
+    // Get the payment profile from authorize.net. We can only verify card number because
+    // expiration month and day are masked.
+    $payment_profile = $this->getPaymentProfile($card_data, $donation);
+    $this->assertEqual(substr($payment_profile->paymentProfile->payment->creditCard->cardNumber, -4), $card_data->card_number, 'Correct card number is stored in payment profile in authorize.net after expiration date change.');
+
+    // Check local card storage for correct updates.
+    $this->assertEqual($expiration_month, $card_data->card_exp_month, 'Credit card expiration month correctly updated in local card on file profile after expiration date change.');
+    $this->assertEqual($expiration_year, $card_data->card_exp_year, 'Credit card expiration year correctly updated in local card on file profile after expiration date change.');
+    $this->assertEqual(substr($cards['visa']['card_number'], -4), $card_data->card_number, 'Credit card number unchanged in local card on file profile after expiration date change.');
+
+    // Same address, new card details to simulate a stolen card.
+    $this->drupalGet('user/' . $this->privileged_user->uid . '/recurring_overview/' . $donation->did);
+
+    // Updated card info
+    $post = array(
+      'payment_fields[credit][card_number]' => '5555555555554444',
+      'payment_fields[credit][expiration_date][card_expiration_month]' => $expiration_month+1,
+      'payment_fields[credit][expiration_date][card_expiration_year]' => $expiration_year+1,
+      'payment_fields[credit][card_cvv]' => '222',
+    );
+
+    $this->drupalPost('user/' . $this->privileged_user->uid . '/recurring_overview/' . $donation->did, $post, t('Save changes'));
+
+    // Reset the card on file cache otherwise we'll get stale data
+    // since we're doing all of this in a single request.
+    entity_get_controller('commerce_cardonfile')->resetCache();
+
+    // Reload the next donation in the series to get any changes that were made. The original donation has already
+    // been processed and is therefore unaffected by the billing change.
+    $donation = fundraiser_donation_get_donation($donation->did+1, TRUE);
+    $card_data = _fundraiser_commerce_donation_cardonfile_card($donation);
+
+    // Get the payment profile from authorize.net. We can only verify card number because
+    // expiration month and day are masked.
+    $payment_profile = $this->getPaymentProfile($card_data, $donation);
+    $this->assertEqual(substr($payment_profile->paymentProfile->payment->creditCard->cardNumber, -4), '4444', 'Correct card number is stored in payment profile in authorize.net after the card number has been changed.');
+
+    // Check local card storage for correct updates.
+    $this->assertEqual($expiration_month+1, $card_data->card_exp_month, 'Credit card expiration month correctly updated in local card on file profile after the card number has been changed.');
+    $this->assertEqual($expiration_year+1, $card_data->card_exp_year, 'Credit card expiration year correctly updated in local card on file profile after the card number has been changed.');
+    $this->assertEqual('4444', $card_data->card_number, 'Credit card number changed in local card on file profile after the card number has been changed.');
+  }
+
+  /**
+   * Helper method to retrieve a payment profile from authorize.net.
+   */
+  protected function getPaymentProfile($card_data, $donation) {
+    // Extract the authorize.net profile id and payment profile id from
+    // card on file's remote_id property.
+    list($cim_customer_profile_id, $cim_payment_profile_id) = explode('|', $card_data->remote_id);
+    return commerce_authnet_cim_get_customer_payment_profile_request($donation->gateway['gateway_details'], $cim_customer_profile_id, $cim_payment_profile_id);
+  }
+}

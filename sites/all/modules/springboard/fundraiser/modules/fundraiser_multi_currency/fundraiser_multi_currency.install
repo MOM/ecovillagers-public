@@ -1,0 +1,53 @@
+<?php
+/**
+ * @file
+ * The schema for the multi currency module.
+ *
+ * This module is deprecated. The schema is here so fundraiser can uninstall it.
+ * After it's been in this state for long enough, this module will be removed
+ * entirely.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function fundraiser_multi_currency_schema() {
+  $schema = array();
+  $schema['fundraiser_currencies'] = array(
+    'description' => 'Default currencies to use for donation forms',
+    'fields' => array(
+      'currency_id' => array(
+        'description' => 'ID for the currency',
+        'type' => 'serial',
+        'not null' => TRUE,
+      ),
+      'symbol' => array(
+        'description' => 'Curency symbol',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'code' => array(
+        'description' => 'Currency code',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'name' => array(
+        'description' => 'Currency name',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+    ),
+    'primary key' => array('currency_id'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_update_last_removed().
+ */
+function fundraiser_multi_currency_update_last_removed() {
+  return 6001;
+}

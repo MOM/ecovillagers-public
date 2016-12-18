@@ -1,0 +1,285 @@
+<?php
+
+/**
+ * @file
+ * Simpletests for SalesforceSyncTokenScanner class.
+ */
+
+/**
+ * Tests finding and replacing relationship tokens in queue batches.
+ */
+class SalesforceSyncTokenTestCase extends DrupalWebTestCase {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Salesforce Sync Token Scanner',
+      'description' => 'Tests finding and replacing relationship tokens in queue batches.',
+      'group' => 'Salesforce Sync',
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($modules = array()) {
+    $modules = $modules + array(
+      'libraries',
+      'salesforce',
+      'salesforce_soap',
+      'salesforce_queue',
+      'salesforce_sync',
+    );
+    parent::setUp($modules);
+
+    $this->createObjectMapRecords();
+  }
+
+  /**
+   * Tests the token syntax.
+   */
+  public function testTokenSyntax() {
+    $token_scanner = new SalesforceSyncTokenScanner(NULL);
+    $object = new stdClass();
+    $object->fields = array(
+      'FirstName' => 'John',
+      'LastName' => 'Doe',
+      'AccountId' => '[Account:User:1]',
+    );
+
+    // Finds valid token.
+    $tokens = $token_scanner->findTokens($object);
+    $this->assertEqual(1, count($tokens), 'Valid token detected');
+
+    // Does not find invalid token.
+    $object->fields['AccountId'] = '[Account:1]';
+    $tokens = $token_scanner->findTokens($object);
+    $this->assertEqual(0, count($tokens), 'Invalid token not detected');
+  }
+
+  /**
+   * Tests adding new items to the token value cache.
+   */
+  public function testCacheAdditions() {
+    // Create an instance of the token scanner w/ no default cache.
+    $token_scanner = new SalesforceSyncTokenScanner(NULL);
+    $item = new stdClass();
+    $item->module = 'user';
+    $item->delta = 'user';
+    $item->object_type = 'Contact';
+    $item->drupal_id = '5';
+
+    $token_scanner->addItemToTokenCache($item, '003400000109WfQAAP');
+
+    $this->assertEqual(TRUE, $token_scanner->cachePopulated(), 'Token cache is populated.');
+
+    $sfid = $token_scanner->getTokenValueFromCache('[Contact:user:5]');
+    $this->assertEqual('003400000109WfQAAP', $sfid, 'Correct value returned from cache.');
+  }
+
+  /**
+   * Tests correct token replacement from the token cache.
+   */
+  public function testTokenReplacementFromCache() {
+    // Create a mock token value cache.
+    $token_value_cache = $this->getTokenValueCache();
+    $token_scanner = new SalesforceSyncTokenScanner($token_value_cache);
+
+    // Create an array of valid tokens.
+    $object = new stdClass();
+    $object->fields = array(
+      'FirstName' => 'John',
+      'LastName' => 'Doe',
+      'AccountId' => '[Account:User:1]',
+    );
+
+    $tokens = $token_scanner->findTokens($object);
+
+    // Token replacement via cache.
+    $token_scanner->tokenReplace($object, $tokens);
+    $this->assertEqual('003400000109WfQAAU', $object->fields['AccountId'], 'Token replaced from cache');
+  }
+
+  /**
+   * Tests correct token replacement from the database.
+   */
+  public function testTokenReplacementFromDb() {
+    // Create a mock token value cache.
+    $token_value_cache = $this->getTokenValueCache();
+    $token_scanner = new SalesforceSyncTokenScanner($token_value_cache);
+
+    // Create an array of valid tokens.
+    $object = new stdClass();
+    $object->fields = array(
+      'FirstName' => 'John',
+      'LastName' => 'Doe',
+      'ContactId' => '[Contact:User:500]',
+    );
+
+    $tokens = $token_scanner->findTokens($object);
+
+    // Token replacement via cache.
+    $token_scanner->tokenReplace($object, $tokens);
+    $this->assertEqual('003400000109WfQAAP', $object->fields['ContactId'], 'Token replaced from database');
+  }
+
+  /**
+   * Verifies a field token is not replaced when a replacement cannot be found.
+   */
+  public function testTokenReplacementMiss() {
+    // Create a mock token value cache.
+    $token_value_cache = $this->getTokenValueCache();
+    $token_scanner = new SalesforceSyncTokenScanner($token_value_cache);
+
+    // Create an array of valid tokens.
+    $object = new stdClass();
+    $object->fields = array(
+      'FirstName' => 'John',
+      'LastName' => 'Doe',
+      'ContactId' => '[Contact:User:400]',
+    );
+
+    $tokens = $token_scanner->findTokens($object);
+
+    $token_scanner->tokenReplace($object, $tokens);
+    $this->assertEqual('[Contact:User:400]', $object->fields['ContactId'], 'Token miss not replaced');
+  }
+
+  /**
+   * Tests token replace from the token cache on a batch of objects.
+   */
+  public function testBatchTokenReplacementFromCache() {
+    // Create a mock token value cache.
+    $token_value_cache = $this->getTokenValueCache();
+    $token_scanner = new SalesforceSyncTokenScanner($token_value_cache);
+    $batch = $this->createBatch(200);
+
+    // Time the operation.
+    $start_time = $this->getTimer();
+
+    $token_scanner->batchTokenReplace($batch);
+
+    $end_time = $this->getTimer();
+    $total_time = ($end_time - $start_time);
+
+    // Pick out a random object and make sure the token was replaced.
+    $index = rand(0, 199);
+    $this->assertEqual('003400000109WfQAAU', $batch['sobjects'][$index]->fields['ContactId'], 'Batch tokens replaced');
+  }
+
+  /**
+   * Tests token replace from the database on a batch of objects.
+   */
+  public function testBatchTokenReplacementFromDb() {
+    $this->createObjectMapRecords();
+    $token_scanner = new SalesforceSyncTokenScanner(NULL);
+    $batch = $this->createBatch(200);
+
+    // Time the operation.
+    $start_time = $this->getTimer();
+
+    $token_scanner->batchTokenReplace($batch);
+
+    $end_time = $this->getTimer();
+    $total_time = ($end_time - $start_time);
+
+    // Pick out a random object and make sure the token was replaced.
+    $index = rand(0, 199);
+    $this->assertEqual('003400000109WfQAAU', $batch['sobjects'][$index]->fields['ContactId'], 'Batch tokens replaced');
+  }
+
+  /**
+   * Creates object map records in the database to use for token lookups.
+   */
+  protected function createObjectMapRecords() {
+    $tokens = $this->getTokenValueCache();
+
+    foreach ($tokens as $sf_type => $drupal_type) {
+      foreach ($drupal_type as $type => $ids) {
+        foreach ($ids as $drupal_id => $sfid) {
+          $record = array(
+            'sfid' => $sfid,
+            'module' => $type,
+            'delta' => $type,
+            'drupal_id' => $drupal_id,
+            'object_type' => $sf_type,
+          );
+          drupal_write_record('salesforce_sync_map', $record);
+        }
+      }
+    }
+
+    // Insert some records that will not be in the cache.
+    $record = array(
+      'sfid' => '003400000109WfQAAP',
+      'module' => 'User',
+      'delta' => 'User',
+      'drupal_id' => 500,
+      'object_type' => 'Contact',
+    );
+    drupal_write_record('salesforce_sync_map', $record);
+  }
+
+  /**
+   * Returns an array of token replacement values for testing.
+   */
+  protected function getTokenValueCache() {
+    $sf_types = array('Contact', 'Account', 'Opportunity', 'Action__c');
+    $drupal_types = array('User', 'Contact', 'Donation', 'Webform_submission');
+    $token_cache = array();
+
+    foreach ($sf_types as $sf_type) {
+      $token_cache[$sf_type] = array();
+      foreach ($drupal_types as $drupal_type) {
+        $token_cache[$sf_type][$drupal_type] = array();
+        for ($i = 1; $i < 200; $i++) {
+          $token_cache[$sf_type][$drupal_type][$i] = '003400000109WfQAAU';
+        }
+      }
+    }
+
+    return $token_cache;
+  }
+
+  /**
+   * Creates a batch of mock objects.
+   */
+  protected function createBatch($count = 200) {
+    $batch = array();
+
+    // Create sample objects.
+    $objects = array();
+    for ($i = 0; $i < $count; $i++) {
+      $object = new stdClass();
+      $object->fields = array(
+        'FirstName' => 'John',
+        'LastName' => 'Doe',
+        'ContactId' => '[Contact:User:23]',
+      );
+
+      // Give them some size to be more realistic.
+      for ($j = 0; $j < 20; $j++) {
+        $object->fields['Property_' . $j . '__c'] = 'Some random value ' . $j;
+      }
+
+      $objects[$i] = $object;
+    }
+
+    $batch['sobjects'] = $objects;
+
+    return $batch;
+  }
+
+  /**
+   * Returns current time in microseconds.
+   */
+  protected function getTimer() {
+    $time = microtime();
+    $time = explode(" ", $time);
+    $time = $time[1] + $time[0];
+    return $time;
+  }
+
+}

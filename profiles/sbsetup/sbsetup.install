@@ -1,0 +1,454 @@
+<?php
+/**
+ * @file
+ * Install, update and uninstall functions for the sbsetup profile.
+ */
+
+ include_once 'sbsetup.wysiwyg.inc';
+ include_once 'sbsetup.perms.inc';
+ include_once 'sbsetup.imce.inc';
+
+/**
+ * Implements hook_install().
+ *
+ * Perform actions to set up the site for this profile.  Based upon the standard
+ * install profile.
+ *
+ * @see system_install()
+ */
+function sbsetup_install() {
+  // Add text formats.
+  $formats = springboard_input_formats();
+  foreach ($formats as $format) {
+    filter_format_save($format);
+  }
+
+  // Create WYSIWYG profiles.
+  $profiles = springboard_wysiwyg_profiles();
+  foreach ($profiles as $profile) {
+    db_merge('wysiwyg')
+      ->key(array('format' => $profile['format']))
+      ->fields(array(
+        'editor' => $profile['editor'],
+        'settings' => serialize($profile['settings']),
+      ))
+      ->execute();
+  }
+  wysiwyg_profile_cache_clear();
+
+  // Enable themes.
+  $default_theme = 'springboard_frontend';
+  $admin_theme = 'seven';
+  db_update('system')
+    ->fields(array('status' => 1))
+    ->condition('type', 'theme')
+    ->condition('name', $default_theme)
+    ->execute();
+  if ($admin_theme != $default_theme) {
+    db_update('system')
+      ->fields(array('status' => 1))
+      ->condition('type', 'theme')
+      ->condition('name', $admin_theme)
+      ->execute();
+  }
+  variable_set('theme_default', $default_theme);
+  variable_set('admin_theme', $admin_theme);
+  variable_set('node_admin_theme', '1');
+
+  // Enable some standard blocks.
+  $blocks = array(
+    array(
+      'module' => 'search',
+      'delta' => 'form',
+      'theme' => $default_theme,
+      'status' => 1,
+      'weight' => -1,
+      'region' => 'sidebar_first',
+      'pages' => '',
+      'cache' => -1,
+    ),
+    array(
+      'module' => 'system',
+      'delta' => 'help',
+      'theme' => $default_theme,
+      'status' => 1,
+      'weight' => 0,
+      'region' => 'help',
+      'pages' => '',
+      'cache' => -1,
+    ),
+    array(
+      'module' => 'system',
+      'delta' => 'main',
+      'theme' => $default_theme,
+      'status' => 1,
+      'weight' => 0,
+      'region' => 'content',
+      'pages' => '',
+      'cache' => -1,
+    ),
+    array(
+      'module' => 'system',
+      'delta' => 'navigation',
+      'theme' => $default_theme,
+      'status' => 1,
+      'weight' => 0,
+      'region' => 'sidebar_first',
+      'pages' => '',
+      'cache' => -1,
+    ),
+    array(
+      'module' => 'user',
+      'delta' => 'login',
+      'theme' => $default_theme,
+      'status' => 1,
+      'weight' => 0,
+      'region' => 'sidebar_first',
+      'pages' => '',
+      'cache' => -1,
+    ),
+  );
+  if ($admin_theme != $default_theme) {
+    $blocks = array(
+      array(
+        'module' => 'node',
+        'delta' => 'recent',
+        'theme' => $admin_theme,
+        'status' => 1,
+        'weight' => 10,
+        'region' => 'dashboard_main',
+        'pages' => '',
+        'cache' => -1,
+      ),
+      array(
+        'module' => 'search',
+        'delta' => 'form',
+        'theme' => $admin_theme,
+        'status' => 1,
+        'weight' => -10,
+        'region' => 'dashboard_sidebar',
+        'pages' => '',
+        'cache' => -1,
+      ),
+      array(
+        'module' => 'system',
+        'delta' => 'help',
+        'theme' => $admin_theme,
+        'status' => 1,
+        'weight' => 0,
+        'region' => 'help',
+        'pages' => '',
+        'cache' => -1,
+      ),
+      array(
+        'module' => 'system',
+        'delta' => 'main',
+        'theme' => $admin_theme,
+        'status' => 1,
+        'weight' => 0,
+        'region' => 'content',
+        'pages' => '',
+        'cache' => -1,
+      ),
+      array(
+        'module' => 'user',
+        'delta' => 'login',
+        'theme' => $admin_theme,
+        'status' => 1,
+        'weight' => 10,
+        'region' => 'content',
+        'pages' => '',
+        'cache' => -1,
+      ),
+      array(
+        'module' => 'user',
+        'delta' => 'new',
+        'theme' => $admin_theme,
+        'status' => 1,
+        'weight' => 0,
+        'region' => 'dashboard_sidebar',
+        'pages' => '',
+        'cache' => -1,
+      ),
+    );
+  }
+  $query = db_insert('block')
+    ->fields(array(
+      'module',
+      'delta',
+      'theme',
+      'status',
+      'weight',
+      'region',
+      'pages',
+      'cache',
+      ));
+  foreach ($blocks as $block) {
+    $query->values($block);
+  }
+  $query->execute();
+
+  // Insert default pre-defined node types into the database. For a complete
+  // list of available node type attributes, refer to the node type API
+  // documentation at: http://api.drupal.org/api/HEAD/function/hook_node_info.
+  $types = array(
+    array(
+      'type' => 'page',
+      'name' => st('Basic page'),
+      'base' => 'node_content',
+      'description' => st("Use <em>basic pages</em> for your static content, such as an 'About us' page."),
+      'custom' => 1,
+      'modified' => 1,
+      'locked' => 0,
+    ),
+    array(
+      'type' => 'article',
+      'name' => st('Article'),
+      'base' => 'node_content',
+      'description' => st('Use <em>articles</em> for time-sensitive content like news, press releases or blog posts.'),
+      'custom' => 1,
+      'modified' => 1,
+      'locked' => 0,
+    ),
+  );
+
+  foreach ($types as $type) {
+    $type = node_type_set_defaults($type);
+    node_type_save($type);
+    node_add_body_field($type);
+  }
+
+  // Insert default pre-defined RDF mapping into the database.
+  $rdf_mappings = array(
+    array(
+      'type' => 'node',
+      'bundle' => 'page',
+      'mapping' => array(
+        'rdftype' => array('foaf:Document'),
+      ),
+    ),
+    array(
+      'type' => 'node',
+      'bundle' => 'article',
+      'mapping' => array(
+        'field_image' => array(
+          'predicates' => array('og:image', 'rdfs:seeAlso'),
+          'type' => 'rel',
+        ),
+        'field_tags' => array(
+          'predicates' => array('dc:subject'),
+          'type' => 'rel',
+        ),
+      ),
+    ),
+  );
+  foreach ($rdf_mappings as $rdf_mapping) {
+    rdf_mapping_save($rdf_mapping);
+  }
+
+  // Default frontpage is the example donation form created by Fundraiser.
+  $nid = db_query('SELECT nid FROM {node} WHERE type = :type LIMIT 0,1', array(':type' => 'donation_form'))->fetchField();
+  if (!empty($nid)) {
+    variable_set('site_frontpage', "node/$nid");
+  }
+
+  // Default "Basic page" to not be promoted and have comments disabled.
+  variable_set('node_options_page', array('status'));
+  variable_set('comment_page', COMMENT_NODE_HIDDEN);
+
+  // Don't display date and author information for "Basic page"
+  // nodes by default.
+  variable_set('node_submitted_page', FALSE);
+
+  // Enable user picture support and set the default to a square
+  // thumbnail option.
+  variable_set('user_pictures', '1');
+  variable_set('user_picture_dimensions', '1024x1024');
+  variable_set('user_picture_file_size', '800');
+  variable_set('user_picture_style', 'thumbnail');
+
+  // Allow visitor account creation with administrative approval.
+  variable_set('user_register', USER_REGISTER_VISITORS_ADMINISTRATIVE_APPROVAL);
+
+  // Create a default vocabulary named "Tags", enabled for the
+  // 'article' content type.
+  $description = st('Use tags to group articles on similar topics into categories.');
+  $help = st('Enter a comma-separated list of words to describe your content.');
+  $vocabulary = (object) array(
+    'name' => st('Tags'),
+    'description' => $description,
+    'machine_name' => 'tags',
+    'help' => $help,
+
+  );
+  taxonomy_vocabulary_save($vocabulary);
+
+  $field = array(
+    'field_name' => 'field_' . $vocabulary->machine_name,
+    'type' => 'taxonomy_term_reference',
+    // Set cardinality to unlimited for tagging.
+    'cardinality' => FIELD_CARDINALITY_UNLIMITED,
+    'settings' => array(
+      'allowed_values' => array(
+        array(
+          'vocabulary' => $vocabulary->machine_name,
+          'parent' => 0,
+        ),
+      ),
+    ),
+  );
+  field_create_field($field);
+
+  $instance = array(
+    'field_name' => 'field_' . $vocabulary->machine_name,
+    'entity_type' => 'node',
+    'label' => 'Tags',
+    'bundle' => 'article',
+    'description' => $vocabulary->help,
+    'widget' => array(
+      'type' => 'taxonomy_autocomplete',
+      'weight' => -4,
+    ),
+    'display' => array(
+      'default' => array(
+        'type' => 'taxonomy_term_reference_link',
+        'weight' => 10,
+      ),
+      'teaser' => array(
+        'type' => 'taxonomy_term_reference_link',
+        'weight' => 10,
+      ),
+    ),
+  );
+  field_create_instance($instance);
+
+  // Create an image field named "Image", enabled for the 'article'
+  // content type.
+  // Many of the following values will be defaulted, they're included here
+  // as an illustrative examples.
+  // @see http://api.drupal.org/api/function/field_create_field/7
+  $field = array(
+    'field_name' => 'field_image',
+    'type' => 'image',
+    'cardinality' => 1,
+    'locked' => FALSE,
+    'indexes' => array('fid' => array('fid')),
+    'settings' => array(
+      'uri_scheme' => 'public',
+      'default_image' => FALSE,
+    ),
+    'storage' => array(
+      'type' => 'field_sql_storage',
+      'settings' => array(),
+    ),
+  );
+  field_create_field($field);
+
+  // Many of the following values will be defaulted, they're included here
+  // as an illustrative examples.
+  // @see http://api.drupal.org/api/function/field_create_instance/7
+  $instance = array(
+    'field_name' => 'field_image',
+    'entity_type' => 'node',
+    'label' => 'Image',
+    'bundle' => 'article',
+    'description' => st('Upload an image to go with this article.'),
+    'required' => FALSE,
+
+    'settings' => array(
+      'file_directory' => 'field/image',
+      'file_extensions' => 'png gif jpg jpeg',
+      'max_filesize' => '',
+      'max_resolution' => '',
+      'min_resolution' => '',
+      'alt_field' => TRUE,
+      'title_field' => '',
+    ),
+
+    'widget' => array(
+      'type' => 'image_image',
+      'settings' => array(
+        'progress_indicator' => 'throbber',
+        'preview_image_style' => 'thumbnail',
+      ),
+      'weight' => -1,
+    ),
+
+    'display' => array(
+      'default' => array(
+        'label' => 'hidden',
+        'type' => 'image',
+        'settings' => array('image_style' => 'large', 'image_link' => ''),
+        'weight' => -1,
+      ),
+      'teaser' => array(
+        'label' => 'hidden',
+        'type' => 'image',
+        'settings' => array('image_style' => 'medium', 'image_link' => 'content'),
+        'weight' => -1,
+      ),
+    ),
+  );
+  field_create_instance($instance);
+
+  // Create a Home link in the main menu.
+  $item = array(
+    'link_title' => st('Home'),
+    'link_path' => '<front>',
+    'menu_name' => 'main-menu',
+  );
+  menu_link_save($item);
+
+  // Update the menu router information.
+  menu_rebuild();
+
+  // Configure jquery_update.
+  variable_set('jquery_update_compression_type', 'min');
+  variable_set('jquery_update_jquery_admin_version', '');
+  variable_set('jquery_update_jquery_cdn', 'none');
+  variable_set('jquery_update_jquery_version', '1.7');
+
+  // Create the defined user roles.
+  $installed_roles = user_roles();
+  $roles = springboard_user_roles();
+  foreach ($roles as $role) {
+    if (!in_array($role, $installed_roles)) {
+      if (user_role_save($role)) {
+        drupal_set_message('User role ' . $role->name . ' has been created.');
+      }
+      else {
+        drupal_set_message('There was an error creating the ' . $role->name . ' user role.');
+      }
+    }
+  }
+
+  // Set up permissions for user roles.
+  $installed_roles = user_roles();
+  $permissions = springboard_user_permissions();
+  $modules = array_keys(user_permission_get_modules());
+
+  foreach ($installed_roles as $rid => $role) {
+    // Give all permissions to the Administrator role.
+    if ($role == 'Administrator') {
+      $role_permissions = $modules;
+      // Assign user 1 the "Administrator" role.
+      db_insert('users_roles')
+        ->fields(array('uid' => 1, 'rid' => $rid))
+        ->execute();
+    }
+    else {
+      // Build list of permissions to grant for each role.
+      $role_permissions = array();
+      foreach ($permissions as $key => $permission) {
+        if (in_array($role, $permission['roles']) && in_array($permission['name'], $modules)) {
+          $role_permissions[] = $permission['name'];
+        }
+      }
+    }
+    user_role_grant_permissions($rid, $role_permissions);
+  }
+
+  // Set up IMCE profiles.
+  sbsetup_imce_install_profiles();
+
+}

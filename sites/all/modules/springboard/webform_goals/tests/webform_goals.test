@@ -1,0 +1,103 @@
+<?php
+/**
+ * @file
+ * Test Webform Goals.
+ */
+
+abstract class WebformGoalsIntegratedTestSetup extends DrupalWebTestCase {
+
+  protected $users;
+
+  /**
+   * Implements setUp().
+   */
+  public function setUp() {
+    parent::setUp('webform_goals');
+
+    // Create user accounts.
+
+    // Create a webform editor to test creating and editing own content.
+    $permissions['editor'] = array(
+      'access content',
+      'create webform content',
+      'edit own webform content',
+      'access all webform results',
+    );
+    // Create a webform admin that will do all node creation.
+    $permissions['admin'] = array(
+      'access content',
+      'administer nodes',
+      'create webform content',
+      'edit any webform content',
+      'access all webform results',
+      'edit all webform submissions',
+      'delete all webform submissions',
+      'administer users',
+    );
+
+    foreach ($permissions as $user_key => $role_permissions) {
+      $this->users[$user_key] = $this->drupalCreateUser($role_permissions);
+    }
+  }
+}
+
+/**
+ * Webform goals testing class.
+ */
+class WebformGoalsIntegratedTestCase extends WebformGoalsIntegratedTestSetup {
+
+  /**
+   * Implements getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Webform Goals'),
+      'description' => t('Checks goals UI & Display.'),
+      'group' => t('Webform Goals'),
+    );
+  }
+
+  /**
+   * Confirm UI elements on webform node create form.
+   */
+  public function testWebformGoalsUI() {
+    // Log in our editor.
+    $this->drupalLogin($this->users['editor']);
+    $edit = array(
+      'title' => t('Test Webform Goals'),
+      'body[und][0][value]' => 'test',
+    );
+    $this->drupalPost('node/add/webform', $edit, t('Save'));
+
+    // @todo Add component.
+    // @todo Webform created, make goals.
+
+  }
+
+}
+
+/**
+ * Webform user testing class.
+ */
+class WebformGoalsUnitTestCase extends WebformGoalsIntegratedTestSetup {
+
+  /**
+   * Implements getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Webform Goals Unit tests'),
+      'description' => t('Individually tests specific functions.'),
+      'group' => t('Webform Goals'),
+    );
+  }
+
+  /**
+   * Unit test helper functions.
+   */
+  public function testWebformGoalsHelperFunctions() {
+    // @todo Test goal progress calculations.
+    // @todo Test token replacement.
+  }
+
+}

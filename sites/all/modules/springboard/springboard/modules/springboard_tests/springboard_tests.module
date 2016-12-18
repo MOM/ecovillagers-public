@@ -1,0 +1,5 @@
+<?php
+/**
+ * @file
+ * General helpers for running simpletest tests against Springboard.
+ */

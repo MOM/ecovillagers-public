@@ -1,0 +1,16 @@
+name = "Token insert UI"
+description = "Allows you to insert tokens in a textfield or wysiwyg field."
+core = 7.x
+package = Token insert
+dependencies[] = token
+files[] = token_insert.inc
+files[] = token_insert.module
+files[] = token_insert.js
+configure = admin/config/content/formats
+
+
+; Information added by drush on 2016-12-18
+version = "4630189ef4115ca05211507ddb3193d5af814f8b-dev"
+project = "token_insert"
+datestamp = "1482080370"
+

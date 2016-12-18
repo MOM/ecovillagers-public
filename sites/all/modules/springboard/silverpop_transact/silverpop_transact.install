@@ -1,0 +1,290 @@
+<?php
+/**
+ * @file
+ * Installs Silverpop Transact module.
+ *
+ * @TODO remove variables at uninstall.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function silverpop_transact_install() {
+  $directory = "private://silverpop";
+  file_prepare_directory($directory, FILE_CREATE_DIRECTORY);
+
+  // We default to Silverpop's SMTP model, so enable the smtp module setting.
+  variable_set('smtp_on', TRUE);
+
+  // We default to Silverpop's SMTP model, so switch to use the mailsystem
+  // provided by the smtp module.
+  $mail_modes = variable_get('mail_system');
+  if (isset($mail_modes['email_wrappers'])) {
+    $mail_modes['email_wrappers'] = 'SmtpMailSystem';
+    $mail_modes['default-system'] = 'SmtpMailSystem';
+    variable_set('mail_system', $mail_modes);
+  }
+}
+
+/**
+ * Implements hook_disable().
+ */
+function silverpop_transact_disable() {
+  // Switch email_wrapper back to the mail system provided by the email_wrappers
+  // module.
+  $mail_modes = variable_get('mail_system');
+  if (isset($mail_modes['email_wrappers'])) {
+    $mail_modes['email_wrappers'] = 'EmailWrappersMailSystemInterface';
+    $mail_modes['default-system'] = 'DefaultMailSystem';
+    variable_set('mail_system', $mail_modes);
+  }
+}
+
+/**
+ * Implements hook_requirements().
+ *
+ */
+function silverpop_transact_requirements($phase) {
+  $requirements = array();
+  if ($phase == 'runtime') {
+    $directory = "private://silverpop";
+    $directory_exists = file_prepare_directory($directory, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS);
+    if ($directory_exists) {
+      $requirements['silverpop'] = array(
+        'title' => t('Silverpop Transact directory'),
+        'description' => t('The directory for storing failed Silverpop Transact transmission exists and is writable.'),
+        'value' => t('Exists'),
+        'severity' => REQUIREMENT_OK,
+      );
+    }
+    else {
+      $requirements['silverpop'] = array(
+        'title' => t('Silverpop Transact directory'),
+        'description' => t('The directory for storing failed Silverpop Transact transmission does not exist or is not writable.'),
+        'value' => t('Does not exist'),
+        'severity' => REQUIREMENT_WARNING,
+      );
+    }
+  }
+  return $requirements;
+}
+
+/**
+ * Implements hook_schema().
+ */
+function silverpop_transact_schema() {
+  // @TODO add appropriate indexes.
+  $schema['silverpop_transact_log'] = array(
+    'description' => 'Silver pop Transact log entries.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'The primary identifier of a silverpop transaction log entry.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'model' => array(
+        'description' => 'XML or SMTP',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'origin' => array(
+        'description' => 'Module or Rule',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the email record was created.',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      // @TODO Is int the best type for status?
+      'status' => array(
+        'description' => 'Boolean indicating upload success/failure. Only applicable with XML mode messages.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 1,
+      ),
+      'silverpop_message' => array(
+        'description' => 'Integer representing Silverpop status message (only applicable for XML)',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'filename' => array(
+        'description' => 'Filename of saved XML document (only applicable for XML model)',
+        'type' => 'varchar',
+        'length' => '2014',
+        'not null' => FALSE,
+      ),
+      'last_retry' => array(
+        'description' => 'Unix timestamp of when record why last tried. (only applicable for XML model)',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'data' => array(
+        'description' => 'Serialized personalization data. (only applicable for XML model)',
+        'type' => 'text',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+  $schema['silverpop_transact_webform'] = array(
+    'description' => 'Stores Silverpop data related to donation_form node emails.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'node id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'eid' => array(
+        'description' => 'email id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'group_id' => array(
+        'description' => 'Silverpop Group ID.',
+        'type' => 'text',
+      ),
+      'save_tokens' => array(
+        'description' => 'Boolean indicating whether the tokens should be saved to Silverpop database.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+      ),
+      'additional_tokens' => array(
+        'description' => 'key|value list of additional tokens to be sent to Silverpop.',
+        'type' => 'text',
+      ),
+      'smtp_xheader_value' => array(
+        'description' => 'Only used in SMTP model. The value of the X-SP-Transact-Id Header.',
+        'type' => 'text',
+      ),
+    ),
+    'primary key' => array('nid', 'eid'),
+    'indexes' => array(
+      'nid' => array('nid'),
+    ),
+  );
+  return $schema;
+}
+
+/**
+ * Adds tables silverpop_transact_log and silverpop_transact_webform.
+ */
+function silverpop_transact_update_7001() {
+  $schema['silverpop_transact_log'] = array(
+    'description' => 'Silver pop Transact log entries.',
+    'fields' => array(
+      'id' => array(
+        'description' => 'The primary identifier of a silverpop transaction log entry.',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'model' => array(
+        'description' => 'XML or SMTP',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'origin' => array(
+        'description' => 'Module or Rule',
+        'type' => 'varchar',
+        'length' => '255',
+        'not null' => FALSE,
+      ),
+      'created' => array(
+        'description' => 'The Unix timestamp when the email record was created.',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'status' => array(
+        'description' => 'Boolean indicating upload success/failure. Only applicable with XML mode messages.',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => 1,
+      ),
+      'silverpop_message' => array(
+        'description' => 'Integer representing Silverpop status message (only applicable for XML)',
+        'type' => 'int',
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'filename' => array(
+        'description' => 'Filename of saved XML document (only applicable for XML model)',
+        'type' => 'varchar',
+        'length' => '2014',
+        'not null' => FALSE,
+      ),
+      'last_retry' => array(
+        'description' => 'Unix timestamp of when record why last tried. (only applicable for XML model)',
+        'type' => 'int',
+        'not null' => FALSE,
+      ),
+      'data' => array(
+        'description' => 'Serialized personalization data. (only applicable for XML model)',
+        'type' => 'text',
+        'not null' => FALSE,
+        'serialize' => TRUE,
+      ),
+    ),
+    'primary key' => array('id'),
+  );
+  $schema['silverpop_transact_webform'] = array(
+    'description' => 'Stores Silverpop data related to donation_form node emails.',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'node id.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'eid' => array(
+        'description' => 'email id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'group_id' => array(
+        'description' => 'Silverpop Group ID.',
+        'type' => 'text',
+      ),
+      'save_tokens' => array(
+        'description' => 'Boolean indicating whether the tokens should be saved to Silverpop database.',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'additional_tokens' => array(
+        'description' => 'key|value list of additional tokens to be sent to Silverpop.',
+        'type' => 'text',
+      ),
+      'smtp_xheader_value' => array(
+        'description' => 'Only used in SMTP model. The value of the X-SP-Transact-Id Header.',
+        'type' => 'text',
+      ),
+    ),
+    'primary key' => array('nid', 'eid'),
+    'indexes' => array(
+      'nid' => array('nid'),
+    ),
+  );
+  db_create_table('silverpop_transact_log', $schema['silverpop_transact_log']);
+  db_create_table('silverpop_transact_webform', $schema['silverpop_transact_webform']);
+
+}
+
+/**
+ * Set Silverpop Transact API model to XML if module was previously configured.
+ */
+function silverpop_transact_update_7002() {
+  if (!empty(variable_get('silverpop_transact_mailing_id'))) {
+    variable_set('silverpop_transact_model', 'XML');
+  }
+}

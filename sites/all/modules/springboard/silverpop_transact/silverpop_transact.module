@@ -1,0 +1,716 @@
+<?php
+/**
+ * @file
+ * Provides integration with Silverpop Transact.
+ */
+
+define('SILVERPOP_TRANSACT_FTP_ADDRESS', 'transfer%.silverpop.com');
+define('SILVERPOP_TRANSACT_DEFAULT_CAMPAIGN', variable_get('silverpop_transact_mailing_id'));
+define('SILVERPOP_TRANSACT_SMTP_ADDRESS', 'transact%.silverpop.com');
+
+/**
+ * Implements hook_action_info().
+ */
+function silverpop_transact_action_info() {
+  return array(
+    'silverpop_transact_resubmit_xml' => array(
+      'type' => 'silverpop_transact',
+      'label' => t('Resubmit XML to Silverpop'),
+      'configurable' => FALSE,
+      'pass rows' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_entity_info().
+ */
+function silverpop_transact_entity_info() {
+  return array(
+    'silverpop_transact' => array(
+      'label' => t('Silverpop Transact'),
+      'base table' => 'silverpop_transact_log',
+      'entity keys' => array(
+        'id' => 'id',
+      ),
+      'label callback' => 'silverpop_transact_operations_label',
+    ),
+  );
+}
+
+/**
+ * Implements hook_views_bulk_operations_object_info().
+ */
+function silverpop_transact_views_bulk_operations_object_info() {
+  return array(
+    'silverpop_transact' => array(
+      'type' => 'silverpop_transact',
+      'base_table' => 'silverpop_transact_log',
+      'title' => 'id',
+    ),
+  );
+}
+
+/**
+ * Implements hook_cron_queue_info().
+ */
+function silverpop_transact_cron_queue_info() {
+  $queues['silverpop_transact_queue_xml'] = array(
+    'worker callback' => 'silverpop_transact_process_cron_queue',
+  );
+  return $queues;
+}
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function silverpop_transact_form_webform_email_edit_form_alter(&$form, &$form_state, $form_id) {
+  if (variable_get('silverpop_transact_model') == 'SMTP') {
+    $defaults = silverpop_transact_load_email_settings($form['node']['#value']->nid, $form['eid']['#value']);
+    $form['silverpop_transact_smtp_xheader_value'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Silverpop SMTP X-Header value'),
+      '#description' => t('The value of the X-SP-Transact-Id X Header that is used to match a message to a Transaction Group. If ommitted, the site-wide default will be used.'),
+      '#default_value' => $defaults['smtp_xheader_value'],
+      '#weight' => '-51',
+    );
+    // Hide N/A form elements by setting their type to 'value'. This way, they
+    // still exist and won't cause errors when other modules go looking for
+    // them.
+    $form['email_wrappers_bcc']['#type'] = 'value';
+    $form['#submit'][] = 'silverpop_transact_email_submit_callback';
+
+  }
+  elseif (variable_get('silverpop_transact_model') == 'XML') {
+    // Hide N/A form elements by setting their type to 'value'. This way, they
+    // still exist and won't cause errors when other modules go looking for
+    // them.
+    $form['email_wrappers_email_template']['#type'] = 'value';
+    $form['email_wrappers_bcc']['#type'] = 'value';
+    // @TODO Probably a better way to set all '#type' under 'template'.
+    $form['template']['#type'] = 'value';
+    $form['template']['email_wrappers_html_message']['#type'] = 'value';
+    $form['template']['email_wrappers_text_message']['#type'] = 'value';
+    $form['template']['template_option']['#type'] = 'value';
+    $form['template']['template']['#type'] = 'value';
+    $form['template']['components']['#type'] = 'value';
+    $form['template']['preview-container']['preview']['#type'] = 'value';
+    // Add Silverpop transact fields.
+    $defaults = silverpop_transact_load_email_settings($form['node']['#value']->nid, $form['eid']['#value']);
+    $form['silverpop_transact_group_id'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Silverpop Group ID'),
+      '#description' => t('Matches the outgoing message with a Silverpop Transactional message group. If left blank, the site-wide default will be used.'),
+      '#default_value' => $defaults['group_id'],
+      '#weight' => '-51',
+    );
+    $form['silverpop_transact_save_tokens'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Save Token Data'),
+      '#description' => t('Saving token data is necessary for proper functioning of the "view in browser" functionality. Additional configuration in Silverpop is required.'),
+      '#default_value' => $defaults['save_tokens'],
+      '#weight' => '-50',
+    );
+    $form['silverpop_transact_additional_tokens'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Additional Silverpop Tokens'),
+      '#description' => t('All webform components and their submitted values are included automatically. Additional tokens can be included by entering key|value pairs in the following format:<br>site_name|[site:name]<br>donation_country|[donation:country]<br>donation_number|[donation:order:order-id]'),
+      '#default_value' => $defaults['additional_tokens'],
+      '#weight' => '-50',
+    );
+    $form['#submit'][] = 'silverpop_transact_email_submit_callback';
+  }
+}
+
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function silverpop_transact_form_fundraiser_admin_settings_alter(&$form, &$form_state) {
+  if (variable_get('silverpop_transact_model') == 'XML') {
+    // Hide N/A form elements by setting their type to 'value'. This way, they
+    // still exist and won't cause errors when other modules go looking for
+    // them.
+    $form['fundraiser_sustainers']['fundraiser_cc_expiration_message']['fundraiser_cc_exp_body']['#type'] = 'value';
+    $form['fundraiser_sustainers']['fundraiser_cc_expiration_message']['fundraiser_cc_exp_subject']['#type'] = 'value';
+    // Adds fields.
+    $form['fundraiser_sustainers']['fundraiser_cc_expiration_message']['silverpop_transact_cc_expiration_message_group_id'] = array(
+      '#type' => 'textfield',
+      '#title' => t('Silverpop Group ID'),
+      '#description' => t('Matches the outgoing message with a Silverpop Transactional message group. If left blank, the site-wide default will be used.'),
+      '#default_value' => variable_get('silverpop_transact_cc_expiration_message_group_id'),
+    );
+    $form['fundraiser_sustainers']['fundraiser_cc_expiration_message']['silverpop_transact_cc_expiration_message_tokens'] = array(
+      '#type' => 'textarea',
+      '#title' => t('Silverpop Tokens'),
+      '#description' => t('Enter a list of key|value pairs for additional tokens to be used in Silverpop templates in the following format:<br>site_name|[site:name]<br>current_date|[current-date:short]<br>donation_number|[donation:order:order-id]'),
+      '#default_value' => variable_get('silverpop_transact_cc_expiration_message_tokens'),
+      '#weight' => '49',
+    );
+    $form['fundraiser_sustainers']['fundraiser_cc_expiration_message']['tokens']['#weight'] = '50';
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function silverpop_transact_form_webform_email_delete_form_alter(&$form, &$form_state, $form_id) {
+  $form['#submit'][] = 'silverpop_transact_delete_callback';
+}
+
+/**
+ * Implements hook_mail_alter().
+ *
+ * In SMTP mdde, adds Silverpop's X-SP-Transact-Id header to all emails. When in
+ * XML mode, sends webform confirmation emails via XML API.
+ */
+function silverpop_transact_mail_alter(&$message) {
+  // Only act if $message['send'] is TRUE, otherwise you may send two.
+  // See email_wrappers_mail_alter().
+  if ($message['send'] == TRUE) {
+    if (isset($message['params']['email']['eid']) || isset($message['params']['email']['nid'])) {
+      $eid = $message['params']['email']['eid'];
+      $nid = $message['params']['email']['nid'];
+      $settings = silverpop_transact_load_email_settings($nid, $eid);
+    }
+    if (variable_get('silverpop_transact_model') == 'SMTP') {
+      // If no xheader value specified for this email, use the site default.
+      if (!isset($settings['smtp_xheader_value']) || $settings['smtp_xheader_value'] === '') {
+        $settings['smtp_xheader_value'] = variable_get('silverpop_transact_xheader_value');
+      }
+      $message['headers']['X-SP-Transact-Id'] = $settings['smtp_xheader_value'];
+      $log_record = array(
+        'model' => 'SMTP',
+        'origin' => 'silverpop_transact',
+        'created' => REQUEST_TIME,
+      );
+      drupal_write_record('silverpop_transact_log', $log_record);
+    }
+    elseif (variable_get('silverpop_transact_model') == 'XML' && $message['id'] == 'webform_submission') {
+      // Seems like there should be a better way to do this. We take a string
+      // containing Drupal tokens, process the tokens, and then turn around and
+      // convert that into an assoc array. Then merge that with another array
+      // containing webform submitted values.
+      // We need the submission id, so we can load the donation object, so we
+      // can pass that to token_replace().
+      if (module_exists('fundraiser_webform')) {
+        // @TODO We only really need to do this if donation tokens are present.
+        $donation = _fundraiser_webform_get_donation_by_sid($message['params']['submission']->sid);
+      }
+      $token_set = array(
+        'node' => $message['params']['node'],
+        'donation' => $donation,
+      );
+      $drupal_tokens = silverpop_transact_parse_personalization(token_replace($settings['additional_tokens'], $token_set));
+      $webform_components = silverpop_transact_load_webform_components($message['params']['submission']->data, $message['params']['node']->webform['components']);
+      $personalization_tokens = array_merge($drupal_tokens, $webform_components);
+      silverpop_transact_create_mailing($message['to'], $settings['group_id'], $personalization_tokens);
+      // Set to false to stop drupal_mail() from sending.
+      $message['send'] = FALSE;
+    }
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function silverpop_transact_menu() {
+  $items['admin/config/services/silverpop/transact'] = array(
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('silverpop_transact_admin'),
+    'access arguments' => array('administer silverpop settings'),
+    'title' => 'Silverpop Transact',
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'silverpop_transact.forms.admin.inc',
+    'description' => 'Manage Silverpop Transact settings.',
+  );
+
+  return $items;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function silverpop_transact_theme($existing, $type, $theme, $path) {
+  return array(
+    'silverpop_transact_mail' => array(
+      'path' => drupal_get_path('module', 'silverpop_transact') . '/templates',
+      'template' => 'silverpop-transact-mail',
+      'variables' => array(
+        'mailing_id' => '',
+        'save_columns' => '',
+        'recipient_email' => '',
+        'personalization' => array(),
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function silverpop_transact_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'silverpop_transact') . '/views',
+  );
+}
+
+/**
+ * Implements hook_cron().
+ */
+function silverpop_transact_cron() {
+  // Wrap in variable check for easy disabling without code push.
+  if (variable_get('silverpop_transact_process_logs_during_cron', TRUE)) {
+    // Only check the Silverpop logs when in XML mode.
+    if (variable_get('silverpop_transact_model') == 'XML') {
+      silverpop_transact_cron_log_status_update();
+    }
+  }
+
+  // Cleanup the silverpop_transact_log table.
+  $row_limit = variable_get('silverpop_transact_row_limit', 10000);
+
+  // For row limit n, get the id of the nth row in descending id order.
+  // Counting the most recent n rows avoids issues with wid number sequences,
+  // e.g. auto_increment value > 1 or rows deleted directly from the table.
+  if ($row_limit > 0) {
+    $min_row = db_select('silverpop_transact_log', 's')
+      ->fields('s', array('id'))
+      ->orderBy('id', 'DESC')
+      ->range($row_limit - 1, 1)
+      ->execute()->fetchField();
+
+    $filenames = db_select('silverpop_transact_log', 's')
+      ->fields('s', array('filename'))
+      ->condition('id', $min_row, '<')
+      ->execute()->fetchCol();
+
+    // Delete files associated with log records that are about to get deleted.
+    foreach ($filenames as $filename) {
+      $filename = $filename . '.status';
+      file_unmanaged_delete($filename);
+    }
+
+    // Delete all table entries older than the nth row, if nth row was found.
+    if ($min_row) {
+      db_delete('silverpop_transact_log')
+        ->condition('id', $min_row, '<')
+        ->execute();
+    }
+  }
+}
+
+/**
+ * Retrieves status files via FTP and updates silverpop_transact_log records.
+ *
+ * @return int
+ *   Returns the number of records updated with a silverpop message
+ */
+function silverpop_transact_cron_log_status_update() {
+  $updated_count = 0;
+  // Connect to FTP server.
+  $connection = silverpop_transact_connect();
+  if ($connection) {
+    // Get list of XML files on the FTP host.
+    ftp_chdir($connection, 'transact/status');
+    $status_files = ftp_nlist($connection, '.');
+    // Get rid of file extension for easier matching with log records.
+    $status_files = str_replace('.status', '', $status_files);
+    // Get list of log records where status is null.
+    $result = db_query("SELECT id, filename, silverpop_message, model FROM {silverpop_transact_log} WHERE silverpop_message IS NULL AND model = 'XML'");
+    if ($result) {
+      // Foreach null status record that has an existing status file, get the
+      // status file, check the status message, and update the corresponding
+      // silverpop_transact_log record.
+      while ($log_record = $result->fetchAssoc()) {
+        // Get rid of "private://silverpop/silverpop/" for easier matching with xml status filenames.
+        $bare_log_filename = str_replace('private://silverpop/', '', $log_record['filename']);
+        if (in_array($bare_log_filename, $status_files)) {
+          // Get XML.
+          $file = $bare_log_filename . '.status';
+
+          if (ftp_get($connection, drupal_realpath($log_record['filename']) . '.status', $file, FTP_ASCII)) {
+            watchdog('silverpop_transact', 'Status file downloaded: %file', array('%file' => $file));
+          }
+          else {
+            watchdog('silverpop_transact', 'Could not download status file: %file', array('%file' => $file));
+          }
+          // Look for status value.
+          $silverpop_status = silverpop_transact_get_xml_status('private://silverpop/' . $file);
+          // Update log record.
+          $data = array('silverpop_message' => $silverpop_status, 'id' => $log_record['id']);
+          drupal_write_record('silverpop_transact_log', $data, 'id');
+          $updated_count++;
+        }
+      }
+    }
+    ftp_close($connection);
+  }
+  return $updated_count;
+}
+
+/**
+ * Silverpop_transact_create_mailing().
+ *
+ * Creates an XML object compliant with the Silverpop Transact API. Submits the
+ * object to Silverpop or optionally queues it to be submitted on cron.
+ *
+ * @param string $recipient_email
+ *   Email of the recipient.
+ * @param string $mailing_id
+ *   Defaults to SILVERPOP_TRANSACT_DEFAULT_CAMPAIGN if NULL is passed in.
+ * @param array $personalization
+ *    Associative array of key|value pairs for use in Silverpop templates, eg:
+ *   - Personalization key (eg 'first_name').
+ *   - Personalization value (eg 'Scott').
+ */
+function silverpop_transact_create_mailing($recipient_email, $mailing_id = NULL, $personalization = NULL, $save_columns = FALSE) {
+  // If mailing ID is not provided, use the default.
+  if ($mailing_id == NULL) {
+    $mailing_id = SILVERPOP_TRANSACT_DEFAULT_CAMPAIGN;
+  }
+  // Render and save the XML data to be sent to Silverpop.
+  $data = array(
+    'mailing_id' => $mailing_id,
+    'save_columns' => $save_columns,
+    'recipient_email' => $recipient_email,
+    'personalization' => $personalization,
+  );
+  $xml = theme('silverpop_transact_mail', $data);
+  $file = file_unmanaged_save_data($xml, 'private://silverpop/'.time(), FILE_EXISTS_RENAME);
+  if (variable_get('silverpop_transact_submit_on_cron')) {
+    $queue = DrupalQueue::get("silverpop_transact_queue_xml");
+    $queue->createItem($file);
+    $submit_status = 2;
+  }
+  else {
+    $submit_status = silverpop_transact_submit_xml($file);
+  }
+  // Log record.
+  $log_record = array(
+    'filename' => $file,
+    'model' => 'XML',
+    'status' => $submit_status,
+    'origin' => 'silverpop_transact',
+    'created' => REQUEST_TIME,
+    'data' => $data,
+  );
+  drupal_write_record('silverpop_transact_log', $log_record);
+}
+
+/**
+ * Transforms pipe delimited key|value textarea into associative array.
+ *
+ * @param string $personalization_string
+ *   Pipe delimited and newline separated string of key|value pars.
+ *
+ * @return array
+ *   An associative array containing:
+ *   - Personalization key (eg 'first_name')
+ *   - Personalization value (eg 'Scott')
+ */
+function silverpop_transact_parse_personalization($personalization_string) {
+  if (!is_array($personalization_string)) {
+    // Interperet the personalization string into a keyed array.
+    $personalization_items = explode("\n", $personalization_string);
+    $personalization = array();
+    foreach ($personalization_items as $item) {
+      $pos = strpos($item, '|');
+      $personalization[substr($item, 0, $pos)] = htmlspecialchars(substr($item, $pos + 1));
+    }
+  }
+  else {
+    $personalization = $personalization_string;
+  }
+  return $personalization;
+}
+
+/**
+ * Delete settings for a given webform email.
+ *
+ * @param int $nid
+ *   Webform node id.
+ * @param int $eid
+ *   Email id.
+ */
+function silverpop_transact_delete_email_settings($nid, $eid) {
+  db_delete('silverpop_transact_webform')
+    ->condition('nid', $nid)
+    ->condition('eid', $eid)
+    ->execute();
+}
+
+/**
+ * Submit callback for webform email edit form.
+ */
+function silverpop_transact_email_submit_callback($form, $form_state) {
+  $values = $form_state['values'];
+  // Delete any existing settings for this email.
+  silverpop_transact_delete_email_settings($values['node']->nid, $values['eid']);
+  // Save settings for this email.
+  $settings = array(
+    'nid' => $values['node']->nid,
+    'eid' => $values['eid'],
+  );
+  if (isset($values['silverpop_transact_group_id'])) {
+    $settings['group_id'] = $values['silverpop_transact_group_id'];
+  }
+  if (isset($values['silverpop_transact_save_tokens'])) {
+    $settings['save_tokens'] = $values['silverpop_transact_save_tokens'];
+  }
+  if (isset($values['silverpop_transact_additional_tokens'])) {
+    $settings['additional_tokens'] = $values['silverpop_transact_additional_tokens'];
+  }
+  if (isset($values['silverpop_transact_smtp_xheader_value'])) {
+    $settings['smtp_xheader_value'] = $values['silverpop_transact_smtp_xheader_value'];
+  }
+  drupal_write_record('silverpop_transact_webform', $settings);
+}
+
+/**
+ * Submit callback for the Webform email delete form.
+ *
+ * Remove any settings for an email that is being deleted.
+ */
+function silverpop_transact_delete_callback($form, $form_state) {
+  $nid = $form_state['values']['email']['nid'];
+  $eid = $form_state['values']['email']['eid'];
+  silverpop_transact_delete_email_settings($nid, $eid);
+}
+
+/**
+ * Load Silverpop settings for a specific webform & email.
+ *
+ * @param int $nid
+ *   Webform node id.
+ * @param int $eid
+ *   Webform email id.
+ *
+ * @return array
+ *   Keyed array of settings. Array keys:
+ *     nid - Webform node id
+ *     eid - Webform email id
+ *     group_id - Silverpop Group ID
+ *     save_tokens
+ *     additional_tokens
+ *     smtp_xheader_value
+ */
+function silverpop_transact_load_email_settings($nid, $eid = FALSE) {
+  $query = db_select('silverpop_transact_webform', 'e')
+    ->fields('e', array(
+      'nid',
+      'eid',
+      'group_id',
+      'save_tokens',
+      'additional_tokens',
+      'smtp_xheader_value',
+    ))
+    ->condition('e.nid', $nid)
+    ->condition('eid', $eid);
+  return $query->execute()->fetchAssoc();
+}
+
+/**
+ * Opens an FTP connection to Silverpop.
+ *
+ * If no arguments are supplied, the values stored in the database are used.
+ *
+ * @param string $api_host
+ *   (Optional) The engage pod number (e.g. Pod 5 would use api5.silverpop.com).
+ * @param string $username
+ *   (Optional) Username used to log into the Silverpop admin portal.
+ * @param string $password
+ *   (Optional) Unencrypted password used to log into Silverpop admin portal.
+ *
+ * @return object
+ *   FTP stream on success or FALSE on error.
+ */
+function silverpop_transact_connect($api_host = NULL, $username = NULL, $password = NULL) {
+  $api_host = empty($api_host) ? variable_get('silverpop_transact_apihost') : $api_host;
+  $username = empty($username) ? variable_get('silverpop_transact_username') : $username;
+  $password = empty($password) ? silverpop_transact_get_password() : $password;
+  // Connect to Silverpop Transact.
+  $connection_address = str_replace('%', $api_host, SILVERPOP_TRANSACT_FTP_ADDRESS);
+  $connection = ftp_connect($connection_address);
+  if ($connection) {
+    $login = ftp_login($connection, $username, $password);
+    if ($login) {
+      ftp_pasv($connection, TRUE);
+      return $connection;
+    }
+    else {
+      watchdog('silverpop_transact', 'There was an error logging in to the Silverpop Transact server. Please check your configuration settings.', array(), WATCHDOG_ERROR);
+      return FALSE;
+    }
+  }
+  else {
+    watchdog('silverpop_transact', 'There was an error connecting to the Silverpop Transact server. Please check your configuration settings.', array(), WATCHDOG_ERROR);
+    return FALSE;
+  }
+}
+
+/**
+ * Submits XML Silverpop via FTP.
+ *
+ * @param string $file
+ *   The path of the xml file.
+ *
+ * @return int
+ *   Returns status code: 0 failure, 1 success
+ */
+function silverpop_transact_submit_xml($file) {
+  $connection = silverpop_transact_connect();
+  // Bail early if we can't connect to Silverpop.
+  if (!$connection) {
+    return 0;
+  }
+  // Get the file to be sent to Silverpop.
+  $local_file_path = drupal_realpath($file);
+  $remote_file_path = 'transact/inbound/' . str_replace('private://silverpop/', '', $file);
+
+  // Attempt to send the XML file to Silverpop.
+  if (ftp_put($connection, $remote_file_path, $local_file_path, FTP_ASCII)) {
+    watchdog('silverpop_transact', 'successfully uploaded file %file', array('%file' => $file));
+    file_unmanaged_delete($file);
+    return 1;
+  }
+  else {
+    watchdog('silverpop_transact', 'Error when attempting to submit to Silverpop Trasact. Data saved at %file', array('%file' => $file), WATCHDOG_ERROR);
+    return 0;
+  }
+  ftp_close($connection);
+}
+
+/**
+ * Silverpop get password.
+ *
+ * Function borrowed from http://drupal.org/project/silverpop.
+ *
+ * @param bool $decrypt
+ *   Decrypt password returned if TRUE.
+ *
+ * @return string
+ *   The unecrypted Silverpop Transact password.
+ */
+function silverpop_transact_get_password($decrypt = TRUE) {
+  $password = variable_get('silverpop_transact_password', '');
+
+  // If mcrypt is being used we need to decrypt the password.
+  if ($password AND function_exists('mcrypt_encrypt') AND $decrypt) {
+    $key = drupal_substr(drupal_get_hash_salt(), 0, 32);
+    $iv_size = mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_ECB);
+    $iv = mcrypt_create_iv($iv_size, MCRYPT_RAND);
+    $ciphertext_dec = base64_decode($password);
+    $plaintext_dec = mcrypt_decrypt(MCRYPT_RIJNDAEL_256, $key, $ciphertext_dec, MCRYPT_MODE_ECB, $iv);
+
+    return rtrim($plaintext_dec, "\0");
+  }
+  elseif ($password) {
+    return $password;
+  }
+  else {
+    return '';
+  }
+}
+
+/**
+ * Silverpop Set Password.
+ *
+ * Function borrowed from http://drupal.org/project/silverpop.
+ *
+ * @param string $password
+ *   Silverpop Transact password.
+ */
+function silverpop_transact_set_password($password = '') {
+  // If mcrypt is available we will encrypt the password in the database.
+  if ($password AND function_exists('mcrypt_encrypt')) {
+    $key = drupal_substr(drupal_get_hash_salt(), 0, 32);
+    $iv_size = mcrypt_get_iv_size(MCRYPT_RIJNDAEL_256, MCRYPT_MODE_ECB);
+    $iv = mcrypt_create_iv($iv_size, MCRYPT_RAND);
+    $ciphertext = mcrypt_encrypt(MCRYPT_RIJNDAEL_256, $key, $password, MCRYPT_MODE_ECB, $iv);
+    $ciphertext_base64 = base64_encode($ciphertext);
+    $password = $ciphertext_base64;
+    // Store encrypted password.
+    watchdog('silverpop_transact', 'Silverpop Transact password %password was successfully encrypted. %ciphertext_base64', array('password' => $password, 'ciphertext_base64' => $ciphertext_base64));
+  }
+  // Otherwise it will be in plain text.
+  elseif ($password) {
+    watchdog('silverpop_transact', 'Silverpop Transact password could not be encrypted and is stored as plaintext. Please check the availability of the Mcrypt PHP extension on your server.', array(), WATCHDOG_CRITICAL);
+  }
+  return $password;
+}
+
+/**
+ * Adds form_key labels to submitted form values.
+ *
+ * @param array $submission_data
+ *   Submitted component data found in $message['params']['submission']->data.
+ * @param array $components_definition
+ *   Component info found in $message['params']['node']->webform['components'].
+ *
+ * @return array
+ *   An associative array containing:
+ *   - form_key: The component_key label of the component (eg 'first_name').
+ *   - value: The value of the component as submitted by the user (eg 'scott').
+ */
+function silverpop_transact_load_webform_components($submission_data, $components_definition) {
+  $component_key_values = array();
+  foreach ($submission_data as $key => $value) {
+    $component_label = $components_definition[$key]['form_key'];
+    // @TODO $value['value'][0] won't be right on multi-value form components.
+    // How would we pass them so they are usable in silverpop?
+    $component_key_values[$component_label] = $value['value'][0];
+  }
+  return $component_key_values;
+}
+
+/**
+ * When given an local xml silverpop.satus file, returns <status> value.
+ *
+ * @param string $file
+ *   Path and filename of local xml file. eg 'private://silverpop/example.status'.
+ *
+ * @return int
+ *   Returns value of <status> xml node, eg 1, 2, 3.
+ */
+function silverpop_transact_get_xml_status($file) {
+  $xml = simplexml_load_string(file_get_contents(drupal_realpath($file)));
+  return $xml->STATUS;
+}
+
+/**
+ * VBO action callback. Re-uploads failed xml files and updates log record.
+ */
+function silverpop_transact_resubmit_xml($cmt, $context = array()) {
+  $file = $context['silverpop_transact']->filename;
+  $id = $context['silverpop_transact']->id;
+  $submit_status = silverpop_transact_submit_xml($file);
+  $data = array(
+    'status' => $submit_status,
+    'last_retry' => REQUEST_TIME,
+    'id' => $id,
+  );
+  drupal_write_record('silverpop_transact_log', $data, 'id');
+}
+
+/**
+ * Cron queue callback. Uploads xml file and updates log record.
+ *
+ * @param string $file
+ *   Path and filename of local xml file. eg 'private://silverpop/fileTjVTQB'.
+ */
+function silverpop_transact_process_cron_queue($file) {
+  $submit_status = silverpop_transact_submit_xml($file);
+  $data = array(
+    'status' => $submit_status,
+    'filename' => $file,
+    'last_retry' => REQUEST_TIME,
+  );
+  drupal_write_record('silverpop_transact_log', $data, 'filename');
+}
+/**
+ * Label callback for "silverpop_transact" entity.
+ */
+function silverpop_transact_operations_label($item) {
+  return 'Silverpop message record #' . $item->id;
+}

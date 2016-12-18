@@ -44,13 +44,11 @@ Drupal.webform.selectOptionsLoad = function(result) {
     }
   }
   else {
-    var $element = $('#' + result.elementId);
     if (result.options) {
-      $element.val(result.options);
-      $.fn.prop ? $element.prop('readonly', true) : $element.attr('readonly', 'readonly');
+      $('#' + result.elementId).val(result.options).attr('readonly', 'readonly');
     }
     else {
-      $.fn.prop ? $element.prop('readonly', false) : $element.removeAttr('readonly');
+      $('#' + result.elementId).removeAttr('readonly');
     }
   }
 }

@@ -1,0 +1,13 @@
+name = Salesforce NPSP
+description = Integration functionality specific to the Nonprofit Starter Pack.
+package = Salesforce
+core = 7.x
+version = 7.x-4.x-dev
+
+dependencies[] = fundraiser_sustainers
+dependencies[] = libraries
+dependencies[] = salesforce
+dependencies[] = salesforce_soap
+dependencies[] = salesforce_sync
+
+files[] = tests/salesforce_npsp.test

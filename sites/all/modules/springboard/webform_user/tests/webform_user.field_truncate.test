@@ -1,0 +1,100 @@
+<?php
+/**
+ * @file
+ * Test the webform user form submissions.
+ */
+
+/**
+ * Tests webform_user truncation.
+ */
+class WebformUserFieldTruncateTestCase extends WebformUserTestSetup {
+
+  /**
+   * Implementation of getInfo().
+   */
+  public static function getInfo() {
+    return array(
+      'name' => t('Webform User Field Truncate'),
+      'description' => t('Test the field length truncate functionality of webform user.'),
+      'group' => t('Webform User'),
+    );
+  }
+
+  /**
+   * Implementation of setUp().
+   */
+  public function setUp($additional_modules = array()) {
+    parent::setUp($additional_modules);
+  }
+
+  /**
+   * Implementation of tearDown().
+   */
+  public function tearDown() {
+    parent::tearDown();
+  }
+
+  /**
+   * Tests that a new user account is created.
+   *
+   * A new account should be crated when an anonymous user with a non-matching
+   * email address submits a webform user form.
+   */
+  public function testWebformUserAnonymousSubmission() {
+    // Create a form for testing.
+    $this->webformUserCreateNode();
+
+    // Load the form and verify all fields are present.
+    $this->drupalGet('node/1');
+
+    // A 1000 character string.
+    $sbp_initial_referrer = '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890' .
+     '1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890';
+
+    // Fill the form out and submit it.
+    // sbp_initial_referrer should truncate at 255.
+    $edit = array(
+      'submitted[mail]' => 'john.doe@example.com',
+      'submitted[sbp_first_name]' => 'John',
+      'submitted[sbp_last_name]' => 'Doe',
+      'submitted[sbp_address]' => '100 Elm Street',
+      'submitted[sbp_address_line_2]' => '',
+      'submitted[sbp_city]' => 'Springfield',
+      'submitted[sbp_state]' => 'VA',
+      'submitted[sbp_country]' => 'US',
+      'submitted[sbp_zip]' => '55555',
+      'submitted[sbp_ms]' => 'ms',
+      'submitted[sbp_cid]' => 'cid',
+      'submitted[sbp_referrer]' => 'http://local',
+      'submitted[sbp_initial_referrer]' => $sbp_initial_referrer,
+      'submitted[sbp_search_engine]' => 'google',
+      'submitted[sbp_search_string]' => 'search_string',
+      'submitted[sbp_user_agent]' => 'user_agent',
+    );
+
+    $this->drupalPost('node/1', $edit, 'Submit');
+
+    // Get the language off the node before checking the user entity field
+    // values.
+    $node = node_load(1);
+    $lang = $node->language;
+
+    // Check to see if the user was created.
+    $user = user_load_by_mail('john.doe@example.com');
+
+    // Check the referrer string.
+    $truncated = substr($sbp_initial_referrer, 0, 255);
+    $users_sbp_initial_referrer = $user->sbp_initial_referrer[$lang][0]['value'];
+    $this->assertEqual($truncated, $users_sbp_initial_referrer, 'Created user\'s referrer is truncated.');
+    $this->assertEqual(strlen($users_sbp_initial_referrer), 255, 'Created user\'s referrer is the max length.');
+  }
+
+}

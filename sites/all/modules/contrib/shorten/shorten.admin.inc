@@ -21,7 +21,7 @@ function shorten_admin($form, $form_state) {
     '#type' => 'checkbox',
     '#title' => t('Use "www." instead of "http://"'),
     '#description' => t('"www." is shorter, but "http://" is automatically link-ified by more services.'),
-    '#default_value' => variable_get('shorten_www', FALSE),
+    '#default_value' => variable_get('shorten_www', TRUE),
   );
   $methods = array();
   if (function_exists('file_get_contents')) {
@@ -93,6 +93,16 @@ function shorten_admin($form, $form_state) {
       '#title' => t('Show the list of URL shortening services in the user interface'),
       '#default_value' => variable_get('shorten_show_service', FALSE),
       '#description' => t('Allow users to choose which service to use in the Shorten URLs block and page.'),
+    );
+  }
+  if (module_exists('token')) {
+    $form['shorten_generate_token'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Generate a shortened URL for nodes for use as tokens'),
+      '#description' => t('This option could create a lot of little-used short URLs.') . ' ' .
+        t('However, performance load is minimized because the shortened URLs are cached.') . ' ' .
+        t('Note that if you turn this off, you should not use the [node:url] token.'),
+      '#default_value' => variable_get('shorten_generate_token', 1),
     );
   }
   $form['shorten_use_alias'] = array(
@@ -206,8 +216,7 @@ function shorten_admin_submit($form, &$form_state) {
  * Returns HTML representing the shorten keys admin form.
  */
 function shorten_keys_form() {
-  $form = drupal_get_form('shorten_keys');
-  return drupal_render($form);
+  return drupal_render(drupal_get_form('shorten_keys'));
 }
 
 /**

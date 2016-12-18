@@ -1,0 +1,15 @@
+name = Springboard Frontend
+description = A stripped-down theme for Springboard fundraising.
+package = Springboard
+version = 7.x-4.x-dev
+core = 7.x
+base theme = springboard_base
+
+;Regions
+regions[header] = Header
+regions[content] = Content
+regions[footer] = Footer
+
+;Stylesheets
+stylesheets[all][] = css/styles.css
+
