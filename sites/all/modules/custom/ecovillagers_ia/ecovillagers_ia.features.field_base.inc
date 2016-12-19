@@ -10,7 +10,7 @@
 function ecovillagers_ia_field_default_field_bases() {
   $field_bases = array();
 
-  // Exported field_base: 'body'
+  // Exported field_base: 'body'.
   $field_bases['body'] = array(
     'active' => 1,
     'cardinality' => 1,
@@ -19,14 +19,6 @@ function ecovillagers_ia_field_default_field_bases() {
       0 => 'node',
     ),
     'field_name' => 'body',
-    'foreign keys' => array(
-      'format' => array(
-        'columns' => array(
-          'format' => 'format',
-        ),
-        'table' => 'filter_format',
-      ),
-    ),
     'indexes' => array(
       'format' => array(
         0 => 'format',
@@ -39,7 +31,7 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'text_with_summary',
   );
 
-  // Exported field_base: 'comment_body'
+  // Exported field_base: 'comment_body'.
   $field_bases['comment_body'] = array(
     'active' => 1,
     'cardinality' => 1,
@@ -48,14 +40,6 @@ function ecovillagers_ia_field_default_field_bases() {
       0 => 'comment',
     ),
     'field_name' => 'comment_body',
-    'foreign keys' => array(
-      'format' => array(
-        'columns' => array(
-          'format' => 'format',
-        ),
-        'table' => 'filter_format',
-      ),
-    ),
     'indexes' => array(
       'format' => array(
         0 => 'format',
@@ -68,21 +52,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'text_long',
   );
 
-  // Exported field_base: 'field_inspiration_categories'
+  // Exported field_base: 'field_inspiration_categories'.
   $field_bases['field_inspiration_categories'] = array(
     'active' => 1,
     'cardinality' => -1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_inspiration_categories',
-    'foreign keys' => array(
-      'tid' => array(
-        'columns' => array(
-          'tid' => 'tid',
-        ),
-        'table' => 'taxonomy_term_data',
-      ),
-    ),
     'indexes' => array(
       'tid' => array(
         0 => 'tid',
@@ -102,14 +78,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'taxonomy_term_reference',
   );
 
-  // Exported field_base: 'field_inspiration_gathering_date'
+  // Exported field_base: 'field_inspiration_gathering_date'.
   $field_bases['field_inspiration_gathering_date'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_inspiration_gathering_date',
-    'foreign keys' => array(),
     'indexes' => array(),
     'locked' => 0,
     'module' => 'date',
@@ -132,21 +107,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'datetime',
   );
 
-  // Exported field_base: 'field_inspiration_gathering_dtls'
+  // Exported field_base: 'field_inspiration_gathering_dtls'.
   $field_bases['field_inspiration_gathering_dtls'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_inspiration_gathering_dtls',
-    'foreign keys' => array(
-      'format' => array(
-        'columns' => array(
-          'format' => 'format',
-        ),
-        'table' => 'filter_format',
-      ),
-    ),
     'indexes' => array(
       'format' => array(
         0 => 'format',
@@ -159,14 +126,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'text_long',
   );
 
-  // Exported field_base: 'field_inspiration_highlighted'
+  // Exported field_base: 'field_inspiration_highlighted'.
   $field_bases['field_inspiration_highlighted'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_inspiration_highlighted',
-    'foreign keys' => array(),
     'indexes' => array(
       'value' => array(
         0 => 'value',
@@ -185,21 +151,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'list_boolean',
   );
 
-  // Exported field_base: 'field_inspiration_public_teaser'
+  // Exported field_base: 'field_inspiration_public_teaser'.
   $field_bases['field_inspiration_public_teaser'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_inspiration_public_teaser',
-    'foreign keys' => array(
-      'format' => array(
-        'columns' => array(
-          'format' => 'format',
-        ),
-        'table' => 'filter_format',
-      ),
-    ),
     'indexes' => array(
       'format' => array(
         0 => 'format',
@@ -212,21 +170,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'text_long',
   );
 
-  // Exported field_base: 'field_inspiration_series'
+  // Exported field_base: 'field_inspiration_series'.
   $field_bases['field_inspiration_series'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_inspiration_series',
-    'foreign keys' => array(
-      'tid' => array(
-        'columns' => array(
-          'tid' => 'tid',
-        ),
-        'table' => 'taxonomy_term_data',
-      ),
-    ),
     'indexes' => array(
       'tid' => array(
         0 => 'tid',
@@ -246,7 +196,7 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'taxonomy_term_reference',
   );
 
-  // Exported field_base: 'field_inspiration_subtitle'
+  // Exported field_base: 'field_inspiration_subtitle'.
   $field_bases['field_inspiration_subtitle'] = array(
     'active' => 1,
     'cardinality' => 1,
@@ -255,14 +205,6 @@ function ecovillagers_ia_field_default_field_bases() {
     'field_name' => 'field_inspiration_subtitle',
     'field_permissions' => array(
       'type' => 0,
-    ),
-    'foreign keys' => array(
-      'format' => array(
-        'columns' => array(
-          'format' => 'format',
-        ),
-        'table' => 'filter_format',
-      ),
     ),
     'indexes' => array(
       'format' => array(
@@ -276,21 +218,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'text_long',
   );
 
-  // Exported field_base: 'field_inspiration_thumbnail'
+  // Exported field_base: 'field_inspiration_thumbnail'.
   $field_bases['field_inspiration_thumbnail'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_inspiration_thumbnail',
-    'foreign keys' => array(
-      'fid' => array(
-        'columns' => array(
-          'fid' => 'fid',
-        ),
-        'table' => 'file_managed',
-      ),
-    ),
     'indexes' => array(
       'fid' => array(
         0 => 'fid',
@@ -306,21 +240,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'image',
   );
 
-  // Exported field_base: 'field_overview_slide_blurb'
+  // Exported field_base: 'field_overview_slide_blurb'.
   $field_bases['field_overview_slide_blurb'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_overview_slide_blurb',
-    'foreign keys' => array(
-      'format' => array(
-        'columns' => array(
-          'format' => 'format',
-        ),
-        'table' => 'filter_format',
-      ),
-    ),
     'indexes' => array(
       'format' => array(
         0 => 'format',
@@ -333,21 +259,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'text_long',
   );
 
-  // Exported field_base: 'field_overview_slide_headline'
+  // Exported field_base: 'field_overview_slide_headline'.
   $field_bases['field_overview_slide_headline'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_overview_slide_headline',
-    'foreign keys' => array(
-      'format' => array(
-        'columns' => array(
-          'format' => 'format',
-        ),
-        'table' => 'filter_format',
-      ),
-    ),
     'indexes' => array(
       'format' => array(
         0 => 'format',
@@ -362,21 +280,13 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'text',
   );
 
-  // Exported field_base: 'field_overview_slide_image'
+  // Exported field_base: 'field_overview_slide_image'.
   $field_bases['field_overview_slide_image'] = array(
     'active' => 1,
     'cardinality' => 1,
     'deleted' => 0,
     'entity_types' => array(),
     'field_name' => 'field_overview_slide_image',
-    'foreign keys' => array(
-      'fid' => array(
-        'columns' => array(
-          'fid' => 'fid',
-        ),
-        'table' => 'file_managed',
-      ),
-    ),
     'indexes' => array(
       'fid' => array(
         0 => 'fid',
@@ -392,7 +302,7 @@ function ecovillagers_ia_field_default_field_bases() {
     'type' => 'image',
   );
 
-  // Exported field_base: 'field_overview_subtitle'
+  // Exported field_base: 'field_overview_subtitle'.
   $field_bases['field_overview_subtitle'] = array(
     'active' => 1,
     'cardinality' => 1,
@@ -401,14 +311,6 @@ function ecovillagers_ia_field_default_field_bases() {
     'field_name' => 'field_overview_subtitle',
     'field_permissions' => array(
       'type' => 0,
-    ),
-    'foreign keys' => array(
-      'format' => array(
-        'columns' => array(
-          'format' => 'format',
-        ),
-        'table' => 'filter_format',
-      ),
     ),
     'indexes' => array(
       'format' => array(

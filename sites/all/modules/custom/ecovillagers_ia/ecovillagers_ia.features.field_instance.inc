@@ -10,7 +10,7 @@
 function ecovillagers_ia_field_default_field_instances() {
   $field_instances = array();
 
-  // Exported field_instance: 'comment-comment_node_inspiration-comment_body'
+  // Exported field_instance: 'comment-comment_node_inspiration-comment_body'.
   $field_instances['comment-comment_node_inspiration-comment_body'] = array(
     'bundle' => 'comment_node_inspiration',
     'default_value' => NULL,
@@ -43,7 +43,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-body'
+  // Exported field_instance: 'node-inspiration-body'.
   $field_instances['node-inspiration-body'] = array(
     'bundle' => 'inspiration',
     'default_value' => NULL,
@@ -87,7 +87,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-field_inspiration_categories'
+  // Exported field_instance: 'node-inspiration-field_inspiration_categories'.
   $field_instances['node-inspiration-field_inspiration_categories'] = array(
     'bundle' => 'inspiration',
     'default_value' => NULL,
@@ -117,7 +117,8 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-field_inspiration_gathering_date'
+  // Exported field_instance:
+  // 'node-inspiration-field_inspiration_gathering_date'.
   $field_instances['node-inspiration-field_inspiration_gathering_date'] = array(
     'bundle' => 'inspiration',
     'deleted' => 0,
@@ -157,7 +158,8 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-field_inspiration_gathering_dtls'
+  // Exported field_instance:
+  // 'node-inspiration-field_inspiration_gathering_dtls'.
   $field_instances['node-inspiration-field_inspiration_gathering_dtls'] = array(
     'bundle' => 'inspiration',
     'default_value' => NULL,
@@ -190,7 +192,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-field_inspiration_highlighted'
+  // Exported field_instance: 'node-inspiration-field_inspiration_highlighted'.
   $field_instances['node-inspiration-field_inspiration_highlighted'] = array(
     'bundle' => 'inspiration',
     'default_value' => array(
@@ -226,7 +228,8 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-field_inspiration_public_teaser'
+  // Exported field_instance:
+  // 'node-inspiration-field_inspiration_public_teaser'.
   $field_instances['node-inspiration-field_inspiration_public_teaser'] = array(
     'bundle' => 'inspiration',
     'default_value' => NULL,
@@ -259,7 +262,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-field_inspiration_series'
+  // Exported field_instance: 'node-inspiration-field_inspiration_series'.
   $field_instances['node-inspiration-field_inspiration_series'] = array(
     'bundle' => 'inspiration',
     'default_value' => NULL,
@@ -289,7 +292,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-field_inspiration_subtitle'
+  // Exported field_instance: 'node-inspiration-field_inspiration_subtitle'.
   $field_instances['node-inspiration-field_inspiration_subtitle'] = array(
     'bundle' => 'inspiration',
     'default_value' => NULL,
@@ -323,7 +326,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-inspiration-field_inspiration_thumbnail'
+  // Exported field_instance: 'node-inspiration-field_inspiration_thumbnail'.
   $field_instances['node-inspiration-field_inspiration_thumbnail'] = array(
     'bundle' => 'inspiration',
     'deleted' => 0,
@@ -363,7 +366,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-overview-body'
+  // Exported field_instance: 'node-overview-body'.
   $field_instances['node-overview-body'] = array(
     'bundle' => 'overview',
     'default_value' => NULL,
@@ -408,7 +411,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-overview-field_overview_slide_blurb'
+  // Exported field_instance: 'node-overview-field_overview_slide_blurb'.
   $field_instances['node-overview-field_overview_slide_blurb'] = array(
     'bundle' => 'overview',
     'default_value' => NULL,
@@ -441,7 +444,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-overview-field_overview_slide_headline'
+  // Exported field_instance: 'node-overview-field_overview_slide_headline'.
   $field_instances['node-overview-field_overview_slide_headline'] = array(
     'bundle' => 'overview',
     'default_value' => NULL,
@@ -474,7 +477,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-overview-field_overview_slide_image'
+  // Exported field_instance: 'node-overview-field_overview_slide_image'.
   $field_instances['node-overview-field_overview_slide_image'] = array(
     'bundle' => 'overview',
     'deleted' => 0,
@@ -523,7 +526,7 @@ function ecovillagers_ia_field_default_field_instances() {
     ),
   );
 
-  // Exported field_instance: 'node-overview-field_overview_subtitle'
+  // Exported field_instance: 'node-overview-field_overview_subtitle'.
   $field_instances['node-overview-field_overview_subtitle'] = array(
     'bundle' => 'overview',
     'default_value' => NULL,

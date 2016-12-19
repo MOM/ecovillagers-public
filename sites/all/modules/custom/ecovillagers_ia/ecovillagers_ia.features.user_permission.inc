@@ -79,15 +79,6 @@ function ecovillagers_ia_user_default_permissions() {
     'module' => 'node',
   );
 
-  // Exported permission: 'create field_user_name_last'.
-  $permissions['create field_user_name_last'] = array(
-    'name' => 'create field_user_name_last',
-    'roles' => array(
-      'anonymous user' => 'anonymous user',
-    ),
-    'module' => 'field_permissions',
-  );
-
   // Exported permission: 'create inspiration content'.
   $permissions['create inspiration content'] = array(
     'name' => 'create inspiration content',
@@ -151,27 +142,11 @@ function ecovillagers_ia_user_default_permissions() {
     'module' => 'node',
   );
 
-  // Exported permission: 'edit field_user_name_last'.
-  $permissions['edit field_user_name_last'] = array(
-    'name' => 'edit field_user_name_last',
-    'roles' => array(),
-    'module' => 'field_permissions',
-  );
-
   // Exported permission: 'edit own comments'.
   $permissions['edit own comments'] = array(
     'name' => 'edit own comments',
     'roles' => array(),
     'module' => 'comment',
-  );
-
-  // Exported permission: 'edit own field_user_name_last'.
-  $permissions['edit own field_user_name_last'] = array(
-    'name' => 'edit own field_user_name_last',
-    'roles' => array(
-      'authenticated user' => 'authenticated user',
-    ),
-    'module' => 'field_permissions',
   );
 
   // Exported permission: 'edit own inspiration content'.
@@ -228,22 +203,6 @@ function ecovillagers_ia_user_default_permissions() {
     'name' => 'use Shorten URLs page',
     'roles' => array(),
     'module' => 'shorten',
-  );
-
-  // Exported permission: 'view field_user_name_last'.
-  $permissions['view field_user_name_last'] = array(
-    'name' => 'view field_user_name_last',
-    'roles' => array(
-      'authenticated user' => 'authenticated user',
-    ),
-    'module' => 'field_permissions',
-  );
-
-  // Exported permission: 'view own field_user_name_last'.
-  $permissions['view own field_user_name_last'] = array(
-    'name' => 'view own field_user_name_last',
-    'roles' => array(),
-    'module' => 'field_permissions',
   );
 
   // Exported permission: 'view own unpublished content'.
