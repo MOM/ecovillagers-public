@@ -798,30 +798,30 @@ body {
     color: white;
   }
 
-  .menu-name-main-menu ul.menu {
-    font: 19px/24px $bariol-light;
-    margin: 0;
-    padding: 0;
-    li {
-      list-style: none;
+  .menu-name-main-menu {
+    ul.menu {
       margin: 0;
       padding: 0;
-      ul li {
-        text-indent: 0.8em;
-      }
+    }
+    > ul.menu {
+      font: 19px/24px $bariol-light;
+      li {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	ul li {
+	  text-indent: 0.8em;
+	}
 
-      a {
-        text-decoration: none;
-        color: white;
+	a {
+	  text-decoration: none;
+	  color: white;
+	}
       }
-
-      &.menu-mlid-356,
-      &.menu-mlid-359 {
-        float: left;
-        width: 190px;  //@TODO: replace this with responsive hoohaw
-      }
-      &.menu-mlid-359 {
-        padding-bottom: 1.5em;
+      > li.first {
+	float: left;
+	width: 190px;  //@TODO: replace this with responsive hoohaw
+	padding-bottom: 1.5em;
       }
     }
   }
@@ -1465,11 +1465,11 @@ body.node-type-overview {
       font-size: 6.3vw;
       line-height: 7.5vw;
     }
-    #block-menu-block-1 {  /* kill this whole block of style for three menu columns */
+    .menu-name-main-menu {  /* kill this whole block of style for three menu columns */
       float: left;
       width: 54vw;
     }
-    .menu-name-main-menu ul.menu {
+    .menu-name-main-menu > ul.menu {
       font: 3.9vw/5vw $bariol-light;
       margin: 5vw 0 0;
       padding: 0;
@@ -1479,12 +1479,9 @@ body.node-type-overview {
         ul {
           margin-top: 0;
         }
-        ul li {
-        }
-        &.menu-mlid-356,
-        &.menu-mlid-359 {
-          width: 31vw;
-        }
+      }
+      > li.first {
+	width: 31vw;
       }
     }
     #block-boxes-site-social-links {
@@ -1581,11 +1578,10 @@ body.node-type-overview {
       font-size: 3.45vw;
       margin-bottom: 1vw;
     }
-    #block-menu-block-1 {
+    .menu-name-main-menu {
       float: left;
       width: 44vw;  /* 64vw for three menu columns */
-      li.menu-mlid-356,
-      li.menu-mlid-359 {
+      > ul > li.first {
         width: 22.35vw;
       }
     }
@@ -1647,16 +1643,15 @@ body.node-type-overview {
       font-size: 3.45vw;
       margin-bottom: 1vw;
     }
-    #block-menu-block-1 {
+    .menu-name-main-menu {
       float: left;
       width: 44vw;  /* 64vw for three menu columns */
-      ul.menu {
+      > ul.menu {
         font-size: 2.4vw;
         line-height: 2.9vw;
-      }
-      li.menu-mlid-356,
-      li.menu-mlid-359 {
-        width: 22.35vw;
+	> li.first {
+	  width: 22.35vw;
+	}
       }
     }
     #block-boxes-site-social-links {
@@ -1728,16 +1723,15 @@ body.node-type-overview {
     #block-ecovillagers-ia-slogan {
       margin-bottom: 20px;
     }
-    #block-menu-block-1 {
+    .menu-name-main-menu {
       float: left;
       width: 360px;  /* 560px for three menu columns */
-      ul.menu {
+      > ul.menu {
         font-size: 21px;
         line-height: 25px;
-      }
-      li.menu-mlid-356,
-      li.menu-mlid-359 {
+	> li.first {
 //        width: 22.35vw;
+	}
       }
     }
     #block-boxes-site-social-links {
