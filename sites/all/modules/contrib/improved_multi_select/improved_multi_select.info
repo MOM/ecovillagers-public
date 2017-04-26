@@ -5,8 +5,8 @@ core = 7.x
 configure = admin/config/user-interface/ims
 
 
-; Information added by drush on 2016-12-18
+; Information added by drush on 2017-04-25
 version = "b82a7dd5c87d552a2b17fd9fc9e6278d3b5b9e98-dev"
 project = "improved_multi_select"
-datestamp = "1482080417"
+datestamp = "1493170553"
 

@@ -53,7 +53,7 @@
     attach: function (context, settings) {
 
       // Add uniform to selects
-      $("select").uniform();
+//      $("select").uniform();
 
       // Add uniform to file upload.
       $('input[type=file]').uniform();

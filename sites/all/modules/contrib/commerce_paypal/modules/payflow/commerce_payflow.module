@@ -1294,6 +1294,7 @@ function commerce_payflow_api_request($payment_method, $api, $nvp = array(), $or
   curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
   curl_setopt($ch, CURLOPT_TIMEOUT, 45);
   curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
+  curl_setopt($ch, CURLOPT_SSLVERSION, 6);
 
   // Commerce PayPal requires SSL peer verification, which may prevent out of
   // date servers from successfully processing API requests. If you get an error

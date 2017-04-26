@@ -3,6 +3,7 @@
     attach: function (context, settings) {
       var clearElement = function($selector) {
         $selector
+          .val('')
           .removeClass('valid')
           .next('label')
             .remove()
@@ -21,6 +22,10 @@
 
         // Helper function, provides the total display.
         function _recalculate_quantity_total() {
+          if (!$('select[name*="quantity"]').length) {
+            return;
+          }
+
           $('#quantity-total').empty();
           var amount = $('input[type="radio"][name*="amount"]:checked:visible').val();
           if (amount == 'other') {
@@ -40,7 +45,7 @@
 
         // Custom Validation Regex rules: AMEX, VISA, MASTERCARD, DISCOVER, Diner's Club, JCB
         $.validator.addMethod('creditcard', function(value, element) {
-          return this.optional(element) || /^(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|6(?:011|5[0-9][0-9])[0-9]{12}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|(?:2131|1800|35\d{3})\d{11})$/i.test(value);
+          return this.optional(element) || /^(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5]\d{14}$|^2(?:2(?:2[1-9]|[3-9]\d)|[3-6]\d\d|7(?:[01]\d|20))\d{12}|6(?:011|5[0-9][0-9])[0-9]{12}|3[47][0-9]{13}|3[47][0-9]{13}|3(?:0[0-5]|[68][0-9])[0-9]{11}|(?:2131|1800|35\d{3})\d{11})$/i.test(value);
           // Doesn't work for Australian Bankcard, Dankort (PBS) cards or
           // Switch/Solo (Paymentech).
           // Bankcard regexp below needs fixing:
@@ -76,29 +81,62 @@
             }
           },
           onfocusout: function (element) {
-            if (typeof validateKeyCallback == 'undefined') {
-              return;
-            }
+            setTimeout(function() {
+              // Callback for real-time onfocusout of form elements.
+              var isValid = $(element).valid();
 
-            // Callback for real-time onfocusout of form elements.
-            var isValid = $(element).valid();
-            if (isValid == 0) {
-              // Set status to 0.
-              validateKeyCallback.status = 0;
-              validateKeyCallback.error(element);
-            }
-            else if (isValid == 1) {
-              // Set status to 1.
-              validateKeyCallback.status = 1;
-              validateKeyCallback.success(element);
-            }
+              if (typeof validateKeyCallback == 'undefined') {
+                return;
+              }
+
+              if (isValid == 0) {
+                // Set status to 0.
+                validateKeyCallback.status = 0;
+                validateKeyCallback.error(element);
+              }
+              else if (isValid == 1) {
+                // Set status to 1.
+                validateKeyCallback.status = 1;
+                validateKeyCallback.success(element);
+              }
+            }, 500);
           },
           highlight: function(element) {
-            $(element).addClass('key-validate');
-            $(element).closest('.control-group').removeClass('success').addClass('error');
+            $element = $(element);
+            var single = $element.attr('name') == 'submitted[donation][amount]';
+            var recurring = $element.attr('name') == 'submitted[donation][recurring_amount]';
+            if (single || recurring) {
+              var $error = $element.next('label.error');
+              if ($error.length) {
+                if (single) {
+                  $error.detach().appendTo('#edit-submitted-donation-amount');
+                }
+                else if (recurring) {
+                  $error.detach().appendTo('#edit-submitted-donation-recurring-amount');
+                }
+              }
+              $element.parent('.control-group').removeClass('success').addClass('error').siblings('.control-group').removeClass('success').addClass('error');
+            }
+            else {
+              $(element).addClass('key-validate');
+              $(element).closest('.control-group').removeClass('success').addClass('error');
+            }
           },
           success: function(element) {
-            $(element).text('OK').addClass('valid').closest('.control-group').removeClass('error').addClass('success');
+            $element = $(element);
+            var single = $element.prev('input[name="submitted[donation][amount]"]').length;
+            var recurring = $element.prev('input[name="submitted[donation][recurring_amount]"]').length;
+            if (single || recurring) {
+              if (single) {
+                $element.detach().appendTo('#edit-submitted-donation-amount');
+              }
+              else if (recurring) {
+                $element.detach().appendTo('#edit-submitted-donation-recurring-amount');
+              }
+            }
+            else {
+              $element.text('OK').addClass('valid').closest('.control-group').removeClass('error').addClass('success');
+            }
           }
         });
 
@@ -113,8 +151,15 @@
           $(document).on('braintree.fieldEvent', function(event, param) {
             var field = param.fields[param.emittedBy];
             var $field = $(field.container);
-            braintreeFields[param.emittedBy] = field.isValid;
-            if (!field.isValid) {
+
+            if (param.emittedBy == 'cvv') {
+              braintreeFields[param.emittedBy] = field.isValid || !field.isEmpty;
+            }
+            else {
+              braintreeFields[param.emittedBy] = field.isValid;
+            }
+
+            if (!braintreeFields[param.emittedBy]) {
               $field.closest('.control-group').removeClass('success').addClass('error');
             }
             else {
@@ -139,16 +184,30 @@
               return $nonce.length > 0 && $checkedAmounts.length && (!$otherAmount.length || $otherAmount.length && $otherAmountValue.val().length);
             }
             else {
+              var isBillingUpdate = undefined !== Drupal.settings.braintree.billing_update_type;
               var braintreeFieldsAreValid = function() {
+                // Considered valid when not on a billing update form and all
+                // fields are filled out, or on a billing update form and either
+                // no fields are filled out or all fields are filled out.
                 var returnValue = true;
+                var atLeastOneTrue = false;
                 $.each(braintreeFields, function(index, value) {
-                  if (value == false) {
+                  if (!value) {
                     returnValue = false;
-                    // Break out of $.each early since we know we'll be
-                    // returning false.
-                    return false;
+                    // We can return early if not on a billing update form.
+                    if (!isBillingUpdate) {
+                      return false;
+                    }
+                  }
+                  else {
+                    atLeastOneTrue = true;
                   }
                 });
+
+                if (!returnValue && isBillingUpdate && !atLeastOneTrue) {
+                  returnValue = true;
+                }
+
                 return returnValue;
               };
 
@@ -202,22 +261,7 @@
                 }, 100);
               }
 
-              // A strange issue with Safari happens where the ellipsis of the
-              // "Processing..." text on the submit button doesn't animate, and
-              // the "focus"ing of the submit button doesn't occur. I have a
-              // suspicion it's because the Payment sheet still has "focus" when
-              // the rest of the submission callbacks occur, or it's something
-              // to do with the rest of the submission callbacks firing "too
-              // fast", if that's possible. Either way, slowing it down a bit
-              // seems to resolve things.
-              if (navigator.userAgent.indexOf('Safari') != -1 && navigator.userAgent.indexOf('Chrome') == -1) {
-                setTimeout(function() {
-                  $('.fundraiser-donation-form').off('submit.donationValidate').submit();
-                }, 500);
-              }
-              else {
-                return true;
-              }
+              return true;
             }
             return false;
           });
@@ -236,20 +280,122 @@
 
         // Other Amount
         var $other_amount = $('input[name*="other_amount"][type!="hidden"]');
+        $($other_amount).blur(function () {
+          var otherAmountField = $(this);
+          if (otherAmountField.parent().children('.field-suffix').length > 0) {
+            var errorMessage = otherAmountField.parent().children('label.error').detach();
+            otherAmountField.parent().children('.description').after(errorMessage);
+          }
+        });
         if ($other_amount.length) {
-          $($other_amount).each(function() {
+          $other_amount.each(function() {
             $(this).rules('add', {
               required: function(element) {
                 return $('input[type="radio"][name$="[amount]"]:checked').length == 0 || $('input[type="radio"][name$="[amount]"][value="other"]:visible').is(":checked");
               },
               amount: true,
               min: parseFloat(Drupal.settings.fundraiserWebform.minimum_donation_amount),
+              max: parseFloat(Drupal.settings.fundraiserWebform.fundraiser_maximum_other_amount),
               messages: {
                 required: "This field is required",
                 amount: "Enter a valid amount",
                 min: "The amount entered is less than the minimum donation amount."
               }
             });
+          });
+        }
+
+        var $recurring_other_amount = $('input[name$="[recurring_other_amount]"]');
+        var recurringOtherRuleEnabled = false;
+        if ($recurring_other_amount.length) {
+          $recurring_other_amount.each(function() {
+            var $this = $(this);
+            var enableRecurringOtherRule = function() {
+              $this.rules('add', {
+                required: function(element) {
+                  return $('input[type="radio"][name$="[recurring_amount]"]:checked').length == 0 || $('input[type="radio"][name$="[recurring_amount]"][value="other"]:visible').is(":checked");
+                },
+                amount: true,
+                min: parseFloat(Drupal.settings.fundraiserWebform.recurring_minimum_donation_amount),
+                messages: {
+                  required: "This field is required",
+                  amount: "Enter a valid amount",
+                  min: "The amount entered is less than the minimum donation amount."
+                },
+              });
+              recurringOtherRuleEnabled = true;
+            };
+
+            // If the recurring other amount is hidden by default (in the case
+            // of dual ask amounts), we need to add it's rule when it becomes
+            // visible.
+            if (!$this.is(':visible') && !recurringOtherRuleEnabled) {
+              $('input[type="checkbox"][name="submitted[donation][recurs_monthly][recurs]"], input[type="radio"][name="submitted[donation][recurs_monthly]"]').on('change', function(e) {
+                var $target = $(e.target);
+                if ($target.is(':checked') && $target.val() == 'recurs') {
+                  enableRecurringOtherRule();
+                }
+              });
+            }
+            else {
+              enableRecurringOtherRule();
+            }
+          });
+
+          $('input[name="submitted[donation][amount]"], input[name="submitted[donation][recurring_amount]"]').change(function() {
+            if ($(this).filter(':checked').length) {
+              $(this).parent('.control-group').removeClass('error').addClass('success').siblings('.control-group').removeClass('error').addClass('success');
+            }
+          })
+        }
+
+        // If neither "other" field is present, add validation for the amount
+        // radios.
+        if (!$other_amount.length || !$recurring_other_amount.length) {
+          var selector = '';
+          var recurringRuleEnabled = false;
+
+          if (!$other_amount.length && $recurring_other_amount.length) {
+            selector = 'input[name="submitted[donation][amount]"]:first';
+          }
+          else if ($other_amount.length && !$recurring_other_amount.length) {
+            selector = 'input[name="submitted[donation][recurring_amount]"]:first';
+          }
+          else if (!$other_amount.length && !$recurring_other_amount.length) {
+            selector = 'input[name="submitted[donation][amount]"]:first, input[name="submitted[donation][recurring_amount]"]:first';
+          }
+
+          $(selector).each(function() {
+            var $this = $(this);
+            var enableRecurringRule = function() {
+              $this.rules('add', {
+                required: function(element) {
+                  return $this.siblings('input[type=radio]').filter(':checked').length == 0;
+                },
+                messages: {
+                  required: "This field is required",
+                },
+              });
+              recurringRuleEnabled = true;
+            };
+
+            if (!$this.is(':visible') && !recurringRuleEnabled) {
+              $('input[type="checkbox"][name="submitted[donation][recurs_monthly][recurs]"], input[type="radio"][name="submitted[donation][recurs_monthly]"]').on('change', function(e) {
+                var $target = $(e.target);
+                if ($target.is(':checked') && $target.val() == 'recurs') {
+                  enableRecurringRule();
+                }
+              });
+            }
+            else {
+              enableRecurringRule();
+            }
+          });
+
+          $('input[name="submitted[donation][amount]"]').change(function() {
+            if ($(this).filter(':checked').length) {
+              $(this).parent('.control-group').removeClass('error').addClass('success').siblings('.control-group').removeClass('error').addClass('success');
+            }
           });
         }
 
@@ -273,7 +419,7 @@
             $('input[name*="[recurring_other_amount]"]').focus();
           }
           else {
-            $('input[name*="[recurring_other_amount]"]').clearEle();
+            clearElement($('input[name*="[recurring_other_amount]"]'));
           }
         });
 

@@ -4,8 +4,8 @@ core = 7.x
 dependencies[] = token
 
 
-; Information added by drush on 2016-12-18
+; Information added by drush on 2017-04-25
 version = "7c136e4ce38c75a910d242205b71ec2b12f48639-dev"
 project = "token_filter"
-datestamp = "1482080377"
+datestamp = "1493170524"
 

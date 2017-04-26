@@ -773,6 +773,11 @@ function springboard_p2p_personal_campaign_url_ajax(&$form, $form_state) {
  */
 function springboard_p2p_entity_insert($entity, $type) {
   if ($type == 'node' && isset($entity->type) && $entity->type == 'p2p_personal_campaign') {
+    if (isset($entity->springboard_p2p_skip_create_event) && $entity->springboard_p2p_skip_create_event) {
+      unset($entity->springboard_p2p_skip_create_event);
+      return;
+    }
+
     if (springboard_p2p_account_has_created_a_personal_campaign($entity->uid)) {
       $account = user_load($entity->uid);
       $event = new SpringboardP2pEvents();
@@ -1188,7 +1193,8 @@ function springboard_p2p_format_progress($progress, $type, $include_units = TRUE
 
     case 'amount':
       if ($include_units) {
-        $output .= '$ ';
+        // Set the currency symbol prefix, excluding a space separator for page springboard/p2p:
+        $output .= '$' . (current_path() == 'admin/springboard/p2p' ? '' : ' ');
       }
       $output .= number_format($progress['amount'], 2);
       break;
@@ -1492,6 +1498,23 @@ function springboard_p2p_get_campaign_id_from_request() {
 }
 
 /**
+ * Gets a personal campaign ID from the URL.
+ *
+ * @return int|null
+ *   The personal campaign ID, or NULL if one can't be found.
+ */
+function springboard_p2p_get_personal_campaign_id_from_request() {
+  if (isset($_GET['p2p_pcid']) && is_numeric($_GET['p2p_pcid'])) {
+    $node = node_load($_GET['p2p_pcid']);
+    if (isset($node->type) && $node->type == 'p2p_personal_campaign') {
+      return $node->nid;
+    }
+  }
+
+  return NULL;
+}
+
+/**
  * Submit handler.
  *
  * Saves the campaign approval status and changes the redirect.
@@ -1703,6 +1726,67 @@ function springboard_p2p_fundraiser_donation_post_create($donation) {
 }
 
 /**
+ * Implements hook_fundraiser_donation_refund_success().
+ *
+ * Updates p2p campaign data to reflect a donation being refunded.
+ */
+function springboard_p2p_fundraiser_refund_success($refund) {
+  if (isset($refund->donation->sid) && isset($refund->amount) && $refund->amount > 0) {
+    // Get the p2p_personal_campaign node ID:
+    $personal_campaign_data = springboard_p2p_get_personal_campaign_action_by_sid($refund->donation->sid);
+    if (isset($personal_campaign_data['personal_campaign_nid']) && is_numeric($personal_campaign_data['personal_campaign_nid'])) {
+      $pc_nid = $personal_campaign_data['personal_campaign_nid'];
+
+      if (isset($refund->donation->amount) && isset($refund->donation->refunds) && is_array($refund->donation->refunds)) {
+        // Determine if this is a full refund:
+        $is_full_refund = FALSE;
+        $previously_refunded = 0.00;
+        foreach ($refund->donation->refunds as $previous_refund) {
+          if (isset($previous_refund->amount)) {
+            $previously_refunded += $previous_refund->amount;
+          }
+        }
+        if ($refund->donation->amount <= ($refund->amount + $previously_refunded)) { // Total should not exceed the original donation amount, but checking just in case!
+          $is_full_refund = TRUE;
+        }
+
+        // For full refunds:
+        // - Remove the original donation amount from personal campaign progress amount.
+        // - Decrement the submissions count for this personal campaign.
+        // - Delete the action record associated with this donation.
+        if ($is_full_refund) {
+          $amount_modifier = ($refund->donation->amount - $previously_refunded) * -1.00;
+          springboard_p2p_update_personal_campaign_amount_progress($pc_nid, $amount_modifier);
+          springboard_p2p_update_personal_campaign_submissions_progress($pc_nid, FALSE);
+          db_query("DELETE FROM {springboard_p2p_personal_campaign_action} WHERE " .
+            "personal_campaign_nid = :pc_nid AND sid = :sid LIMIT 1",
+            array(
+              'pc_nid' => $pc_nid,
+              'sid' => $refund->donation->sid,
+            )
+          );
+        }
+
+        // For partial refunds:
+        // - Subtract the refund amount from the personal campaign progress amount.
+        // - Update the amount for the action record association with this refund's submission.
+        elseif (!$is_full_refund) {
+          springboard_p2p_update_personal_campaign_amount_progress($pc_nid, $refund->amount * -1.00);
+          db_query("UPDATE {springboard_p2p_personal_campaign_action} " .
+            "SET amount = :new_amount WHERE personal_campaign_nid = :pc_nid AND sid = :sid LIMIT 1",
+            array(
+              ':new_amount' => ($refund->donation->amount - ($refund->amount + $previously_refunded)) * 100,
+              ':pc_nid' => $pc_nid,
+              ':sid' => $refund->donation->sid,
+            )
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
  * Implements hook_form_alter().
  *
  * Adds extra data to a p2p enabled form if a personal campaign ID is passed in.
@@ -1718,12 +1802,19 @@ function springboard_p2p_form_alter(&$form, &$form_state, $form_id) {
       break;
   }
 
-  if (isset($_GET['p2p_pcid']) && is_numeric($_GET['p2p_pcid']) && strpos($form_id, 'webform_client_form_') !== FALSE && !empty($form['#node'])) {
+  if (!empty($form_state['values']['springboard_p2p_personal_campaign_action']['personal_campaign_nid'])) {
+    $personal_campaign_id = $form_state['values']['springboard_p2p_personal_campaign_action']['personal_campaign_nid'];
+  }
+  else {
+    $personal_campaign_id = springboard_p2p_get_personal_campaign_id_from_request();
+  }
+
+  if ($personal_campaign_id && strpos($form_id, 'webform_client_form_') !== FALSE && !empty($form['#node'])) {
     $type = $form['#node']->type;
-    $personal_campaign_id = $_GET['p2p_pcid'];
 
     $is_fundraiser_type = fundraiser_is_donation_type($type);
     $is_webform_user_type = _webform_user_is_webform_user_node_type($type);
+
     if ($is_fundraiser_type || $is_webform_user_type) {
 
       $personal_campaign = node_load($personal_campaign_id);
@@ -1811,7 +1902,7 @@ function springboard_p2p_form_alter(&$form, &$form_state, $form_id) {
     }
 
     // Test for donation form and if a p2p form.
-    if (($is_fundraiser_type) || (!empty($_GET['p2p_pcid']))) {
+    if ($is_fundraiser_type || $personal_campaign_id) {
 
       // Get rid of the grippie.
       $form["springboard_p2p_personal_campaign_action"]['comment']['#resizable'] = FALSE;
@@ -2195,8 +2286,20 @@ function springboard_p2p_fundraiser_donation_success($donation) {
  */
 function springboard_p2p_update_personal_campaign_amount_progress($nid, $amount) {
   $personal_campaign = node_load($nid);
-  $personal_campaign->field_p2p_campaign_progress[$personal_campaign->language][0]['amount'] += $amount;
-  node_save($personal_campaign);
+  $current_progress = 0;
+  if (isset($personal_campaign->language)
+    && isset($personal_campaign->field_p2p_campaign_progress[$personal_campaign->language][0]['amount'])) {
+    $current_progress = $personal_campaign->field_p2p_campaign_progress[$personal_campaign->language][0]['amount'];
+  }
+
+  $current_progress += $amount;
+  if ($current_progress >= 0) {
+    $personal_campaign->field_p2p_campaign_progress[$personal_campaign->language][0]['amount'] = $current_progress;
+    node_save($personal_campaign);
+  }
+  else {
+    watchdog('springboard_p2p', 'Error adjusting campaign progress due to negative value: ' . $current_progress);
+  }
 }
 
 /**
@@ -2205,10 +2308,21 @@ function springboard_p2p_update_personal_campaign_amount_progress($nid, $amount)
  * @param int $nid
  *   The node ID of the personal campaign.
  */
-function springboard_p2p_update_personal_campaign_submissions_progress($nid) {
+function springboard_p2p_update_personal_campaign_submissions_progress($nid, $increment = TRUE) {
   $personal_campaign = node_load($nid);
-  ++$personal_campaign->field_p2p_campaign_progress[$personal_campaign->language][0]['submissions'];
-  node_save($personal_campaign);
+  $current_submissions = 0;
+  if (isset($personal_campaign->language)
+    && isset($personal_campaign->field_p2p_campaign_progress[$personal_campaign->language][0]['submissions'])) {
+    $current_submissions = $personal_campaign->field_p2p_campaign_progress[$personal_campaign->language][0]['submissions'];
+  }
+  $current_submissions += ($increment ? 1 : -1);
+  if ($current_submissions >= 0) {
+    $personal_campaign->field_p2p_campaign_progress[$personal_campaign->language][0]['submissions'] = $current_submissions;
+    node_save($personal_campaign);
+  }
+  else {
+    watchdog('springboard_p2p', 'Error adjusting campaign progress due to negative value: ' . $current_submissions);
+  }
 }
 
 /**
@@ -2291,28 +2405,6 @@ function springboard_p2p_format_campaign_form_header($campaign) {
  * Adds customizations to the p2p webform.
  */
 function springboard_p2p_page_alter(&$page, $form) {
-  if (isset($_GET['p2p_pcid']) && is_numeric($_GET['p2p_pcid']) && arg(0) == 'node' && is_numeric(arg(1)) && is_null(arg(2))) {
-    $personal_campaign_id = $_GET['p2p_pcid'];
-
-    $node = node_load(arg(1));
-    $type = $node->type;
-    $is_fundraiser_type = fundraiser_is_donation_type($type);
-    $is_webform_user_type = _webform_user_is_webform_user_node_type($type);
-    if ($is_fundraiser_type || $is_webform_user_type) {
-      $personal_campaign = node_load($personal_campaign_id);
-      if ($personal_campaign->type == 'p2p_personal_campaign') {
-
-        $campaign_id = $personal_campaign->field_p2p_campaign[$personal_campaign->language][0]['target_id'];
-        $campaign = node_load($campaign_id);
-        if (!empty($campaign) && $campaign->type == 'p2p_campaign') {
-
-          // Place the banner in the springboard_frontend theme header region.
-          // @todo Review and remove this if needed.
-          // $page['page_top']['springboard_p2p_banner'] = springboard_p2p_format_campaign_form_header($campaign);
-        }
-      }
-    }
-  }
 
   // Not admin page.
   if (!path_is_admin(current_path())) {
@@ -2842,4 +2934,19 @@ function springboard_p2p_get_personal_campaign_title_suggestion($title) {
   }
 
   return $default_title . $title;
+}
+
+/**
+ * Override handling of the profile state field to support user-entered zones:
+ */
+function springboard_p2p_add_state_and_country_ajax_value_validate(&$element, &$form_state, $form) {
+  $items = array(0 => array($element['#value_key'] => $element['#value']));
+
+  form_set_value($element, $items, $form_state);
+
+  $field = field_info_instance('user', 'sbp_state', 'user');
+
+  // Set the static allowed values to bypass list_allowed_values().
+  $allowed_values[$field['field_id']] = array($element['#value'] => $element['#value']);
+  drupal_static('list_allowed_values', $allowed_values);
 }

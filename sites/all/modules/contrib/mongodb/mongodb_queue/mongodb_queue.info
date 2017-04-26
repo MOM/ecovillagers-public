@@ -1,0 +1,15 @@
+name = MongoDB Queue
+description = Integration between MongoDB and DrupalQueueInterface.
+package = MongoDB
+version = VERSION
+core = 7.x
+files[] = mongodb_queue.module
+files[] = mongodb_queue.inc
+dependencies[] = mongodb
+
+; Information added by Drupal.org packaging script on 2015-12-05
+version = "7.x-1.0-rc2+53-dev"
+core = "7.x"
+project = "mongodb"
+datestamp = "1449311048"
+

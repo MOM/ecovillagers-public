@@ -269,6 +269,18 @@ function commerce_payment_validate_credit_card_type($number, $card_types) {
 
   // Provide a check on the first digit (and card length if applicable).
   switch (substr($number, 0, 1)) {
+    case '2':
+      // MasterCard Bin range is 222100 - 272099 and is 16 numbers.
+      if ($strlen == 16) {
+        $initial = (int) substr($number, 0, 6);
+
+        if ($initial >= 222100 && $initial <= 272099 && in_array('mastercard', $card_types)) {
+          return 'mastercard';
+        }
+      }
+
+      return FALSE;
+
     case '3':
       // American Express begins with 3 and is 15 numbers.
       if ($strlen == 15 && in_array('amex', $card_types)) {
@@ -547,6 +559,7 @@ function commerce_payment_validate_credit_card_security_code($number, $code) {
         return strlen($code) == 3;
       }
 
+    case '2':
     case '4':
     case '5':
     case '6':

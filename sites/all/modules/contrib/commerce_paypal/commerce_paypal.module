@@ -101,7 +101,7 @@ function commerce_paypal_process_ipn($payment_method = NULL, $debug_ipn = array(
     curl_setopt($ch, CURLOPT_NOPROGRESS, 1);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
-    curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1);
+    curl_setopt($ch, CURLOPT_SSLVERSION, 6);
 
     // Commerce PayPal requires SSL peer verification, which may prevent out of
     // date servers from successfully processing API requests. If you get an error
@@ -378,7 +378,7 @@ function commerce_paypal_api_request($payment_method, $nvp = array(), $order = N
   curl_setopt($ch, CURLOPT_NOPROGRESS, 1);
   curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
   curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
-  curl_setopt($ch, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1);
+  curl_setopt($ch, CURLOPT_SSLVERSION, 6);
 
   // Commerce PayPal requires SSL peer verification, which may prevent out of
   // date servers from successfully processing API requests. If you get an error

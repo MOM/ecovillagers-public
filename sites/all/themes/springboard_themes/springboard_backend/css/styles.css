@@ -340,19 +340,31 @@ ul.nav li.dropdown:hover > ul.dropdown-menu {
   border: none;
 }
 
+#menu-wrapper .nav-tabs li.springboard {
+  margin-right: 20px;
+  }
+
 #menu-wrapper .nav-tabs li.springboard > a,
 #menu-wrapper .nav-tabs li.springboard > a.active {
   display: inline-block;
   width: 160px;
   height: 19px;
-  background: url("../logo.png") no-repeat !important;
+  background-image: url("../images/sb-white.svg");
+  background-size: contain;
+  background-repeat: no-repeat;
+  margin: -5px 18px 0 0;
   text-align: left;
   text-indent: -9999px;
 }
 
+.ie8 #menu-wrapper .nav-tabs li.springboard > a,
+.ie8 #menu-wrapper .nav-tabs li.springboard > a.active {
+  background-image: url("../logo.png");
+  }
+
 #menu-wrapper .nav-tabs li.springboard > a:after {
   position: absolute;
-  left: 146px;
+  right: 0px;
   margin: 0 0 0 0;
   color: #fff;
   content: "\f0ab";
@@ -364,6 +376,10 @@ ul.nav li.dropdown:hover > ul.dropdown-menu {
   font-size: 15px;
   font-family: FontAwesome;
 }
+
+#menu-wrapper .nav-tabs li.springboard > ul.dropdown-menu {
+  margin-top: 5px;
+  }
 
 #menu-wrapper .nav-tabs li.options {
   position: absolute;
@@ -778,6 +794,10 @@ a.views-data-export:hover {
   line-height: 20px;
 }
 
+#edit-actions #edit-submit:hover {
+  /*background: url("../images/arrow-message-save-button.png") 34% center no-repeat #1E72A3;*/
+}
+
 #edit-actions a {
   line-height: 24px;
 }
@@ -1058,10 +1078,18 @@ ul.tabs.primary li.active a:hover {
 /* forms > fieldsets */
 
 fieldset {
-  padding: 9px 0;
-  border-bottom: 2px solid #e1e0db;
-  margin-top: -8px;
-  background: #fff;
+  border: 1px solid #d5d5d5;
+  background-color: #fff;
+  margin-bottom: 2em;
+  border-radius: 4px;
+}
+
+fieldset.form-wrapper {
+  padding: 0 2em 0 2em;
+}
+
+fieldset .form-wrapper {
+  padding: 0;
 }
 
 .ie8 fieldset,
@@ -1073,10 +1101,25 @@ fieldset {
 }
 
 fieldset fieldset {
-  padding: 9px 0;
-  border-bottom: none;
-  margin-top: 0;
-  background: inherit;
+  border: none;
+}
+
+fieldset fieldset .form-wrapper {
+  padding: 0;
+}
+
+fieldset fieldset .fieldset-wrapper {
+  padding: 1em 1em 1em 2em;
+  background: #fff;
+}
+
+fieldset.form-wrapper input.form-text,
+fieldset.form-wrapper textarea {
+  width: 100%;
+  max-width: -webkit-calc(100% - 12px);
+  max-width: -moz-calc(100% - 12px);
+  max-width: calc(100% - 12px);
+  margin: 0;
 }
 
 html.js fieldset.collapsed {
@@ -1090,7 +1133,11 @@ html.js fieldset.collapsed#edit-help {
 }
 
 .fieldset-wrapper {
-  padding: 26px 26px 0 26px;
+  padding: 1em 0;
+}
+fieldset .fieldset-wrapper .control-group label {
+  font-weight: 400;
+  font-size: 1.1em;
 }
 
 fieldset a.fieldset-title:hover,
@@ -1100,11 +1147,42 @@ fieldset a.fieldset-title:active {
 }
 
 legend {
-  margin: 0 0 6px 0;
   border: none;
-  line-height: inherit;
+  padding-bottom: 0;
+  float: left;
+  margin: 5px 0 0;
+  font-weight: bold;
+  font-size: 1.4em;
+}
+
+.fieldset-legend {
+  color: #333;
+  font-weight: 400;
   position: relative;
-  top: 4px;
+}
+
+.ie8 .fieldset-legend,
+.ie11 .fieldset-legend {
+  top: 10px;
+}
+
+.ie9 .fieldset-legend {
+  top: 20px;
+  padding-bottom: 0;
+}
+
+fieldset fieldset legend {
+  margin-left: 5px;
+}
+
+fieldset .text-format-wrapper fieldset legend {
+  top: 0;
+}
+
+fieldset fieldset legend .fieldset-legend {
+  margin: 0.5em;
+  padding: 0;
+  font-size: 0.9em;
 }
 
 .ie9 legend {
@@ -1116,45 +1194,8 @@ a.fieldset-title {
 }
 
 fieldset fieldset legend {
-  margin-bottom: 20px;
   position: relative;
-  top: -20px;
-}
-
-fieldset .text-format-wrapper fieldset legend {
-  top: 0;
-}
-
-fieldset fieldset legend .fieldset-legend {
-  margin: 0;
-  padding: 0;
-}
-
-.fieldset-legend {
-  color: #333;
-  font-weight: 400;
-  font-size: 22px;
-  position: relative;
-  top: 26px;
-  height: 25px;
-  display: block;
-  margin-left: 26px;
-  padding-bottom: 20px;
-}
-
-.ie8 .fieldset-legend,
-.ie11 .fieldset-legend,
-.ie .fieldset-legend {
-  top: 10px;
-}
-
-.ie .description fieldset {
-  margin-top: 10px;
-}
-
-.ie9 .fieldset-legend {
-  top: 20px;
-  padding-bottom: 0;
+  margin-left: 10px;
 }
 
 a.fieldset-title:before {
@@ -1207,8 +1248,17 @@ fieldset fieldset .fieldset-wrapper {
 
 fieldset .fieldset-wrapper,
 .webform-submission-info-text {
-  padding: 0 26px 0 26px;
+  padding: 1em 0;
   margin-top: 20px;
+}
+
+legend + .webform-submission-info-text {
+  clear: both;
+  padding: 1em;
+}
+
+.webform-submission-info > legend {
+    padding: 0 1em;
 }
 
 fieldset fieldset .fieldset-wrapper {
@@ -1376,58 +1426,95 @@ a.accordion-toggle.collapsed:before {
   border-bottom: none;
 }
 
-select {
+select,
+select.input-small{
   width: inherit;
 }
 
 /* Uniform global */
 
+select,
 div.selector,
 div.selector span {
-  height: 40px;
-  background-image: url('../images/select-sprite.png');
-  background-repeat: no-repeat;
-  line-height: 40px;
-  -webkit-font-smoothing: antialiased;
+  width: auto;
+  max-width: 100%;
+  -webkit-border-radius: 4px;
+  -moz-border-radius: 4px;
+  border-radius: 4px;
+  background-color: #fff;
+  border: solid 1px #ccc;
+  padding: 2px 30px 2px 15px;
+  display: block;
+  margin-right: 20px;
+  font-size: 14px;
+  -webkit-box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  box-sizing: border-box;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  color: #6c6c6c;
+  height: auto;
+  background: url('../images/icon-arrow-down.jpg') 96% 53% no-repeat;
 }
 
+.views-widget select,
+.views-widget div.selector,
+.views-widget div.selector span {
+  max-width: 240px;
+}
+
+div.selector span,
+div.selector select {
+  background: transparent none;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+select[multiple="multiple"] {
+  background-image: none;
+  background-color: #fff;
+  padding: 0;
+}
+
+
+/** Internet explorer **/
+select {
+  background: none \0;
+}
+
+html.ie10  select,
+html.ie11  select {
+  background: url('../img/icon-arrow-down.jpg') 96% 53% no-repeat;
+}
+
+html.ie10  select::-ms-expand,
+html.ie11  select::-ms-expand {
+  display: none;
+}
 div.selector select {
   font-family: inherit;
   border: none;
 }
 
-/* left */
-
-div.selector {
-  background-position: 0 -100px;
-  font-size: 12px;
-}
-
-div.selector.hover.active,
-div.selector.focus.active,
-div.selector.hover,
-div.selector.focus {
-  background-position: 0 -144px;
-}
-
-/* right */
-
-div.selector.hover span,
-div.selector.focus span {
-  background-position: right -45px;
+option {
+  padding: 4px 20px 14px 40px;
+  display: block;
 }
 
 div.uploader {
   width: 252px;
+  border: 1px dotted #333;
   margin: 0 10px 0 0;
 }
 
 div.uploader span.filename {
-  width: 104px;
+  width: 116px;
 }
 
 div.uploader span.action {
-  width: 124px;
+  width: 100px;
 }
 
 div.uploader span.action:after {
@@ -1503,7 +1590,7 @@ ul.links.inline.webform-submission-actions {
 html.js input.form-autocomplete {
   background-image: url('../images/sprite.png');
   background-repeat: no-repeat;
-  background-position: 101% -147px;
+  background-position: 100% -138px;
 }
 
 #autocomplete {
@@ -2624,7 +2711,7 @@ td.views-field.table-actions a {
   -webkit-border-radius: 0;
   -moz-border-radius: 0;
   border-radius: 0;
-  background: url('../images/spinnergosb.gif') no-repeat;
+  background: #fff url('../images/spinnergosb.gif') no-repeat;
   opacity: 1;
 }
 /* Repositioned for recent donations forms view block: */
@@ -2905,6 +2992,10 @@ fieldset#edit-refund-options {
 /* Match bootstraps 'wide' setting. */
 @media (min-width: 1200px) {
 
+  #menu-wrapper .nav-tabs  li.springboard {
+    margin-right: 40px;
+  }
+
   ul.nav.nav-footer li.li-depth-0 {
     width: 15.9%;
   }
@@ -2937,6 +3028,10 @@ fieldset#edit-refund-options {
     -webkit-border-radius: 0;
     -moz-border-radius: 0;
     border-radius: 0;
+  }
+
+  #menu-wrapper .nav-tabs  li.springboard {
+    margin-right: 20px;
   }
 
   body #block-system-main {
@@ -3036,6 +3131,10 @@ fieldset#edit-refund-options {
     font-size: .85em;
   }
 
+  #menu-wrapper .nav-tabs li.springboard {
+    margin-right: 15px;
+  }
+
   input[type="text"],
   input[type="password"],
   input[type="datetime"],
@@ -3087,3 +3186,122 @@ fieldset#edit-refund-options {
   background-color: #005f9a;
   height: 28px;
 }
+
+
+/** Springboard Advocacy Messages UI */
+
+.springboard-advocacy-message-form-container {
+  width: 100%;
+  margin-bottom: 1em;
+}
+
+#springboard-advocacy-message-form-container .form-wrapper {
+  margin-top: 5px;
+  padding: 0 2em;
+}
+
+#springboard-advocacy-message-form-container #edit-field-sba-subject-editable .control-group,
+#springboard-advocacy-message-form-container #edit-field-sba-user-editable .control-group {
+  display: inline-block;
+  margin-right: 25px;
+}
+
+#springboard-advocacy-message-form-container fieldset fieldset#sba_message_sba_message_action_message_form_group_sba_editable,
+#edit-field-sba-bottom-conclusion {
+  display: none;
+}
+
+#springboard-advocacy-message-form-container fieldset fieldset#edit-field-sba-user-editable div.form-type-checkboxes > label,
+#springboard-advocacy-message-form-container fieldset fieldset div[id*=edit-field-sba-editable-area-optional] div.form-type-checkboxes > label {
+  display: none;
+}
+
+#springboard-advocacy-message-form-container #edit-field-sba-user-editable .form-type-checkbox label {
+  margin-right: 0.5em;
+}
+
+#springboard-advocacy-message-form-container #edit-field-sba-user-editable .form-type-checkboxes > label {
+  display: none;
+}
+
+#springboard-advocacy-message-form-container .form-item-name,
+#edit-field-sba-signature {
+  background: #fff;
+  border: 1px solid #d5d5d5;
+  padding: 1em 2em;
+  margin-bottom: 2em;
+  border-radius: 4px;
+}
+
+#edit-field-sba-signature label {
+  font-weight: normal;
+  font-size: 1.3em;
+  margin-bottom: 1em;
+  margin-top: 0.3em;
+}
+
+#edit-field-sba-signature label {
+  margin-top: 1em;
+}
+
+#springboard-advocacy-message-form-container #edit-field-sba-subject-editable,
+#springboard-advocacy-message-form-container #edit-field-sba-placeholder-greeting,
+#edit-field-sba-greeting,
+#edit-field-sba-subject {
+  display: inline-block;
+  -webkit-box-sizing: border-box;
+  -moz-box-sizing: border-box;
+  box-sizing: border-box;
+  width: 50%;
+  margin-top: 0;
+}
+
+#springboard-advocacy-message-form-container #edit-field-sba-placeholder-greeting {
+  vertical-align: top;
+  margin-top: 0.5em;
+}
+
+#springboard-advocacy-message-form-container div[id*=edit-field-sba-editable-area-optional] {
+  margin: 15px 0;
+}
+
+/* Advocacy custom group form */
+
+#springboard-target-create-custom-groups-form .form-item-group-group-name,
+#springboard-target-edit-custom-groups-form .form-item-group-group-name {
+  float: left;
+  width: 65%;
+}
+
+#springboard-target-create-custom-groups-form .form-item-group-group-name input,
+#springboard-target-edit-custom-groups-form .form-item-group-group-name input{
+  float: none;
+  line-height: 2em;
+  font-size: 18px;
+  height: auto;
+  padding: 0;
+  text-indent: 8px;
+  width: 100%;
+}
+
+#springboard-target-create-custom-groups-form #edit-submit,
+#springboard-target-edit-custom-groups-form #edit-submit{
+  width: 33%;
+  line-height: 2em;
+  display: block;
+  border-radius: 4px;
+  border: none;
+  background: url("../images/arrow-message-save-button.png") 10px 50% no-repeat #247AAD;
+  clear: none;
+  font-family: "Open Sans";
+  font-size: 18px;
+  font-weight: 400;
+  color: #FFF;
+  text-align: center;
+  margin-bottom: 25px;
+  margin-top: 14px;
+  margin-right: 0;
+  padding: 0;
+  float: right;
+}
+

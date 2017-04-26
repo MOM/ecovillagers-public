@@ -725,14 +725,40 @@ function commerce_authnet_form_commerce_cardonfile_update_form_alter(&$form, &$f
  *   TRUE if the transaction was successful
  */
 function commerce_authnet_cim_cardonfile_charge($payment_method, $card_data, $order, $charge = NULL) {
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
   // Format order total for transaction.
   if (!isset($charge)) {
-    $wrapper = entity_metadata_wrapper('commerce_order', $order);
     $charge = commerce_line_items_total($wrapper->commerce_line_items);
   }
 
   // Extract the Customer Profile and Payment Profile IDs from the remote_id.
   list($cim_customer_profile_id, $cim_payment_profile_id) = explode('|', $card_data->remote_id);
+
+  // Update address information if it differs from stored information.
+  $billing = commerce_authnet_cim_billto_array($order);
+  $billing = array_filter($billing);
+  $payment_profile_xml = commerce_authnet_cim_get_customer_payment_profile_request($payment_method, $cim_customer_profile_id, $cim_payment_profile_id);
+  $billto = (array) $payment_profile_xml->paymentProfile->billTo;
+  $billto = array_filter($billto);
+  $diff = array_diff($billing, (array) $billto);
+  if (!empty($diff)) {
+    $billing = array(
+      'customerProfileId' => (int) $cim_customer_profile_id,
+      'paymentProfile' => array(
+        'billTo' => array_merge((array) $billto, $billing),
+        'payment' => array(
+          'creditCard' => array(
+            'cardNumber' => 'XXXX' . $card_data->card_number,
+            'expirationDate' => 'XXXX',
+          ),
+        ),
+        'customerPaymentProfileId' => (int) $cim_payment_profile_id,
+      ),
+    );
+    $billing['paymentProfile']['billTo'] = array_filter($billing['paymentProfile']['billTo']);
+    $response = commerce_authnet_cim_request($payment_method, 'updateCustomerPaymentProfileRequest', $billing);
+  }
 
   // Determine the proper transaction element to use inside the XML.
   $element_name = commerce_authnet_cim_transaction_element_name($payment_method['settings']['txn_type']);

@@ -14,7 +14,6 @@ function new_relic_rpm_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('new_relic_rpm_deploy'),
     'access arguments' => array('create new relic rpm deployments'),
-    'type' => MENU_LOCAL_TASK,
     'file' => 'new_relic_rpm.settings.inc',
   );
   $items['admin/config/development/new-relic-rpm'] = array(
@@ -181,7 +180,7 @@ function new_relic_rpm_watchdog(array $log_entry) {
     '@request_uri' => $log_entry['request_uri'],
     '@referer_uri' => $log_entry['referer'],
     '@uid' => $log_entry['uid'],
-    '@name' => format_username($log_entry['user']),
+    '@name' => user_format_name($log_entry['user']),
     '@message' => strip_tags(strtr($log_entry['message'], is_array($log_entry['variables']) ? $log_entry['variables'] : array())),
   ));
 
@@ -193,29 +192,6 @@ function new_relic_rpm_watchdog(array $log_entry) {
  * @see http://drupal.org/node/1354
  */
 function new_relic_rpm_set_job_state($setting) {
-  if (!new_relic_rpm_extension_installed()) {
-    return;
-  }
-
-  switch ($setting) {
-    case 'bg':
-      newrelic_background_job(TRUE);
-      break;
-
-    case 'ignore':
-      newrelic_ignore_transaction(TRUE);
-      break;
-
-  }
-}
-
-/**
- * Checks if the new_relic extension is installed.
- *
- * @return bool
- *   TRUE if the extension is installed, FALSE if not.
- */
-function new_relic_rpm_extension_installed() {
   static $newrelic_module;
 
   if (!isset($newrelic_module)) {
@@ -229,10 +205,19 @@ function new_relic_rpm_extension_installed() {
     if (function_exists('module_implements')) {
       watchdog('New Relic RPM', 'New Relic RPM PHP module not enabled.', array(), WATCHDOG_ERROR);
     }
-    return FALSE;
+    return;
   }
 
-  return TRUE;
+  switch ($setting) {
+    case 'bg':
+      newrelic_background_job(TRUE);
+      break;
+
+    case 'ignore':
+      newrelic_ignore_transaction(TRUE);
+      break;
+
+  }
 }
 
 /**

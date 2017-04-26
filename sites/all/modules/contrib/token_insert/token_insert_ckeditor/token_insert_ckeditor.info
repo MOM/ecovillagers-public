@@ -7,8 +7,8 @@ dependencies[] = ckeditor
 dependencies[] = token_insert
 
 
-; Information added by drush on 2016-12-18
+; Information added by drush on 2017-04-25
 version = "4630189ef4115ca05211507ddb3193d5af814f8b-dev"
 project = "token_insert"
-datestamp = "1482080370"
+datestamp = "1493170522"
 
