@@ -836,7 +836,7 @@ body {
       list-style: none;
       font: 24px/32px $bariol-bold;
     }
-    a {
+    .content a {
       text-decoration: none;
       color: #E9E2DD;
       display: block;
@@ -856,7 +856,7 @@ body {
   }
 
   #block-boxes-footer-home-link {
-    a {
+    .content a {
       @include replace-text(url(../img/footer-logo.png), 0, 0);
       display: block;
       width: 120px;
