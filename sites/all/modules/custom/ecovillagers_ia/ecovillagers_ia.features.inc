@@ -34,7 +34,6 @@ function ecovillagers_ia_image_default_styles() {
 
   // Exported image style: author_thumbnail.
   $styles['author_thumbnail'] = array(
-    'name' => 'author_thumbnail',
     'label' => 'Author Thumbnail',
     'effects' => array(
       3 => array(
@@ -53,11 +52,11 @@ function ecovillagers_ia_image_default_styles() {
         'weight' => 1,
       ),
     ),
+    'name' => 'author_thumbnail',
   );
 
   // Exported image style: commenter_thumbnail.
   $styles['commenter_thumbnail'] = array(
-    'name' => 'commenter_thumbnail',
     'label' => 'Commenter Thumbnail',
     'effects' => array(
       4 => array(
@@ -76,11 +75,11 @@ function ecovillagers_ia_image_default_styles() {
         'weight' => 1,
       ),
     ),
+    'name' => 'commenter_thumbnail',
   );
 
   // Exported image style: inspiration_thumbnail.
   $styles['inspiration_thumbnail'] = array(
-    'name' => 'inspiration_thumbnail',
     'label' => 'Inspiration Thumbnail',
     'effects' => array(
       2 => array(
@@ -99,11 +98,11 @@ function ecovillagers_ia_image_default_styles() {
         'weight' => 1,
       ),
     ),
+    'name' => 'inspiration_thumbnail',
   );
 
   // Exported image style: overview_slide.
   $styles['overview_slide'] = array(
-    'name' => 'overview_slide',
     'label' => 'Overview Slide',
     'effects' => array(
       1 => array(
@@ -122,6 +121,7 @@ function ecovillagers_ia_image_default_styles() {
         'weight' => 1,
       ),
     ),
+    'name' => 'overview_slide',
   );
 
   return $styles;
