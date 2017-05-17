@@ -46,7 +46,7 @@ function ecovillagers_ia_views_default_views() {
   $handler->display->display_options['fields']['cid']['exclude'] = TRUE;
   $handler->display->display_options['fields']['cid']['element_label_colon'] = FALSE;
   $handler->display->display_options['fields']['cid']['link_to_comment'] = FALSE;
-  /* Field: Broken/missing handler */
+  /* Field: User: Photo */
   $handler->display->display_options['fields']['field_user_head_shot']['id'] = 'field_user_head_shot';
   $handler->display->display_options['fields']['field_user_head_shot']['table'] = 'field_data_field_user_head_shot';
   $handler->display->display_options['fields']['field_user_head_shot']['field'] = 'field_user_head_shot';
@@ -55,13 +55,18 @@ function ecovillagers_ia_views_default_views() {
   $handler->display->display_options['fields']['field_user_head_shot']['alter']['alter_text'] = TRUE;
   $handler->display->display_options['fields']['field_user_head_shot']['alter']['text'] = '<a name="comment-[cid]">[field_user_head_shot]</a>';
   $handler->display->display_options['fields']['field_user_head_shot']['element_label_colon'] = FALSE;
-  /* Field: Broken/missing handler */
+  $handler->display->display_options['fields']['field_user_head_shot']['click_sort_column'] = 'fid';
+  $handler->display->display_options['fields']['field_user_head_shot']['settings'] = array(
+    'image_style' => 'commenter_thumbnail',
+    'image_link' => '',
+  );
+  /* Field: User: Last Name */
   $handler->display->display_options['fields']['field_user_name_last']['id'] = 'field_user_name_last';
   $handler->display->display_options['fields']['field_user_name_last']['table'] = 'field_data_field_user_name_last';
   $handler->display->display_options['fields']['field_user_name_last']['field'] = 'field_user_name_last';
   $handler->display->display_options['fields']['field_user_name_last']['relationship'] = 'uid';
   $handler->display->display_options['fields']['field_user_name_last']['exclude'] = TRUE;
-  /* Field: Broken/missing handler */
+  /* Field: User: First Name */
   $handler->display->display_options['fields']['field_user_name_first']['id'] = 'field_user_name_first';
   $handler->display->display_options['fields']['field_user_name_first']['table'] = 'field_data_field_user_name_first';
   $handler->display->display_options['fields']['field_user_name_first']['field'] = 'field_user_name_first';
@@ -330,21 +335,26 @@ function ecovillagers_ia_views_default_views() {
   $handler->display->display_options['relationships']['uid']['field'] = 'uid';
   $handler->display->display_options['relationships']['uid']['required'] = TRUE;
   $handler->display->display_options['defaults']['fields'] = FALSE;
-  /* Field: Broken/missing handler */
+  /* Field: User: Photo */
   $handler->display->display_options['fields']['field_user_head_shot']['id'] = 'field_user_head_shot';
   $handler->display->display_options['fields']['field_user_head_shot']['table'] = 'field_data_field_user_head_shot';
   $handler->display->display_options['fields']['field_user_head_shot']['field'] = 'field_user_head_shot';
   $handler->display->display_options['fields']['field_user_head_shot']['relationship'] = 'uid';
   $handler->display->display_options['fields']['field_user_head_shot']['label'] = '';
   $handler->display->display_options['fields']['field_user_head_shot']['element_label_colon'] = FALSE;
-  /* Field: Broken/missing handler */
+  $handler->display->display_options['fields']['field_user_head_shot']['click_sort_column'] = 'fid';
+  $handler->display->display_options['fields']['field_user_head_shot']['settings'] = array(
+    'image_style' => 'author_thumbnail',
+    'image_link' => '',
+  );
+  /* Field: User: First Name */
   $handler->display->display_options['fields']['field_user_name_first']['id'] = 'field_user_name_first';
   $handler->display->display_options['fields']['field_user_name_first']['table'] = 'field_data_field_user_name_first';
   $handler->display->display_options['fields']['field_user_name_first']['field'] = 'field_user_name_first';
   $handler->display->display_options['fields']['field_user_name_first']['relationship'] = 'uid';
   $handler->display->display_options['fields']['field_user_name_first']['label'] = 'Presented by';
   $handler->display->display_options['fields']['field_user_name_first']['element_label_colon'] = FALSE;
-  /* Field: Broken/missing handler */
+  /* Field: User: Last Name */
   $handler->display->display_options['fields']['field_user_name_last']['id'] = 'field_user_name_last';
   $handler->display->display_options['fields']['field_user_name_last']['table'] = 'field_data_field_user_name_last';
   $handler->display->display_options['fields']['field_user_name_last']['field'] = 'field_user_name_last';
@@ -500,7 +510,7 @@ function ecovillagers_ia_views_default_views() {
   $handler->display->display_options['defaults']['empty'] = FALSE;
   $handler->display->display_options['defaults']['relationships'] = FALSE;
   $handler->display->display_options['defaults']['fields'] = FALSE;
-  /* Field: Content: Body */
+  /* Field: Content: Content */
   $handler->display->display_options['fields']['body']['id'] = 'body';
   $handler->display->display_options['fields']['body']['table'] = 'field_data_body';
   $handler->display->display_options['fields']['body']['field'] = 'body';

@@ -240,9 +240,9 @@ function ecovillagers_ia_context_default_contexts() {
   $context->reactions = array(
     'block' => array(
       'blocks' => array(
-        'menu_block-1' => array(
+        'menu_block-2' => array(
           'module' => 'menu_block',
-          'delta' => '1',
+          'delta' => '2',
           'region' => 'header',
           'weight' => '-10',
         ),
@@ -252,9 +252,9 @@ function ecovillagers_ia_context_default_contexts() {
           'region' => 'footer',
           'weight' => '-10',
         ),
-        'menu_block-2' => array(
+        'menu_block-1' => array(
           'module' => 'menu_block',
-          'delta' => '2',
+          'delta' => '1',
           'region' => 'footer',
           'weight' => '-9',
         ),
