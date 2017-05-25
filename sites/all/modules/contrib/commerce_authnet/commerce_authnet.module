@@ -1195,6 +1195,7 @@ function commerce_authnet_aim_request($payment_method, $nvp = array()) {
   curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
   curl_setopt($ch, CURLOPT_NOPROGRESS, 1);
   curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
+  curl_setopt($ch, CURLOPT_SSLVERSION, 6);
   $result = curl_exec($ch);
 
   // Log any errors to the watchdog.
@@ -1345,6 +1346,7 @@ function commerce_authnet_cim_request($payment_method, $request_type, $api_reque
   curl_setopt($ch, CURLOPT_NOPROGRESS, 1);
   curl_setopt($ch, CURLOPT_FOLLOWLOCATION, 0);
   curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+  curl_setopt($ch, CURLOPT_SSLVERSION, 6);
   $result = curl_exec($ch);
 
   // Log any errors to the watchdog.

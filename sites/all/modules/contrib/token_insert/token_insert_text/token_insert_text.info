@@ -8,8 +8,8 @@ files[] = token_insert_text.js
 files[] = token_insert_text.module
 
 
-; Information added by drush on 2017-04-25
+; Information added by drush on 2017-05-25
 version = "4630189ef4115ca05211507ddb3193d5af814f8b-dev"
 project = "token_insert"
-datestamp = "1493170522"
+datestamp = "1495705144"
 

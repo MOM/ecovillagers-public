@@ -9,6 +9,7 @@ dependencies[] = email_wrappers
 dependencies[] = fundraiser
 dependencies[] = fundraiser_ab
 dependencies[] = fundraiser_commerce
+dependencies[] = fundraiser_commerce_cardonfile
 dependencies[] = fundraiser_sustainers
 dependencies[] = fundraiser_triggers
 dependencies[] = fundraiser_webform
