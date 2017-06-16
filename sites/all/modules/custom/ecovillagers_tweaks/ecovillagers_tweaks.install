@@ -1,0 +1,12 @@
+<?php
+
+/**
+ * @file
+ * Install file for the ecovillagers_tweaks module.
+ */
+
+/**
+ * Implements hook_install().
+ */
+function ecovillagers_tweaks_install() {
+}

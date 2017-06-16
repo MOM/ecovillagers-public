@@ -1,0 +1,17 @@
+<?php
+/**
+ * @file
+ * Miscellaneous hooks and alterations for ecovillagers.org.
+ */
+
+/**
+ * Implements MODULE_process_HOOK().
+ *
+ * Get rid of the hardcoded inclusion of cents in donation total amount goals.
+ */
+function ecovillagers_tweaks_process_webform_goals_widget(&$args) {
+  if ($args['webform_goal']['metric'] == 'fundraiser_donation_amount') {
+    $args['goal_progress']['count'] = preg_replace("|\\.[0-9]{2}\$|", '', $args['goal_progress']['count']);
+    $args['goal_progress']['target'] = preg_replace("|\\.[0-9]{2}\$|", '', $args['goal_progress']['target']);
+  }
+}
