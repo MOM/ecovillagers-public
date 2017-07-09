@@ -221,7 +221,7 @@ function dynamic_gift_strings_form_alter(&$form, &$form_state, $form_id) {
   // make sure the node has a webform
   if (strstr($form_id, 'webform_client_form')) {
     $node = $form['#node'];
-    if ($node->type == 'donation_form') {
+    if ($node->type == 'donation_form' || $node->type == 'p2p_donation_form') {
       if (isset($_SESSION['dynamic_gift_string_values'][$node->nid])
          && is_array($_SESSION['dynamic_gift_string_values'][$node->nid])) { // Coder: This is ok.
         $component_hierarchy = _fundraiser_webform_parse_components($node->nid, $node->webform['components']);
