@@ -1724,7 +1724,7 @@ function springboard_p2p_validate_email_as_username($mail) {
   if (strpos($mail, '  ') !== FALSE) {
     return t('The e-mail address cannot contain multiple spaces in a row.');
   }
-  if (preg_match('/[^\x{80}-\x{F7} a-z0-9@_.\'-]/i', $mail)) {
+  if (preg_match('/[^\x{80}-\x{F7} a-z0-9@_.\'-+]/i', $mail)) {
     return t('The e-mail address contains an illegal character.');
   }
   // Non-printable ISO-8859-1 + NBSP.
