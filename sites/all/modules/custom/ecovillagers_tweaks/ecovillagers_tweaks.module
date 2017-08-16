@@ -19,6 +19,23 @@ function ecovillagers_tweaks_menu() {
 }
 
 /**
+ * Implementation of hook_init().
+ */
+function ecovillagers_tweaks_init() {
+  // Redirect a P2P personal campaign page to add its campaign market source to the query string.
+  if (arg(0) == 'node' && !arg(2) && user_is_anonymous()) {  // Only for anonymous user.
+    $node = menu_get_object();
+    if (is_object($node) && !empty($node->nid) && $node->type == 'p2p_personal_campaign') {
+      $params = drupal_get_query_parameters();
+      if (empty($params['p2p_pcid'])) {
+        $params['p2p_pcid'] = $node->nid;
+        drupal_goto("node/{$node->nid}", array('query' => $params));
+      }
+    }
+  }
+}
+
+/**
  * Implements MODULE_process_HOOK().
  *
  * Get rid of the hardcoded inclusion of cents in donation total amount goals.
@@ -31,7 +48,7 @@ function ecovillagers_tweaks_process_webform_goals_widget(&$args) {
 }
 
 /**
- * Implmentation of hook_form_alter().
+ * Implementation of hook_form_alter().
  */
 function ecovillagers_tweaks_form_alter(&$form, &$form_state, $form_id) {
   // Add submission handler to Webform User-enabled webform.
