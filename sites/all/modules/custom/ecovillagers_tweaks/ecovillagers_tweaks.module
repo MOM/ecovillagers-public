@@ -27,10 +27,22 @@ function ecovillagers_tweaks_init() {
     $node = menu_get_object();
     if (is_object($node) && !empty($node->nid) && $node->type == 'p2p_personal_campaign') {
       $params = drupal_get_query_parameters();
-      if (empty($params['p2p_pcid'])) {
-        $params['p2p_pcid'] = $node->nid;
+      if (empty($params['ref_uid'])) {
+        $params['ref_uid'] = $node->uid;
         drupal_goto("node/{$node->nid}", array('query' => $params));
       }
+    }
+  }
+}
+
+/**
+ * Implements hook_salesforce_queue_create_item_alter()
+ */
+function ecovillagers_tweaks_salesforce_queue_create_item_alter(&$item) {
+  if ($item['object_type'] == 'Contact') {
+    if (!empty($item['sobject']->fields['Referring_Contact__c']) && is_numeric($item['sobject']->fields['Referring_Contact__c'])) {
+      // Assume a numeric Referring Contact value is a UID that needs to be swapped for SFID.
+      $item['sobject']->fields['Referring_Contact__c'] = '[Contact:user:' . $item['sobject']->fields['Referring_Contact__c'] . ']';
     }
   }
 }
