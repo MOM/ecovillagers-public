@@ -44,6 +44,15 @@ function ecovillagers_tweaks_salesforce_queue_create_item_alter(&$item) {
       // Assume a numeric Referring Contact value is a UID that needs to be swapped for SFID.
       $item['sobject']->fields['Referring_Contact__c'] = '[Contact:user:' . $item['sobject']->fields['Referring_Contact__c'] . ']';
     }
+    foreach ($item['sobject']->fields as $key => $value) {
+      if (substr($key, -13) == '_Interests__c') {
+        // Assume "___ Interests" fields come from multi-checkbox webform components and need
+        // semicolon delimiters converted to newlines.
+        if (!empty($value)) {
+          $item['sobject']->fields[$key] = preg_replace("|\\s*;\\s*|", "\n", $value);
+        }
+      }
+    }
   }
 }
 
