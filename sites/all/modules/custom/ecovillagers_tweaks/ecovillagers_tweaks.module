@@ -27,6 +27,13 @@ function ecovillagers_tweaks_init() {
     $node = menu_get_object();
     if (is_object($node) && !empty($node->nid) && $node->type == 'p2p_personal_campaign') {
       $params = drupal_get_query_parameters();
+      // If a gift string param was given, we need to capture it for the donation forms.
+      if (!empty($params['gs'])) {
+        $expire = strtotime(variable_get('secure_prepopulate_dynamic_gift_strings_cookie_lifetime', '1 year'));
+        setcookie('gs-global', urlencode($params['gs']), $expire, '/');
+        unset($params['gs']);  // Now it's saved and we can lose the QS param.
+      }
+      // Put the ref_uid source code into the URL so that market source sees it.
       if (empty($params['ref_uid'])) {
         $params['ref_uid'] = $node->uid;
         drupal_goto("node/{$node->nid}", array('query' => $params));
