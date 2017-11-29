@@ -1,5 +1,5 @@
 name = Springboard P2P
-description = Springboard Peer to peer features
+description = Springboard Peer to Peer features
 core = 7.x
 package = Springboard P2P
 version = 7.x-4.0-dev

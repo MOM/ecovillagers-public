@@ -1,0 +1,44 @@
+<?php
+
+/**
+ * @file
+ * springboard_performance.module
+ * Experimental performance tweaks for Springboard
+ */
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function springboard_performance_entity_info_alter(&$entity_info) {
+  foreach ($entity_info as $type => $info) {
+    // Disable field cache on all entities.
+    if (isset($entity_info[$type]['field cache']) && variable_get('springboard_performance_disable_field_cache', TRUE)) {
+      // Explicitly disable field cache on this entity.
+      $entity_info[$type]['field cache'] = FALSE;
+    }
+    // Disable pessimistic locking on the commerce_order entity.
+    // @see https://www.drupal.org/node/2240427#comment-11399745
+    if ($type == 'commerce_order' && variable_get('springboard_performance_disable_commerce_order_locking', FALSE)) {
+      $entity_info[$type]['locking mode'] = NULL;
+    }
+  }
+}
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_performance_menu() {
+  $items = array();
+
+  $items['admin/config/development/springboard-performance'] = array(
+    'title' => 'Springboard performance',
+    'description' => 'Experimental performance tweaks for Springboard',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('springboard_performance_admin_settings_form'),
+    'access arguments' => array('administer springboard_performance'),
+    'file' => 'springboard_performance.admin.inc',
+    'type' => MENU_NORMAL_ITEM,
+  );
+
+  return $items;
+}

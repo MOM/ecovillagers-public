@@ -13,7 +13,7 @@
     <?php foreach($personalization as $key => $value):?>
     <PERSONALIZATION>
       <TAG_NAME><?php print $key; ?></TAG_NAME>
-      <VALUE><?php print $value; ?></VALUE>
+      <VALUE><![CDATA[<?php print $value; ?>]]></VALUE>
     </PERSONALIZATION>
     <?php endforeach; ?>
   </RECIPIENT>

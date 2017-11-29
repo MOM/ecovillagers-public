@@ -31,7 +31,7 @@ function sba_social_action_insert_components($node) {
     'extra' => array(
       'options_source' => 'united_states',
       // May have to remove some.
-      'aslist' => 'Y',
+      'aslist' => '1',
       'multiple' => 0,
     ),
   );

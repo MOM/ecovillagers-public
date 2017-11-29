@@ -47,6 +47,21 @@ function springboard_node_expire_install() {
       db_add_field('node_expire', $field, $spec);
     }
   }
+  _springboard_node_expire_defaults();
+}
+
+function _springboard_node_expire_defaults() {
+  $ntypes = variable_get('node_expire_ntypes', array());
+  $webform_types = variable_get('webform_node_types', array());
+  foreach ($webform_types as $type) {
+    if (empty($ntypes[$type])) {
+      $ntypes[$type]['enabled'] = 1;
+      $ntypes[$type]['default'] = '';
+      $ntypes[$type]['max'] = '';
+      $ntypes[$type]['required'] = 0;
+    }
+  }
+  variable_set('node_expire_ntypes', $ntypes);
 }
 
 /**
@@ -62,4 +77,8 @@ function springboard_node_expire_uninstall() {
   foreach ($fields_to_drop as $field) {
     db_drop_field('node_expire', $field);
   }
+}
+
+function springboard_node_expire_update_7001() {
+  _springboard_node_expire_defaults();
 }

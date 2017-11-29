@@ -71,6 +71,7 @@ function salesforce_message_action_create_actions_taken_fieldmap() {
       'title' => 'Name',
       'action' => 'Action__c',
       'action_type' => 'Action_Type__c',
+      'internal_name' => 'Internal_Name__c',
     ),
     'salesforce_submission_map' => array(
       'sid' => 'Submission_ID__c',
@@ -522,6 +523,33 @@ function salesforce_message_action_update_7002() {
 
     if (!array_key_exists('sba_user_edit_flag', $map['webform_map'])) {
       $map['webform_map']['sba_user_edit_flag'] = 'Message_Edited__c';
+      $map_need_updating = TRUE;
+    }
+
+    // Only perform the update if the fields weren't already mapped manually.
+    if ($map_need_updating) {
+      db_update('salesforce_genmap_map')
+        ->fields(array(
+          'field_map' => serialize($map),
+        ))
+        ->condition('mid', $record->mid)
+        ->execute();
+    }
+  }
+}
+
+
+/**
+ * Maps the internal name field
+ */
+function salesforce_message_action_update_7003() {
+  $result = db_query('SELECT mid, field_map FROM {salesforce_genmap_map} WHERE module = :module', array(':module' => 'salesforce_message_action'));
+
+  foreach ($result as $record) {
+    $map_need_updating = FALSE;
+    $map = unserialize($record->field_map);
+    if (!array_key_exists('internal_name', $map['salesforce_node_map'])) {
+      $map['salesforce_node_map']['internal_name'] = 'Internal_Name__c';
       $map_need_updating = TRUE;
     }
 

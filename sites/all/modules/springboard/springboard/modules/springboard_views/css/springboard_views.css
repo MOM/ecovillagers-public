@@ -1,0 +1,495 @@
+#ui-datepicker-div {
+  zoom: 0.90;
+  -moz-transform: scale(0.90);
+}
+#sb-webform-results-override-wrapper legend {
+  font-size: 22px;
+}
+#sb-webform-results-override-wrapper legend .fieldset-legend {
+  padding-bottom: 0;
+}
+#sb-webform-results-override-wrapper .sb-webform-results-table legend {
+  height: 70px;
+}
+#sb-webform-results-override-wrapper .sb-webform-results-table legend .fieldset-legend {
+  padding-bottom: 10px;
+  top: 0;
+}
+#sb-webform-results-override-wrapper .sb-webform-results-filters legend {
+  margin: -5px 0 9px 28px;
+}
+#sb-webform-results-override-wrapper .sb-webform-results-filters .fieldset-wrapper {
+  background-color: inherit;
+  border: none;
+  padding: 2px 26px;
+  margin-top: 0;
+}
+#sb-webform-results-override-wrapper #webform-ui-exposed-search legend {
+  display: none;
+}
+.view-sb-action-submissions-results .views-exposed-widgets,
+.view-sb-generic-webform-results .views-exposed-widgets {
+  margin-bottom: 22px;
+}
+.view-sb-action-submissions-results fieldset#webform-ui-exposed-search,
+.view-sb-generic-webform-results fieldset#webform-ui-exposed-search {
+  margin-bottom: 2px;
+}
+.view-sbv-donations #webform-ui-exposed-search .fieldset-wrapper,
+.view-sb-action-submissions-results #webform-ui-exposed-search .fieldset-wrapper,
+.view-sb-generic-webform-results #webform-ui-exposed-search .fieldset-wrapper {
+  background-color: inherit;
+  border: none;
+  padding: 0;
+}
+#views-exposed-form-sbv-donations-page .views-exposed-widgets { 
+  margin-bottom: 18px;
+}
+#views-exposed-form-sbv-donations-page-2 .views-exposed-widgets {
+  margin-bottom: 20px;
+  padding-top: 24px;
+}
+#views-exposed-form-sbv-donations-page #sb-db-donations-report-help,
+#views-exposed-form-sbv-donations-page-2 #sb-db-donations-report-help {
+  display: none;
+  cursor: pointer;
+  position: relative;
+  top: -1px;
+}
+#views-exposed-form-sbv-donations-page #sb-db-donations-report-help-popup,
+#views-exposed-form-sbv-donations-page-2 #sb-db-donations-report-help-popup {
+  background: #fff;
+  box-shadow: 4px 4px 11px 0px #aaa;
+  padding: 4px 9px;
+  cursor: pointer;
+  position: absolute;
+  right: 20px;
+  top: -56px;
+  width: 320px;
+  z-index: 10;
+}
+#views-exposed-form-sbv-donations-page .form-item-master-did-value #edit-master-did-value,
+#views-exposed-form-sbv-donations-page-2 .form-item-master-did-value #edit-master-did-value {
+  display: none;
+}
+#views-exposed-form-sbv-donations-page .form-item-master-did-value,
+#views-exposed-form-sbv-donations-page-2 .form-item-master-did-value {
+  position: absolute;
+}
+#views-exposed-form-sbv-donations-page #edit-field-fundraiser-internal-name-value-wrapper label,
+#views-exposed-form-sbv-donations-page #edit-next-charge-min-inside-wrapper .container-inline-date label,
+#views-exposed-form-sbv-donations-page #edit-next-charge-max-inside-wrapper .container-inline-date label,
+#views-exposed-form-sbv-donations-page #edit-date-filter-min-inside-wrapper .container-inline-date label,
+#views-exposed-form-sbv-donations-page #edit-date-filter-max-inside-wrapper .container-inline-date label {
+  display: none;
+}
+.view-sb-action-submissions-results #edit-order-id-wrapper label,
+.view-sb-action-submissions-results #edit-sid-wrapper label,
+.view-sb-action-submissions-results #edit-uid-raw-wrapper label,
+.view-sb-action-submissions-results #edit-date-filter-min-inside-wrapper .container-inline-date label,
+.view-sb-action-submissions-results #edit-date-filter-max-inside-wrapper .container-inline-date label,
+.view-sb-generic-webform-results #edit-sid-wrapper label,
+.view-sb-generic-webform-results #edit-uid-raw-wrapper label,
+.view-sb-generic-webform-results #edit-date-filter-min-inside-wrapper .container-inline-date label,
+.view-sb-generic-webform-results #edit-date-filter-max-inside-wrapper .container-inline-date label,
+#views-exposed-form-sbv-donations-page-2 #edit-order-id-wrapper label,
+#views-exposed-form-sbv-donations-page-2 #edit-sid-wrapper label,
+#views-exposed-form-sbv-donations-page-2 #edit-uid-raw-wrapper label,
+#views-exposed-form-sbv-donations-page-2 #edit-next-charge-min-inside-wrapper .container-inline-date label,
+#views-exposed-form-sbv-donations-page-2 #edit-next-charge-max-inside-wrapper .container-inline-date label,
+#views-exposed-form-sbv-donations-page-2 #edit-date-filter-min-inside-wrapper .container-inline-date label,
+#views-exposed-form-sbv-donations-page-2 #edit-date-filter-max-inside-wrapper .container-inline-date label {
+  display: none;
+}
+#views-exposed-form-sbv-donations-page #edit-next-charge-min-wrapper,
+#views-exposed-form-sbv-donations-page #edit-next-charge-max-wrapper,
+#views-exposed-form-sbv-donations-page-2 #edit-next-charge-min-wrapper,
+#views-exposed-form-sbv-donations-page-2 #edit-next-charge-max-wrapper {
+  float: left;
+}
+
+#views-exposed-form-sbv-donations-page-2 #edit-keyword-wrapper,
+#views-exposed-form-sbv-donations-page-2 #edit-mail-wrapper,
+#views-exposed-form-sbv-donations-page-2 #edit-next-charge-filter-wrapper,
+#views-exposed-form-sbv-donations-page-2 #edit-date-filter-wrapper {
+  margin-top: -25px;
+}
+.view-sb-action-submissions-results #edit-keyword-wrapper input,
+#views-exposed-form-sbv-donations-page #edit-keyword-wrapper input,
+.view-sb-generic-webform-results #edit-keyword-wrapper input,
+#views-exposed-form-sbv-donations-page-2 #edit-keyword-wrapper input {
+  width: 186px;
+}
+#views-exposed-form-sbv-donations-page #edit-status,
+#views-exposed-form-sbv-donations-page-2 #edit-status {
+  width: 170px;
+}
+.view-sb-action-submissions-results .views-submit-button,
+.view-sb-generic-webform-results .views-submit-button,
+#views-exposed-form-sbv-donations-page-2 .views-submit-button {
+  margin-top: -9px;
+}
+.view-sb-generic-webform-results .views-submit-button input,
+.view-sb-action-submissions-results .views-submit-button input,
+#views-exposed-form-sbv-donations-page .views-submit-button input,
+#views-exposed-form-sbv-donations-page-2 .views-submit-button input {
+  width: 34px;
+}
+#views-exposed-form-sbv-donations-page .views-submit-button::before,
+#views-exposed-form-sbv-donations-page-2 .views-submit-button::before {
+  content: '';
+}
+#views-exposed-form-sbv-donations-page-2 .views-submit-button input,
+#views-exposed-form-sbv-donations-page-2 .views-reset-button input {
+  margin-top: 10px;
+}
+#views-exposed-form-sb-generic-webform-results-page .views-exposed-form .views-exposed-widget.views-submit-button,
+#views-exposed-form-sb-generic-webform-results-page .views-exposed-form .views-exposed-widget.views-reset-button {
+  margin-top: 0;
+}
+.view-sbv-donations a.views-data-export {
+  margin-top: -42px;
+  position: absolute;
+  right: 10px;
+  top: inherit;
+}
+body.page-node-webform-results .view-sbv-donations a.views-data-export {
+  right: 49px;
+  padding-top: 2px;
+  margin-top: -41px;
+}
+#views-exposed-form-sbv-donations-page #edit-keyword-wrapper,
+#sb-webform-results-override-wrapper .view-filters form #edit-keyword-wrapper {
+  margin-right: 16px;
+}
+#views-exposed-form-sbv-donations-page .views-exposed-form .views-reset-button {
+  margin-top: 0;
+  margin-left: 4px;
+}
+body.page-admin #views-exposed-form-sbv-donations-page .views-exposed-form .views-reset-button {
+}
+body.page-admin #views-exposed-form-sbv-donations-page .views-exposed-form .views-reset-button input {
+  margin-right: 0;
+}
+body.page-admin #views-exposed-form-sbv-donations-page .views-exposed-form .views-submit-button {
+  margin-top: 0;
+}
+body.page-admin #views-exposed-form-sbv-donations-page .views-exposed-form #sb-db-donations-report-help {
+  position: relative;
+  left: 60px;
+}
+#views-exposed-form-sbv-donations-page-2 .views-exposed-form .views-reset-button {
+  margin-top: -9px;
+}
+body .view-sb-action-submissions-results table.views-table,
+body .view-sb-generic-webform-results table.views-table,
+body .view-sbv-donations table.views-table {
+  background-color: #fff;
+  border: none;
+  border-collapse: collapse;
+}
+body .view-sb-action-submissions-results table.sticky-header,
+body .view-sb-generic-webform-results table.sticky-header,
+body .view-sbv-donations table.sticky-header {
+  display: none;
+}
+body .view-sb-action-submissions-results table.sticky-header th,
+body .view-sb-generic-webform-results table.sticky-header th,
+body .view-sbv-donations table.sticky-header th {
+  border-left: 1px solid #567284;
+  padding-left: 0;
+  padding-right: 0;
+}
+body .view-sb-action-submissions-results table.sticky-header th.first,
+body .view-sb-generic-webform-results table.sticky-header th.first,
+body .view-sbv-donations table.sticky-header th.first {
+  border-left: none;
+  padding-left: 5px;
+}
+body .view-sb-action-submissions-results table.sticky-enabled th img,
+body .view-sb-generic-webform-results table.sticky-enabled th img,
+body .view-sbv-donations table.sticky-enabled th img {
+  position: relative;
+  right: 7px;
+}
+@media (max-width: 1040px) {
+  .view-sb-action-submissions-results table.sticky-header,
+  .view-sb-generic-webform-results table.sticky-header,
+  .view-sbv-donations table.sticky-header {
+    margin-left: -2px;
+  }
+}
+body .view-sb-action-submissions-results table thead th,
+body .view-sb-generic-webform-results table thead th,
+body .view-sbv-donations table thead th {
+  border-left: 1px solid #567284;
+  font-size: 11px;
+  line-height: 1.9em;
+  padding: 3px 5px;
+}
+body .view-sb-action-submissions-results table thead th.first,
+body .view-sb-generic-webform-results table thead th.first,
+body .view-sbv-donations table thead th.first {
+  border-left: none;
+}
+body .view-sb-generic-webform-results table.views-table tr td,
+body .view-sbv-donations table.views-table tr td {
+  background-color: #f7f7f4;
+  border: none;
+  border-left: 1px dotted #d4d4c9;
+  font-size: 12px;
+  line-height: 1.5em;
+  padding: .55em .70em;
+}
+body .view-sbv-donations table.views-table tr td {
+  font-size: 12px;
+  line-height: 1.3em;
+  padding: .7em .7em;
+}
+body .view-sbv-donations table.views-table tr td.views-field-status {
+  width: inherit;
+}
+body .view-sbv-donations table.views-table tr td.table-actions {
+  width: 52px;
+}
+.view-sb-generic-webform-results table.views-table tr td.views-field-ctools-dropdown,
+.view-sbv-donations table.views-table tr td.views-field-ctools-dropdown {
+  width: 66px;
+}
+body .view-sbv-donations table.views-table tr td.table-actions a {
+  padding: 0 1px;
+}
+.view-sb-generic-webform-results table.views-table td.first,
+.view-sbv-donations table.views-table td.first {
+  border-left: none;
+}
+.view-sb-generic-webform-results table.views-table tr.even td,
+.view-sbv-donations table.views-table tr.even td {
+  background-color: #fff;
+}
+body .view-sb-generic-webform-results .item-list ul.pager,
+body .view-sbv-donations .item-list ul.pager {
+  padding-bottom: 12px;
+}
+body.page-node #sb-webform-results-override-wrapper table.views-table {
+  zoom: 0.95;
+}
+body.page-node .view-sbv-donations table .views-field-order-id,
+body.page-node .view-sbv-donations table .views-field-uid {
+  width: 60px;
+}
+body.page-node .view-sb-generic-webform-results table .views-field-uid {
+  width: inherit;
+}
+body.page-node .view-sb-generic-webform-results table .views-field-sid,
+body.page-node .view-sbv-donations table .views-field-sid {
+  width: 70px;
+}
+body.page-node .view-sb-generic-webform-results table .views-field-remote-addr,
+body.page-node .view-sb-generic-webform-results table .views-field-remote-addr,
+body.page-node .view-sbv-donations table .views-field-remote-addr {
+  width: 80px;
+}
+body.page-node .view-sb-generic-webform-results table .views-field-submitted,
+body.page-node .view-sbv-donations table .views-field-created {
+  width: 120px;
+}
+body.page-node .view-sb-generic-webform-results table td.views-field-nothing {
+  width: 140px;
+}
+body.page-node .view-sb-generic-webform-results table td.views-field-mail {
+  width: inherit;
+}
+.view-sbv-donations #sbv-export-download-msg {
+  float: right;
+}
+.view-sb-generic-webform-results #sb-db-items-per-page,
+.view-sbv-donations #sb-db-items-per-page {
+  font-size: 11px;
+}
+body.page-admin .view-sbv-donations {
+  background: inherit;
+  border-top: none;
+  padding: 8px 8px;
+  margin-top: -10px;
+}
+body.page-admin .view-sbv-donations .view-filters {
+  background: #fff;
+  border-bottom: 2px solid #e1e0db;
+  margin-bottom: 38px;
+  padding: 6px 26px;
+}
+body.page-admin .view-sbv-donations h2 {
+  font-size: 26px;
+  margin-bottom: 22px;
+  padding-left: 4px;
+}
+body.page-admin .view-sbv-donations a.views-data-export {
+  margin-top: -37px;
+}
+body.page-admin .view-sbv-donations a.views-data-export,
+body.page-admin .view-sbv-donations .view-filters {
+  zoom: 0.95;
+  -moz-transform: scale(0.95);
+}
+@media (max-width: 1200px) {
+  body.page-admin .view-sbv-donations .views-widget .control-group .date-padding .form-text {
+    width: 132px;
+  }
+  body.page-admin-reports-salesforce-donations #main.container {
+    width: inherit;
+    margin-left: 10px;
+    margin-right: 10px;
+  }
+  body.page-admin .view-sbv-donations a.views-data-export,
+  body.page-admin .view-sbv-donations .view-filters {
+    zoom: 0.75;
+    -moz-transform: scale(0.75);
+  }
+  body.page-node .view-sb-generic-webform-results .view-filters,
+  body.page-node .view-sbv-donations .view-filters {
+    zoom: 0.82;
+    -moz-transform: scale(0.82);
+  }
+  body.page-admin .view-sbv-donations a.views-data-export {
+    margin-top: -48px;
+    right: 10px;
+  }
+}
+@media (max-width: 989px) {
+  body.page-admin-reports-salesforce-donations #main {
+    width: 95%;
+  }
+  body.page-admin .view-sbv-donations {
+    padding: 0px 6px;
+  }
+  body.page-admin .view-sbv-donations table {
+    zoom: 0.90;
+    -moz-transform: scale(0.90);
+  }
+  body.page-admin .view-sbv-donations a.views-data-export {
+    margin-left: 10px;
+    margin-top: -52px;
+    zoom: 0.60;
+    -moz-transform: scale(0.60);
+  }
+  body.page-admin .view-sbv-donations .view-filters {
+    zoom: 0.70;
+    -moz-transform: scale(0.70);
+  }
+}
+@media (max-width: 979px) {
+  body.page-node .view-sb-generic-webform-results .view-filters input.form-text,
+  body.page-node .view-sbv-donations .view-filters input.form-text {
+    width: 120px;
+  }
+  body.page-node .view-sb-generic-webform-results .view-filters,
+  body.page-node .view-sbv-donations .view-filters {
+    zoom: 0.70;
+    -moz-transform: scale(0.70);
+  }
+}
+@media (max-width: 904px) {
+  body.page-admin .view-sbv-donations .view-filters {
+    zoom: 0.65;
+    -moz-transform: scale(0.65);
+  }
+  body.page-admin .view-sbv-donations table {
+    zoom: 0.75;
+    -moz-transform: scale(0.75);  
+  }
+}
+@media (max-width: 848px) {
+  body.page-admin .view-sbv-donations .view-filters {
+    zoom: 0.55;
+    -moz-transform: scale(0.55);
+  }
+  body.page-admin .view-sbv-donations table {
+    zoom: 0.70;
+    -moz-transform: scale(0.70);
+  }
+}
+@media (max-width: 800px) {
+  body.page-admin .view-sbv-donations table {
+    zoom: 0.60;
+    -moz-transform: scale(0.60);
+  } 
+}
+@media (max-width: 768px) {
+  body.page-admin-reports-salesforce-donations #main.container {
+    width: inherit;
+    margin-left: 0;
+    margin-right: 0;
+  }
+  body.page-admin .view-sbv-donations table {
+    zoom: 0.40;
+    -moz-transform: scale(0.40);
+  }
+  body.page-admin .view-sbv-donations table.views-table tr td {
+    font-size: 10px;
+    line-height: 1.2em;
+    padding: 2px 2px;
+  }
+  body.page-node .view-sb-generic-webform-results .view-filters,
+  body.page-node .view-sbv-donations .view-filters {
+    zoom: 0.65;
+    -moz-transform: scale(0.65);
+  }
+  body.page-admin #views-exposed-form-sbv-donations-page .views-exposed-form .views-submit-button {
+    float: right;
+    left: 0;
+  }
+  body.page-admin #views-exposed-form-sbv-donations-page .views-exposed-form .views-submit-button input {
+    width: 42px;
+  }
+  body.page-admin #views-exposed-form-sbv-donations-page .views-exposed-form .views-reset-button,
+  body.page-admin #views-exposed-form-sbv-donations-page .views-exposed-form #sb-db-donations-report-help {
+    display: none;
+  }
+}
+@media (max-width: 732px) {
+  body.page-node .view-sb-generic-webform-results .view-filters,  
+  body.page-node .view-sbv-donations .view-filters {
+    zoom: 0.60;
+    -moz-transform: scale(0.60);
+  }
+  body.page-admin .view-sbv-donations .view-filters {
+    zoom: 0.45;
+    -moz-transform: scale(0.45);
+  }
+  body.page-admin .view-sbv-donations table {
+    zoom: 0.35;
+    -moz-transform: scale(0.35);
+  }
+}
+@media (max-width: 720px) {
+  body.page-admin .view-sbv-donations table {
+    zoom: 0.25;
+    -moz-transform: scale(0.25);
+  }
+  body.page-node .view-sb-generic-webform-results .view-filters,
+  body.page-node .view-sbv-donations .view-filters {
+    zoom: 0.55;
+    -moz-transform: scale(0.55);
+  }
+}
+@media (max-width: 670px) {
+  body.page-admin .view-sbv-donations .views-widget .control-group .date-padding .form-text {
+    width: 96px;
+  }
+  body.page-node .view-sb-generic-webform-results table,
+  body.page-node .view-sbv-donations table {
+    zoom: 0.45;
+    -moz-transform: scale(0.45);
+  }
+  body.page-node .view-sb-generic-webform-results table.views-table tr td,
+  body.page-node .view-sbv-donations table.views-table tr td {
+    font-size: 10px;
+    line-height: 1.25em;
+    padding: 2px 5px;
+  }
+}
+/* Ensure download link is not present on results tabs: */
+body.page-node #sb-webform-results-override-wrapper #sb-queue-csv-download {
+  display: none;
+}

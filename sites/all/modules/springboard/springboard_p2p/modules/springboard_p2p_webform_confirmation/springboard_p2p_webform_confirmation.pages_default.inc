@@ -19,7 +19,7 @@ function springboard_p2p_webform_confirmation_default_page_manager_handlers() {
   $handler->handler = 'panel_context';
   $handler->weight = 0;
   $handler->conf = array(
-    'title' => 'P2P Donation Confirmation Page',
+    'title' => 'Peer to Peer Donation Confirmation Page',
     'no_blocks' => 0,
     'pipeline' => 'standard',
     'body_classes_to_remove' => '',

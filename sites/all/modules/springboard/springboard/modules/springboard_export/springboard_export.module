@@ -1,0 +1,143 @@
+<?php
+
+/**
+ * Implements hook_views_query_alter().
+ */
+function springboard_export_views_query_alter(&$view, &$query) {
+  // Only proceed if the drush export command has flagged this as a data export:
+  if (!isset($view->is_sb_export) || !$view->is_sb_export) {
+    return;
+  }
+  // Use the orderby for this view_data_export display's parent:
+  if (isset($view->sb_export_query_orderby) && is_array($view->sb_export_query_orderby)) {
+    $query->orderby = $view->sb_export_query_orderby;
+  }
+}
+
+function springboard_export_views_post_execute(&$view) {
+  // Do nothing if the current display is, itself, a data export:
+  if ($view->plugin_name == 'views_data_export_csv') {
+    return;
+  }
+
+  // TODO - Enabling view-specific toggling of the custom export workflow:
+  if($view->name != 'sbv_donations') {
+    return;
+  }
+
+  // Do nothing if the current display does not have a views_data_export display attached to it:
+  $is_springboard_export_view = FALSE;
+  if (!isset($view->display) || !is_array($view->display) || !isset($view->current_display)) {
+    return;
+  }
+  foreach ($view->display as $display_name => $display_data) {
+    if (isset($display_data->handler->plugin_name) && $display_data->handler->plugin_name == 'views_data_export') {
+      if (!isset($display_data->display_options)
+        || !isset($display_data->display_options['displays'])
+        || !is_array($display_data->display_options['displays'])
+        || !isset($display_data->display_options['displays'][$view->current_display])
+        || $display_data->display_options['displays'][$view->current_display] !== $view->current_display) {
+        return;
+      }
+      else {
+        $export_display_name = $display_name;
+        $is_springboard_export_view = TRUE;
+        break;
+
+      }
+    }
+  }
+  if ($is_springboard_export_view == FALSE) {
+    return;
+  }
+
+  // Gather info needed to programatically run the export:
+  $export_data_collection_failed = FALSE;
+  $export_data = array();
+  $export_data['view_name'] = $view->name;
+  $export_data['view_display'] = $export_display_name;
+
+  // Capture exposed filter data:
+  $export_data['exposed_input'] = $view->exposed_input;
+
+  // Exclude sort and order because those are handled via query alter:
+  $values_to_ignore = array('sort', 'order');
+  foreach ($export_data['exposed_input'] as $key => $val) {
+    if (in_array($key, $values_to_ignore)) {
+      unset($export_data['exposed_input'][$key]);
+    }
+  }
+
+  // Capture sorting data:
+  if (isset($view->query->orderby) && is_array($view->query->orderby) && !empty($view->query->orderby)) {
+    $export_data['query_orderby'] = $view->query->orderby;
+  }
+
+  if (isset($view->current_display)) {
+    $export_data['attached_display'] = $view->current_display;
+  }
+
+  // Send export data to jQuery to be used if the user runs an export:
+  drupal_add_js(array('sBCustomViewsFileExportData' => $export_data), 'setting');
+  drupal_add_js(drupal_get_path('module', 'springboard_export') . '/js/springboard_export.js', array('type' => 'file'));
+
+  // Add associated CSS:
+  drupal_add_css(drupal_get_path('module', 'springboard_export') . '/css/springboard_export.css', array('type' => 'file'));
+}
+
+/**
+ * hook_form_FORM_ID_alter().
+ */
+function springboard_export_form_views_ui_edit_display_form_alter(&$form, &$form_state, $form_id) {
+  if (!isset($form['options']['style_options']) || !isset($form['options']['#help_module']) || $form['options']['#help_module'] != 'views_data_export') {
+    return;
+  }
+  $form['options']['style_options']['springboard_export'] = array(
+    '#type' => 'checkbox',
+    '#title' => 'Enable Springboard Export',
+    '#default_value' => 1,
+    '#weight' => -100,
+    '#description' => t('Enable the custom export workflow which adds export request to the Drupal queue table, to be processed via ' .
+      'the springboard-dw-csv-reports-queue-process drush command.  First, the user supplies a report recipient email. Then, the exported ' .
+      'file is generated and sent to Amazon S3.  Finally, a download link is sent to the recipient email the user provided.'),
+  );
+  // TODO - Add AJAX-based save of the checkbox value; standard form submit function did not work due to ajax-based submission.
+}
+
+/**
+ * Implements hook_menu().
+ */
+function springboard_export_menu() {
+  $items = array();
+  $items['springboard-export-queue-ajax'] = array(
+    'title' => 'AJAX callback',
+    'page callback' => '_springboard_export_queue_data_export',
+    'access callback' => 'user_access',
+    'access arguments' => array('access all webform results'),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * jQuery CSV Download button callback.
+ *
+ * This enqueues a CSV download request along with any filtering or sorting.
+ */
+function _springboard_export_queue_data_export() {
+  $data = array();
+  if (isset($_POST) && !empty($_POST)) {
+    if (isset($_POST['export_data']) && isset($_POST['recipient_email'])) {
+      $data = $_POST['export_data'];
+      $recipient = $_POST['recipient_email'];
+      watchdog('springboard_export', 'CSV export enqueued: ' . json_encode($data));
+    }
+  }
+
+  // Queue the data export job:
+  $success = FALSE;
+  $success = springboard_dw_export_insert('springboard_export', $data, $recipient);
+
+  // Return status to jQuery:
+  drupal_json_output(array('status' => $success ? 'success' : 'fail'));
+}

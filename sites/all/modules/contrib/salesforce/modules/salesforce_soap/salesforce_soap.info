@@ -7,10 +7,3 @@ files[] = salesforce_soap.inc
 
 dependencies[] = salesforce
 dependencies[] = libraries
-
-
-; Information added by drush on 2017-05-25
-version = "e2b4ce0ffcd5c8e5f862f695a7bd2d4e915f1dc9-dev"
-project = "salesforce"
-datestamp = "1495705163"
-

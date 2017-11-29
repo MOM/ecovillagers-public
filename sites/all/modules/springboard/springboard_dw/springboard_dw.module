@@ -6,6 +6,7 @@
 
 require_once 'includes/springboard_dw.api.inc';
 require_once 'includes/springboard_dw.queue.inc';
+require_once 'includes/springboard_dw.export.queue.inc';
 require_once 'includes/springboard_dw.utility.inc';
 require_once 'includes/springboard_dw.transaction.inc';
 
@@ -22,8 +23,11 @@ require_once 'includes/springboard_dw.transaction.inc';
  *   The language code for this view.
  */
 function springboard_dw_node_view($node, $view_mode, $langcode) {
-  if (!variable_get('springboard_dw_api_endpoint') || !variable_get('springboard_dw_authentication_token')) {
-    drupal_set_message(t('Springboard data warehouse settings have not been configured. <a href="/admin/config/services/springboard-dw">Update your settings.</a>'), 'warning');
+  global $user;
+  if (is_array($user->roles) && in_array('Administrator', array_values($user->roles))) {
+    if (!variable_get('springboard_dw_api_endpoint') || !variable_get('springboard_dw_authentication_token')) {
+      drupal_set_message(t('Springboard data warehouse settings have not been configured. <a href="/admin/config/services/springboard-dw">Update your settings.</a>'), 'warning');
+    }
   }
 }
 
@@ -72,6 +76,15 @@ function springboard_dw_menu() {
     'file'             => 'includes/springboard_dw.admin.inc',
   );
 
+  // DW CSV download queue AJAX callback:
+  $items['sb-dw-export-queue-ajax'] = array(
+    'title' => 'DW Donations AJAX callback',
+    'page callback' => '_springboard_dw_export_queue_data_export',
+    'access callback' => 'user_access',
+    'access argument' => 'access all webform results',
+    'type' => MENU_CALLBACK,
+  );
+
   return $items;
 }
 
@@ -84,8 +97,8 @@ function springboard_dw_menu() {
 function springboard_dw_log_queue_item($data) {
   // Check if watchdog logging is enabled.
   if (variable_get('springboard_dw_watchdog_enabled')) {
-    $watchdog_string = '<pre>' . print_r($data, TRUE) . '</pre>';
-    watchdog("data_warehouse", $watchdog_string);
+    $watchdog_string = print_r($data, TRUE);
+    watchdog('data_warehouse_debug', '<pre>@watchdog_string</pre>', array('@watchdog_string' => $watchdog_string));
   }
 }
 
@@ -98,7 +111,7 @@ function springboard_dw_log_queue_item($data) {
 function springboard_dw_watchdog_log($watchdog_string) {
   // Check if watchdog logging is enabled.
   if (variable_get('springboard_dw_watchdog_enabled')) {
-    watchdog("data_warehouse", $watchdog_string);
+    watchdog('data_warehouse_debug', $watchdog_string);
   }
 }
 
@@ -219,10 +232,6 @@ function springboard_dw_petition_submission($node, $action) {
   springboard_dw_track_item_warehouse_queued('petition',
     $petition['unique_id']);
 
-  // if (!springboard_dw_item_is_warehoused('advocacy petition message',
-  // $petition['unique_id'])) {
-
-  // $petition_item = springboard_dw_map_petition_submission_item($action);
   $petition_item = springboard_dw_map_petition_submission_item($action,
     $petition['unique_id']);
 
@@ -290,6 +299,12 @@ function springboard_dw_social_action_submission($node, $action) {
  *   The donation object.
  */
 function springboard_dw_fundraiser_donation_success($donation) {
+  if (variable_get('springboard_dw_force_refresh', FALSE)) {
+    // Reload donation to be sure to get everything we need from submission
+    // table then send to queue.
+    $donation = fundraiser_donation_get_donation($donation->did, TRUE);
+  }
+
   // Get the Drupal data warehouse queue.
   $queue = DrupalQueue::get("springboard_dw_export");
 
@@ -314,7 +329,7 @@ function springboard_dw_fundraiser_donation_success($donation) {
   springboard_dw_log_queue_item($donation_item);
 
   // Check if the transaction id exists and track payment if so.
-  if (isset($donation_item['transaction_id'])) {
+  if (isset($donation_item['transaction_id']) && !empty($donation_item['transaction_id'])) {
     // Get the transaction date from the commerce payment transaction
     $transaction = springboard_dw_transaction_get_by_id
     ($donation_item['transaction_id']);
@@ -341,6 +356,24 @@ function springboard_dw_fundraiser_donation_success($donation) {
   springboard_dw_queue_donation_line_items($donation);
 
 }
+
+/**
+ * Implements hook_dw_fundraiser_donation_update().
+ *
+ * Update DW record when updating donation billing info.
+ */
+function springboard_dw_fundraiser_donation_update($donation) {
+  if (isset($donation->update_billing) && $donation->update_billing == TRUE) {
+    // Get the Drupal data warehouse queue.
+    $queue = DrupalQueue::get("springboard_dw_export");
+    $donation_item = springboard_dw_map_donation_item($donation, TRUE, 'realtime', FALSE);
+    // Queue the item or flag it for updating.
+    $queue->createItem($donation_item);
+    // Log the queue item.
+    springboard_dw_log_queue_item($donation_item);
+  }
+}
+
 
 /**
  * Handles the queuing of any line items attached to a donation.
@@ -371,7 +404,9 @@ function springboard_dw_queue_donation_line_items($donation) {
  * Implements springboard_dw_fundraiser_sustainers_change_charge_date().
  *
  * @param object $donation
+ *    The donation object to use for the charge date update.
  * @param string $transaction_date
+ *    The new transaction date to assign to the donation object.
  */
 function springboard_dw_fundraiser_sustainers_change_charge_date($donation, $transaction_date) {
   // Get the Drupal data warehouse queue.
@@ -651,15 +686,12 @@ function springboard_dw_fundraiser_sustainers_future_order_insert($created_donat
   $created_donation->donation['cid'] = $created_donation->submission_data['cid'];
   $created_donation->donation['referrer'] = $created_donation->submission_data['referrer'];
   $created_donation->donation['initial_referrer'] = $created_donation->submission_data['initial_referrer'];
-  $created_donation->donation['cid'] = $created_donation->submission_data['initial_referrer'];
-  $created_donation->donation['cid'] = $created_donation->submission_data['initial_referrer'];
   $created_donation->donation['search_engine'] = $created_donation->submission_data['search_engine'];
   $created_donation->donation['search_string'] = $created_donation->submission_data['search_string'];
   $created_donation->donation['user_agent'] = $created_donation->submission_data['user_agent'];
   $created_donation->donation['device_type'] = $created_donation->submission_data['device_type'];
   $created_donation->donation['device_name'] = $created_donation->submission_data['device_name'];
   $created_donation->donation['device_os'] = $created_donation->submission_data['device_os'];
-  $created_donation->donation['device_browser'] = $created_donation->submission_data['device_browser'];
   $created_donation->donation['device_browser'] = $created_donation->submission_data['device_browser'];
 
   // Donation payment details. Currently hardcoded to credit.
@@ -803,20 +835,44 @@ function springboard_dw_entity_insert($entity, $type) {
 }
 
 /**
+ * Implements hook_views_api().
+ */
+function springboard_dw_views_api() {
+  return array(
+    'api' => 3.0,
+    'path' => drupal_get_path('module', 'springboard_dw') . '/includes/views',
+  );
+}
+
+/**
+ * Implements hook_custom_theme().
+ *
+ * Ensure the admin theme is used for this view:
+ */
+function springboard_dw_custom_theme() {
+  $current_path = current_path();
+  if (strpos($current_path, 'warehouse/reports/donations') === 0) {
+    return 'springboard_backend';
+  }
+}
+
+/**
  * Map a commerce line item to an array formatted for an API call.
  *
  * @param object $item
  *   An entity metadata wrapper object for a commerce line item.
  * @param string $currency_code
  *   The currency used on the order.
- *
- * @return array
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
+ * @return array The line item mapped to API consumable format.
  *   The line item mapped to API consumable format.
  */
-function springboard_dw_map_line_item_item($item, $currency_code = 'USD') {
+function springboard_dw_map_line_item_item($item, $currency_code = 'USD', $type = 'realtime') {
   $line_item_item = array();
 
   $line_item_item['queue_type'] = 'line_item';
+  $line_item_item['warehouse_type'] = $type;
   $line_item_item['line_item_id'] = $item->line_item_id->value();
   $line_item_item['donation_id'] = $item->order_id->value();
   $line_item_item['type'] = $item->type->value();
@@ -836,21 +892,21 @@ function springboard_dw_map_line_item_item($item, $currency_code = 'USD') {
 /**
  * Map a sync map item to an array formatted for an API call.
  *
- * @param object $submission
- *   The submission object.
- * @param array  $submitted_data
- *   The submitted data.
- *
+ * @param array $item
+ *   The sync item object.
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array
  *   The submission item mapped to API consumable format.
  */
-function springboard_dw_map_sync_map_item($item) {
+function springboard_dw_map_sync_map_item($item, $type = 'realtime') {
   $sb_vendor_mapping_item = array();
 
   $dw_exportable_type = springboard_dw_convert_sf_type($item['module'], $item['delta'], $item['object_type']);
 
   if ($dw_exportable_type) {
     $sb_vendor_mapping_item['queue_type'] = 'vendor_mapping';
+    $sb_vendor_mapping_item['warehouse_type'] = $type;
     $sb_vendor_mapping_item['dw_id'] = $item['drupal_id'];
     $sb_vendor_mapping_item['dw_type'] = $dw_exportable_type;
     $sb_vendor_mapping_item['group_id'] = '';
@@ -870,14 +926,16 @@ function springboard_dw_map_sync_map_item($item) {
  *   The submission object.
  * @param array  $submitted_data
  *   The submitted data.
- *
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array
  *   The submission item mapped to API consumable format.
  */
-function springboard_dw_map_submission_item($submission, $submitted_data) {
+function springboard_dw_map_submission_item($submission, $submitted_data,
+                                            $type = 'realtime' ) {
   $submission_item = array();
-
   $submission_item['queue_type'] = 'submission';
+  $submission_item['warehouse_type'] = $type;
   $submission_item['submission_id'] = $submission->sid;
   $submission_item['form_id'] = $submission->nid;
   $submission_item['contact_id'] = $submission->uid;
@@ -960,19 +1018,20 @@ function springboard_dw_extract_submission_extra_props($submitted_data, $submiss
  *
  * @param object $message_action
  *   The message action object to map to an array for an api call.
- *
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array
  *   The api mapped array.
- *
- * @internal param object $donation
  */
-function springboard_dw_map_advocacy_action_item($message_action) {
+function springboard_dw_map_advocacy_action_item($message_action, $type =
+'realtime') {
 
   // Get the Advocacy action object details and prep for
   // warehousing (sb_action).
   $advocacy_item = array();
 
   $advocacy_item['queue_type'] = 'advocacy action';
+  $advocacy_item['warehouse_type'] = $type;
 
   $advocacy_item['unique_id'] = uniqid(); // Actions need a unique_id
   // to be created in Drupal because their could be multiple messages
@@ -1055,17 +1114,19 @@ function springboard_dw_map_advocacy_action_item($message_action) {
  *
  * @param object $petition
  *   The petition object to map to an array.
- *
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array
  *   The api mapped array.
  */
-function springboard_dw_map_petition_item($petition) {
+function springboard_dw_map_petition_item($petition, $type = 'realtime') {
 
   // Get the Advocacy petition object details and prep
   // for warehousing (sb_action).
   $advocacy_item = array();
 
   $advocacy_item['queue_type'] = 'petition';
+  $advocacy_item['warehouse_type'] = $type;
 
   $advocacy_item['unique_id'] = uniqid(); // Actions need a unique_id
   // to be created in Drupal because their could be multiple messages
@@ -1126,21 +1187,23 @@ function springboard_dw_map_petition_item($petition) {
  *
  * @param object $petition
  *    The petition object to map to an array for making an api call.
- *
  * @param string $petition_unique_id
  *    The unique id of the advocacy petition to associate with the
  *    petition count.
- *
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array The petition array ready to send with an api call.
  *   The petition array ready to send with an api call.
  */
 function springboard_dw_map_petition_submission_item($petition,
-                                                     $petition_unique_id) {
+                                                     $petition_unique_id,
+                                                     $type = 'realtime') {
   // Get the Advocacy petition object details and prep
   // for warehousing (sb_action).
   $message_item = array();
 
   $message_item['queue_type'] = 'advocacy petition message';
+  $message_item['warehouse_type'] = $type;
   $message_item['message_id'] = '';
   $message_item['action_id'] = '';
   $message_item['group_id'] = '';
@@ -1150,8 +1213,10 @@ function springboard_dw_map_petition_submission_item($petition,
   $message_item['user_edited'] = '';
   $message_item['created_at'] = springboard_dw_get_submission_timestamp($petition->sid);
   $message_item['updated_at'] = $message_item['created_at'];
-  $message_item['contact_id'] = $petition->contact->uid;
-  $message_item['contact_email'] = $petition->contact->mail;
+  $message_item['contact_id'] = isset($petition->contact->uid) ?
+    $petition->contact->uid : $petition->contact['uid'];
+  $message_item['contact_email'] = isset($petition->contact->mail) ?
+    $petition->contact->mail : $petition->contact['mail'];
   $message_item['submission_id'] = $petition->sid;
 
   $dw_extra_props = array();
@@ -1178,15 +1243,17 @@ function springboard_dw_map_petition_submission_item($petition,
  *   The message array.
  * @param array $full_message
  *   The full message pulled from an api call.
- *
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array
  *   The mapped array ready for an api call.
  */
-function springboard_dw_map_advocacy_message_item($message, $full_message) {
+function springboard_dw_map_advocacy_message_item($message, $full_message,
+                                                  $type = 'realtime') {
 
   $message_item = $message;
   $full_message = json_decode(json_encode($full_message), TRUE);
-
+  $message_item['warehouse_type'] = $type;
   $message_item['message_id'] = $message['message_id'];
   $message_item['action_id'] = $message['action_id'];
   $message_item['group_id'] = $message['group_id'];
@@ -1232,12 +1299,14 @@ function springboard_dw_map_advocacy_message_item($message, $full_message) {
  *
  * @param object $donation
  *   The donation object.
- *
- * @return array
+ * @param bool   $update
+ *   Whether the item is an update operation.
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
+ * @return array The mapped array ready for an api call.
  *   The mapped array ready for an api call.
  */
-function springboard_dw_map_donation_item($donation, $update = FALSE) {
-  // Get the donation object details and prep for warehousing (sb_donation).
+function springboard_dw_map_donation_item($donation, $update = FALSE, $type = 'realtime', $check_submission_data = TRUE) {
   $donation_item = array();
 
   // Flag this queue item for an update.
@@ -1246,9 +1315,11 @@ function springboard_dw_map_donation_item($donation, $update = FALSE) {
   }
 
   $donation_item['queue_type'] = 'donation';
+  $donation_item['warehouse_type'] = $type;
   $donation_item['donation_id'] = $donation->did;
   $donation_item['parent_id'] = isset($donation->master_did) ?
     $donation->master_did : '';
+  $donation_item['type'] = node_type_get_name($donation->node->type);
 
   // Will come later.
   $donation_item['group_id'] = '';
@@ -1266,28 +1337,28 @@ function springboard_dw_map_donation_item($donation, $update = FALSE) {
   $donation_item['quick_submit'] = 0;
   $donation_item['click_submit'] = 0;
 
-  $donation_item['ms'] = $donation->donation['ms'];
-  $donation_item['cid'] = $donation->donation['cid'];
-  $donation_item['first_name'] = $donation->donation['first_name'];
-  $donation_item['last_name'] = $donation->donation['last_name'];
-  $donation_item['email'] = $donation->donation['mail'];
-  $donation_item['address'] = $donation->donation['address'];
-  $donation_item['address_line_2'] = $donation->donation['address_line_2'];
-  $donation_item['city'] = $donation->donation['city'];
-  $donation_item['state'] = $donation->donation['state'];
-  $donation_item['country'] = $donation->donation['country'];
-  $donation_item['zip'] = $donation->donation['zip'];
-  $donation_item['referrer'] = $donation->donation['referrer'];
-  $donation_item['initial_referrer'] = $donation->donation['initial_referrer'];
-  $donation_item['payment_method'] = $donation->donation['payment_method'];
-  $donation_item['recurs_monthly'] = $donation->donation['recurs_monthly'];
-  $donation_item['search_engine'] = $donation->donation['search_engine'];
-  $donation_item['search_string'] = $donation->donation['search_string'];
-  $donation_item['user_agent'] = $donation->donation['user_agent'];
-  $donation_item['device_type'] = $donation->donation['device_type'];
-  $donation_item['device_name'] = $donation->donation['device_name'];
-  $donation_item['device_os'] = $donation->donation['device_os'];
-  $donation_item['device_browser'] = $donation->donation['device_browser'];
+  $donation_item['ms'] = _springboard_dw_donation_get_value($donation, 'ms', $check_submission_data);
+  $donation_item['cid'] = _springboard_dw_donation_get_value($donation, 'cid', $check_submission_data);
+  $donation_item['first_name'] = _springboard_dw_donation_get_first_name($donation);
+  $donation_item['last_name'] = _springboard_dw_donation_get_last_name($donation);
+  $donation_item['email'] = _springboard_dw_donation_get_value($donation, 'mail', $check_submission_data);
+  $donation_item['address'] = _springboard_dw_donation_get_value($donation, 'address', $check_submission_data);
+  $donation_item['address_line_2'] = _springboard_dw_donation_get_value($donation, 'address_line_2', $check_submission_data);
+  $donation_item['city'] = _springboard_dw_donation_get_value($donation, 'city', $check_submission_data);
+  $donation_item['state'] = _springboard_dw_donation_get_value($donation, 'state', $check_submission_data);
+  $donation_item['country'] = _springboard_dw_donation_get_value($donation, 'country', $check_submission_data);
+  $donation_item['zip'] = _springboard_dw_donation_get_value($donation, 'zip', $check_submission_data);
+  $donation_item['referrer'] = _springboard_dw_donation_get_value($donation, 'referrer', $check_submission_data);
+  $donation_item['initial_referrer'] = _springboard_dw_donation_get_value($donation, 'initial_referrer', $check_submission_data);
+  $donation_item['payment_method'] = _springboard_dw_donation_get_value($donation, 'payment_method', $check_submission_data);
+  $donation_item['recurs_monthly'] = _springboard_dw_donation_get_value($donation, 'recurs_monthly', $check_submission_data);
+  $donation_item['search_engine'] = _springboard_dw_donation_get_value($donation, 'search_engine', $check_submission_data);
+  $donation_item['search_string'] = _springboard_dw_donation_get_value($donation, 'search_string', $check_submission_data);
+  $donation_item['user_agent'] = _springboard_dw_donation_get_value($donation, 'user_agent', $check_submission_data);
+  $donation_item['device_type'] = _springboard_dw_donation_get_value($donation, 'device_type', $check_submission_data);
+  $donation_item['device_name'] = _springboard_dw_donation_get_value($donation, 'device_name', $check_submission_data);
+  $donation_item['device_os'] = _springboard_dw_donation_get_value($donation, 'device_os', $check_submission_data);
+  $donation_item['device_browser'] = _springboard_dw_donation_get_value($donation, 'device_browser', $check_submission_data);
   $donation_item['form_id'] = $donation->nid;
   $donation_item['contact_id'] = $donation->uid;
   $donation_item['submission_id'] = $donation->sid;
@@ -1313,13 +1384,14 @@ function springboard_dw_map_donation_item($donation, $update = FALSE) {
    */
   $donation_item['ip_address'] = '';
 
-  $donation_item['created_at'] = date('U');
-  $donation_item['updated_at'] = date('U');
+  // If this is a legacy donation, use created and changed dates. If real-time
+  // submission, use the current datetime.
+  $donation_item['created_at'] = isset($donation->created) ? $donation->created : date('U');
+  $donation_item['updated_at'] = isset($donation->changed) ? $donation->changed : date('U');
 
-  // If this is a future payment use the close date of the sustainer to
-  // persist to the data warehouse as the transaction date
-  $donation_item['transaction_date'] = isset($donation->close_date) ?
-    strtotime($donation->close_date) : date('U');
+  // Get the date of the transaction, which comes from different places depending
+  // on whether it's a processed or pending donation.
+  $donation_item['transaction_date'] = _springboard_dw_get_transaction_date($donation);
 
   // Add the extra props attributes.
   $dw_extra_props = springboard_dw_extract_donation_extra_props($donation, $donation_item);
@@ -1341,8 +1413,11 @@ function springboard_dw_map_donation_item($donation, $update = FALSE) {
 
 /**
  * Map a charge advance item to a donation update.
+ *
  * @param $donation
+ *    The donation object.
  * @return array
+ *    The submission item mapped to API consumable format.
  */
 function springboard_dw_map_donation_sustainer_item($donation) {
   // Get the donation object details and prep for warehousing (sb_donation).
@@ -1363,16 +1438,118 @@ function springboard_dw_map_donation_sustainer_item($donation) {
 }
 
 /**
+ * Getter method for retrieving a donation key that may exist inside
+ * of a donation object in $donation->donation or possibly
+ * $donation->submission_data depending on the timing of the hook
+ * execution call.
+ *
+ * @param           $donation
+ * @param           $key
+ * @param bool|TRUE $check_submission_data
+ * @return mixed
+ */
+function _springboard_dw_donation_get_value($donation, $key, $check_submission_data = TRUE) {
+  if ($check_submission_data) {
+    return isset($donation->submission_data[$key]) ? $donation->submission_data[$key]: $donation->donation[$key];
+  }
+  return $donation->donation[$key];
+}
+
+/**
+ * Getter method for retrieving the first name of a donor.
+ *
+ * A donor's name is stored in three different places. Depending
+ * on the intergrity of the source database it may make sense to
+ * read the data from a specific location.
+ *
+ * @param $donation
+ *   The donation from which to extract the donor's first name.
+ *
+ * @return string
+ */
+function _springboard_dw_donation_get_first_name($donation) {
+  // The best place to retrieve the name value is from the raw submission.
+  if (isset($donation->submission_data['first_name'])) {
+    return $donation->submission_data['first_name'];
+  }
+  // Next best location is on the user object since that is copied wholesale from the submission.
+  if (!empty($donation->user)) {
+    $user_wrapper = entity_metadata_wrapper('user', $donation->user);
+    if (!empty($user_wrapper->sbp_first_name)) {
+      return $user_wrapper->sbp_first_name->value();
+    }
+  }
+  // Finally, If there is no submission or user the order is the last place this information will be found.
+  // Doing this last because commerce parses out first/last names differently.
+  return $donation->donation['first_name'];
+}
+
+/**
+ * Getter method for retrieving the last name of a donor.
+ *
+ * A donor's name is stored in three different places. Depending
+ * on the intergrity of the source database it may make sense to
+ * read the data from a specific location.
+ *
+ * @param $donation
+ *   The donation from which to extract the donor's last name.
+ *
+ * @return string
+ */
+function _springboard_dw_donation_get_last_name($donation) {
+  // The best place to retrieve the name value is from the raw submission.
+  if (isset($donation->submission_data['last_name'])) {
+    return $donation->submission_data['last_name'];
+  }
+
+  // Next best location is on the user object since that is copied wholesale from the submission.
+  if (!empty($donation->user)) {
+    $user_wrapper = entity_metadata_wrapper('user', $donation->user);
+    if (!empty($user_wrapper->sbp_last_name)) {
+      return $user_wrapper->sbp_last_name->value();
+    }
+  }
+
+  // Finally, If there is no submission or user the order is the last place this information will be found.
+  // Doing this last because commerce parses out first/last names differently.
+  return $donation->donation['last_name'];
+}
+
+/**
+ * Returns the transaction date for a given donation.
+ *
+ * @param $donation
+ *
+ * @return int (timestamp)
+ */
+function _springboard_dw_get_transaction_date($donation) {
+  // If the payment has been received, use the date of the payment record as the transaction date.
+  if ($donation->status_charged && !empty($donation->txn_id)) {
+    $payment_transaction = springboard_dw_transaction_get_by_id($donation->txn_id);
+    if (!empty($payment_transaction)) {
+      return $payment_transaction['created'];
+    }
+  }
+
+  // If we have no transaction id try and get the date of the most recent payment transaction.
+  $last_transaction_date = springboard_dw_transaction_date_get_by_order_id($donation->did);
+  if (!empty($last_transaction_date)) {
+    return $last_transaction_date;
+  }
+
+  // Use the close date, which will reflect the date in the future when the donation will be processed.
+  return isset($donation->close_date) ? strtotime($donation->close_date) : date('U');
+}
+
+/**
  * Map the donation object to set status to canceled to an array formatted for an
  * API
  * call.
  *
  * @param object $donation_id
  *   The donation object.
- *
  * @param string $donation_status
  *   The status to update the donation with.
- *
  * @return array The mapped array ready for an api call.
  *   The mapped array ready for an api call.
  */
@@ -1395,22 +1572,22 @@ function springboard_dw_map_donation_update_status($donation_id,
  *
  * @param array $payment
  *    The payment array to populate the record with.
- *
  * @param array $donation
  *    The donation array to associate with the payment.
  * @param array $extra_props
  *    Any extra props that should be mapped to the payment item record.
- *
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array $payment_item
  *    The mapped array ready for an api call.
  */
 function springboard_dw_map_payment_item($payment, $donation, $extra_props =
-array()) {
+array(), $type = 'realtime') {
   // Get the payment object details and prep for warehousing (sb_payment).
   $payment_item = array();
 
   $payment_item["queue_type"] = 'payment';
-
+  $payment_item['warehouse_type'] = $type;
   $payment_item["donation_id"] = $donation['donation_id'];
   $payment_item["group_id"] = '';
   $payment_item["contact_id"] = $payment['uid'];
@@ -1442,7 +1619,6 @@ array()) {
  *    The refund object to associate with the payment.
  * @param array  $extra_props
  *    Any extra props that should be mapped to the payment item record.
- *
  * @return array $payment_item
  *    The mapped array ready for an api call.
  */
@@ -1453,7 +1629,6 @@ function springboard_dw_map_payment_refund_item($payment, $refund,
   $payment_item = array();
 
   $payment_item["queue_type"] = 'payment';
-
   $payment_item["donation_id"] = $refund->did;
   $payment_item["group_id"] = '';
   $payment_item["contact_id"] = $payment['uid'];
@@ -1494,10 +1669,8 @@ function springboard_dw_map_payment_refund_item($payment, $refund,
  *
  * @param integer $donation_id
  *   The donation object id.
- *
  * @param array   $donation_extra_props
  *   The extra props to add to the donation record.
- *
  * @return array The mapped array ready for an api call.
  *   The mapped array ready for an api call.
  */
@@ -1520,7 +1693,6 @@ function springboard_dw_map_donation_update_extra_props($donation_id,
  *
  * @param integer $donation_id
  *   The donation object id.
- *
  * @return array
  *   The mapped array ready for an api call.
  */
@@ -1543,7 +1715,6 @@ function springboard_dw_map_donation_item_update_amount($donation_id,
  *
  * @param object $donation
  *   The donation object.
- *
  * @return array
  *   The mapped array ready for an api call.
  */
@@ -1579,13 +1750,31 @@ function springboard_dw_extract_donation_extra_props($donation, $donation_item) 
     'other_amount',
   ));
 
-  // Extract items in $donation->donation that are not already explicitly
-  // added to $donation_item. Any custom fields that were added to a donation
-  // form will be in the $donation->donation data structure.
+  // Extra props array to add additional donation parameters to.
   $extra_props = array();
-  foreach ($donation->donation as $key => $value) {
-    if (!in_array($key, $field_blacklist) && !array_key_exists($key, $donation_item)) {
-      $extra_props[$key] = $value;
+
+  // Extract items in $donation->donation that are not already explicitly
+  // added to $donation_item. Only extract these extra values if there is no
+  // $donation->submission_data because that data supercedes the
+  // $donation->donation data which is less reliably bolted on from various
+  // fundraiser success hooks.
+  if (!isset($donation->submission_data)) {
+    foreach ($donation->donation as $key => $value) {
+      if (!in_array($key, $field_blacklist) && !array_key_exists($key, $donation_item)) {
+        $extra_props[$key] = $value;
+      }
+    }
+  }
+
+  // Extract items in $donation->submission_data that are not already explicitly
+  // added to $donation_item (if submission_data exists). This $donation->submission_data
+  // can be assumed to be more reliable than $donation->donation therefore we
+  // call this assignment later.
+  if (isset($donation->submission_data)) {
+    foreach ($donation->submission_data as $key => $value) {
+      if (!in_array($key, $field_blacklist) && !array_key_exists($key, $donation_item)) {
+        $extra_props[$key] = $value;
+      }
     }
   }
 
@@ -1601,11 +1790,13 @@ function springboard_dw_extract_donation_extra_props($donation, $donation_item) 
  *   The user data to map.
  * @param bool  $update
  *   Whether this is an update operation.
- *
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array
  *   An array of the contact item.
  */
-function springboard_dw_map_contact_item($contact_id, $user_data = array(), $update = FALSE) {
+function springboard_dw_map_contact_item($contact_id, $user_data = array(),
+                                         $update = FALSE, $type = 'realtime') {
   // If the $user_data parameter is empty
   // we can assume this is a new record we need to insert.
   if (empty($user_data)) {
@@ -1617,6 +1808,7 @@ function springboard_dw_map_contact_item($contact_id, $user_data = array(), $upd
   // Get the user account details and prep for warehousing (sb_contact)
   $contact_item = array();
   $contact_item['queue_type'] = 'contact';
+  $contact_item['warehouse_type'] = $type;
 
   // If user data is being passed to update, flag this queue item for an update.
   if (!empty($user_data) && $update == TRUE) {
@@ -1638,8 +1830,8 @@ function springboard_dw_map_contact_item($contact_id, $user_data = array(), $upd
   $contact_item['zip'] = $user_data['sbp_zip'];
   $contact_item['ms'] = $user_data['sbp_ms'];
   $contact_item['cid'] = $user_data['sbp_cid'];
-  $contact_item['referrer'] = $user_data['sbp_referrer'];
-  $contact_item['initial_referrer'] = $user_data['sbp_initial_referrer'];
+  $contact_item['referrer'] = isset($user_data['sbp_referrer']) ? $user_data['sbp_referrer'] : '';
+  $contact_item['initial_referrer'] = isset($user_data['sbp_initial_referrer']) ? $user_data['sbp_initial_referrer'] : '';
   $contact_item['search_engine'] = $user_data['sbp_search_engine'];
   $contact_item['search_string'] = $user_data['sbp_search_string'];
   $contact_item['user_agent'] = $user_data['sbp_user_agent'];
@@ -1661,7 +1853,6 @@ function springboard_dw_map_contact_item($contact_id, $user_data = array(), $upd
 
   // Add the extra props to the field mapping
   $contact_item['extra_props'] = $dw_extra_props;
-
   return $contact_item;
 }
 
@@ -1678,6 +1869,21 @@ function springboard_dw_extract_contact_extra_props($user, $contact_item) {
   // that should never be exported. The payment_fields array will contain
   // full credit card numbers!
   $field_blacklist = variable_get('springboard_dw_contact_field_blacklist', array(
+    'sbp_first_name', // already explicity mapped
+    'sbp_last_name', // already explicity mapped
+    'sbp_address', // already explicity mapped
+    'sbp_address_line_2', // already explicity mapped
+    'sbp_city', // already explicity mapped
+    'sbp_state', // already explicity mapped
+    'sbp_country', // already explicity mapped
+    'sbp_zip', // already explicity mapped
+    'sbp_ms', // already explicity mapped
+    'sbp_cid', // already explicity mapped
+    'sbp_referrer', // already explicity mapped
+    'sbp_initial_referrer', // already explicity mapped
+    'sbp_search_engine', // already explicity mapped
+    'sbp_search_string', // already explicity mapped
+    'sbp_user_agent', // already explicity mapped
     'status',
     'theme',
     'created',
@@ -1694,7 +1900,7 @@ function springboard_dw_extract_contact_extra_props($user, $contact_item) {
   // and mapped via the user map will be in the $user data structure.
   $extra_props = array();
   foreach ($user as $key => $value) {
-    if (!in_array($key, $field_blacklist) && !array_key_exists($key, $contact_item) && substr($key, 0, 4) != 'sbp_') {
+    if (!in_array($key, $field_blacklist) && !array_key_exists($key, $contact_item)) {
       $extra_props[$key] = $value;
     }
   }
@@ -1755,18 +1961,19 @@ function springboard_dw_extract_form_extra_props($form, $form_item) {
  *   The node object to map.
  * @param string $action_unique_id
  *   The unique id of the action this social action message belongs to.
- *
  * @return array An array of message item details.
  *   An array of message item details.
  */
 function springboard_dw_map_social_action_item($message, $action, $node,
-                                               $action_unique_id) {
+                                               $action_unique_id,
+                                               $type = 'realtime') {
 
   // Get the Advocacy message object id and prep for warehousing (sb_message)
   $message_item = array();
   $message_item['queue_type'] = 'advocacy social action message';
+  $message_item['warehouse_type'] = $type;
 
-  $advocacy_item['unique_id'] = uniqid(); // Actions need a unique_id
+  $message_item['unique_id'] = uniqid(); // Actions need a unique_id
   // to be created in Drupal because their could be multiple messages
   // assigned to a given action
 
@@ -1817,15 +2024,17 @@ function springboard_dw_map_social_action_item($message, $action, $node,
  *   The node object of the form.
  * @param bool   $update
  *   Whether this is an update operation or insert.
- *
+ * @param string $type
+ *   The type of queue processing (I.E realtime or legacy) of the record.
  * @return array The donation object mapped to an array.
  *   The form object mapped to an array.
  */
-function springboard_dw_map_form_item($node, $update = FALSE) {
+function springboard_dw_map_form_item($node, $update = FALSE, $type = 'realtime') {
 
   // Get the user account details and prep for warehousing (sb_contact).
   $form_item = array();
   $form_item['queue_type'] = 'form';
+  $form_item['warehouse_type'] = $type;
 
   // If form data is being passed to update, flag this queue item for an update.
   if ($update == TRUE) {
@@ -1881,18 +2090,12 @@ function springboard_dw_map_form_item($node, $update = FALSE) {
 /**
  * Converts a webform submission array.
  *
- * Converts a webform submission array that is keyed by cid to one
- * keyed by form key.
- *
  * @param object $submission
  *   The submission object to convert to key value pair.
  * @param object $components
  *   The components to map.
- *
  * @return array
  *   An array of submissions data mapped to key value pairs.
- *
- * @internal param $node
  */
 function springboard_dw_convert_submission_to_keyvalue($submission, $components) {
   $key_value_data = array();
@@ -1912,7 +2115,6 @@ function springboard_dw_convert_submission_to_keyvalue($submission, $components)
  * @param object $item
  *   The queue item to process, queue type is inferred by
  *   the queue_type parameter.
- *
  * @return bool
  *   Return value of API call.
  */
@@ -1972,21 +2174,9 @@ function springboard_dw_contact($item) {
   // Make the API call.
   $api_response = springboard_dw_api_call($api_endpoint, $item);
 
-  // Looks like the api response was good.
-  if ($api_response->getStatusCode() == 200) {
-
-    return TRUE;
-  }
-  else {
-    // Log the API error.
-    springboard_dw_api_log_error('Error sending contact API call.',
-      $api_endpoint, $item, json_decode($api_response->getBody()),
-      $api_response->getStatusCode());
-
-    // Respond back with failure to retry in the queue.
-    return FALSE;
-  }
-
+  // Return back TRUE if status code is 200, FALSE IF ANYTHING ELSE
+  return springboard_dw_generate_queue_item_response
+  ($api_response->getStatusCode());
 }
 
 /**
@@ -2206,10 +2396,66 @@ function springboard_dw_line_item($item) {
 /**
  * Respond back with a boolean based on status code matching a 200 success
  * response code.
- * @param $status_code
+ *
+ * @param int $status_code
+ *    The status code to compare when assigning the bool return.
  * @return bool
  */
 function springboard_dw_generate_queue_item_response($status_code) {
   return $status_code == 200 ? TRUE : FALSE;
 }
 
+/**
+ * Helper function to queue a DW csv export request:
+ */
+function _springboard_dw_export_queue_data_export() {
+  if (!isset($_POST) || empty($_POST)) {
+    drupal_json_output(array('status' => 'fail'));
+    return;
+  }
+
+  $data = $_POST['export_params'];
+  unset($data['source_view']);
+  unset($data['items_per_page']);
+  if (isset($data['transaction_date']['min']['date']) && !empty($data['transaction_date']['min']['date'])) {
+    $data['transaction_date']['min'] = $data['transaction_date']['min']['date'];
+  }
+  else {
+    unset($data['transaction_date']['min']);
+  }
+  if (isset($data['transaction_date']['max']['date']) && !empty($data['transaction_date']['max']['date'])) {
+    $data['transaction_date']['max'] = $data['transaction_date']['max']['date'];
+  }
+  else {
+    unset($data['transaction_date']['max']);
+  }
+  if (!isset($data['transaction_date']['max']) && !isset($data['transaction_date']['min'])) {
+    unset($data['transaction_date']);
+  }
+
+  watchdog('springboard_dw', 'CSV export request: ' . json_encode($data));
+
+  if (isset($_POST['recipient'])) {
+    $recipient = $_POST['recipient'];
+  }
+  else {
+    global $user;
+    if (isset($user->mail)) {
+      $recipient = $user->mail;
+    }
+    else {
+      $user = user_load(1);
+      if (isset($user->mail)) {
+        $recipient = $user->mail;
+      }
+    }
+  }
+
+  // Queue the data export job:
+  $success = TRUE;
+  // $success = springboard_dw_export_insert('Warehouse', $data, $recipient);
+
+  // Return status to jQuery:
+
+  drupal_json_output(array('status' => $success ? 'success' : 'fail'));
+}

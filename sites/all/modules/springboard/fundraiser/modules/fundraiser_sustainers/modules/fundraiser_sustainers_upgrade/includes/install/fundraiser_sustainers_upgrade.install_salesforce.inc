@@ -39,7 +39,7 @@ function fundraiser_sustainers_upgrade_webform_fieldmap() {
   $map = entity_create('salesforce_genmap_map', $map);
   $map->nid = -40;
   $map->map_handler = 'webform';
-  $map->salesforce_object_type = 'Sustainers_Upgrade__c';
+  $map->salesforce_object_type = 'Sustainer_Upgrade__c';
   $object_type = '';
   module_load_include('inc', 'salesforce_genmap', 'includes/salesforce_genmap.map');
   $map->salesforce_record_type = $object_type;
@@ -50,7 +50,7 @@ function fundraiser_sustainers_upgrade_webform_fieldmap() {
       'fsu_uid' => 'User_ID__c',
       'fsu_status_flag' => 'Status_Flag__c',
       'fsu_timestamp' => 'Timestamp__c',
-      'fsu_form_id' => 'Form_ID__c',
+      'fsu_nid' => 'Form_ID__c',
       'fsu_url' => 'Form_URL__c',
       'referrer' => 'Referrer__c',
       'initial_referrer' => 'Initial_Referrer__c',
@@ -60,6 +60,10 @@ function fundraiser_sustainers_upgrade_webform_fieldmap() {
       'utm_medium' => 'UTM_medium__c',
       'utm_source' => 'UTM_source__c',
       'utm_term' => 'UTM_term__c',
+    ),
+    'salesforce_node_map' => array(
+      'title' => 'Name',
+      'internal_name' => 'Internal_Name__c',
     ),
   );
   $map->sync_options = array(

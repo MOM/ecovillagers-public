@@ -58,7 +58,7 @@ function braintree_payment_module_implements_alter(&$implementations, $hook) {
  * payment method.
  */
 function braintree_payment_form_node_form_alter(&$form, &$form_state, $form_id) {
-  if (!_braintree_payment_paypal_method_is_option($form['#node'])) {
+  if (!_braintree_payment_paypal_method_is_option($form['#node'], $form)) {
     return;
   }
 
@@ -146,11 +146,17 @@ function braintree_payment_form_webform_components_form_alter(&$form, &$form_sta
  * and the components overview page.
  */
 function _braintree_payment_webform_components_validate($form, &$form_state) {
+  $default_fundraiser_fields = _braintree_payment_default_fundraiser_fields();
   if ($form['#form_id'] == 'webform_component_edit_form') {
+    $is_default = in_array($form_state['values']['form_key'], $default_fundraiser_fields);
     $node = node_load($form['nid']['#value']);
     $billing_cid = webform_get_cid($node, 'billing_information', 0);
     $donor_cid = webform_get_cid($node, 'donor_information', 0);
-    if (isset($form_state['values']['pid']) && ($form_state['values']['pid'] == $billing_cid || $form_state['values']['pid'] == $donor_cid) && isset($form_state['values']['type'])  && $form_state['values']['type'] != 'hidden' && $form_state['values']['form_key'] != 'sbp_phone') {
+    if (isset($form_state['values']['pid']) &&
+        ($form_state['values']['pid'] == $billing_cid || $form_state['values']['pid'] == $donor_cid) &&
+        isset($form_state['values']['type'])  && $form_state['values']['type'] != 'hidden'
+        && $form_state['values']['form_key'] != 'sbp_phone' &&
+        !$is_default) {
       form_set_error($form_state['values']['form_key'], t('The component <em>@key</em> cannot be added to this fieldset when Paypal compact flow is enabled', array('@key' => $form_state['values']['form_key'])));
     }
     return;
@@ -159,7 +165,6 @@ function _braintree_payment_webform_components_validate($form, &$form_state) {
   // Check the component position and type against the default fundraiser
   // fields. If there's a non-hidden field present in either of the default
   // fieldsets, flag it.
-  $default_fundraiser_fields = _braintree_payment_default_fundraiser_fields();
   $billing_cid = webform_get_cid($form['#node'], 'billing_information', 0);
   $billing_children = _braintree_payment_webform_components_find_parent_children($billing_cid, $form_state['values']['components']);
   $donor_cid = webform_get_cid($form['#node'], 'donor_information', 0);
@@ -224,9 +229,13 @@ function braintree_payment_form_webform_client_form_alter(&$form, &$form_state) 
 }
 
 /**
- * Helper function to determine if method ID is apple pay.
+ * Helper function to determine if method ID is paypal.
  */
 function _braintree_is_paypal_payment_method($method) {
+  if (empty($method)) {
+    return FALSE;
+  }
+
   list($method_id, $rule_name) = explode('|', $method);
   return $method_id == BRAINTREE_PAYMENT_PAYPAL_PAYMENT_METHOD_ID;
 }
@@ -241,6 +250,19 @@ function _braintree_payment_paypal_method_is_option($node, $form = NULL) {
   if (isset($node->gateways) && isset($node->gateways['paypal']) && _braintree_is_paypal_payment_method($node->gateways['paypal']['id'])) {
     return TRUE;
   }
+  $set_on_node = !empty($node->gateways['paypal']) && _braintree_is_paypal_payment_method($node->gateways['paypal']['id']);
+  $set_on_form = !empty($form['payment_methods']['gateways']['paypal']['id']);
+  if ($set_on_form) {
+    $set_on_form = _braintree_is_paypal_payment_method($form['payment_methods']['gateways']['paypal']['id']['#default_value']);
+    // If it's not set on the form currently, but can be selected, return TRUE
+    // so that if it is checked the compact flow option will appear.
+    if (!$set_on_form && _braintree_payment_array_key_starts_with(BRAINTREE_PAYMENT_PAYPAL_PAYMENT_METHOD_ID, $form['payment_methods']['gateways']['paypal']['id']['#options'])) {
+      $set_on_form = TRUE;
+    }
+  }
+  if ($set_on_node || $set_on_form) {
+    return TRUE;
+  }
   return FALSE;
 }
 
@@ -250,5 +272,5 @@ function _braintree_payment_paypal_method_is_option($node, $form = NULL) {
  * Check if a given node has the Paypal compact flow enabled.
  */
 function _braintree_payment_paypal_method_is_enabled($node) {
-  return !empty($node->gateways['paypal']['compact']);
+  return !empty($node->gateways['paypal']['status']) && !empty($node->gateways['paypal']['compact']);
 }

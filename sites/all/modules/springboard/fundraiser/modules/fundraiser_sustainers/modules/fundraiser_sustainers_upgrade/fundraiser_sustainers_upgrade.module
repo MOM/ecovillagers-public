@@ -149,7 +149,12 @@ function fundraiser_sustainers_upgrade_springboard_admin_form_page_types_alter(&
  * Add our form here, too.
  */
 function fundraiser_sustainers_upgrade_springboard_views_springboard_dashboard_panes_alter(&$webform_types, &$fundraiser_types) {
-  $webform_types[] = 'sustainers_upgrade_form';
+  $fundraiser_types[] = 'sustainers_upgrade_form';
+  foreach ($webform_types as $key => $type) {
+    if ($type == 'sustainers_upgrade_form') {
+      unset($webform_types[$key]);
+    }
+  }
 }
 
 /**
@@ -803,7 +808,7 @@ function fundraiser_sustainers_upgrade_get_session_payload() {
       $payload['uid'] = $_SESSION['springboard_hmac']['uid'];
       $payload['amount'] = $_SESSION['springboard_hmac']['0'];
       $payload['did'] = $_SESSION['springboard_hmac']['1'];
-      $payload['nid'] = $_SESSION['springboard_hmac']['2'];
+      $payload['nid'] = isset($_SESSION['springboard_hmac']['2']) ? $_SESSION['springboard_hmac']['2'] : NULL;
       $payload['rollback'] = !empty($_SESSION['springboard_hmac']['3']) && $_SESSION['springboard_hmac']['3'] == 'rollback' ? $_SESSION['springboard_hmac']['3'] : NULL;
     }
   }
@@ -841,8 +846,8 @@ function fundraiser_sustainers_upgrade_token_info() {
     'description' => t("Displays a link to undo an upgrade. Can be used on confirmation pages and emails."),
   );
 
-  $tokens['upgrade_amount'] = array(
-    'name' => t("Upgrade amount"),
+  $tokens['upgrade_amount_formatted'] = array(
+    'name' => t("Upgrade amount - formatted"),
     'description' => t("Displays the amount that the sustainer's series will be upgraded to."),
   );
 
@@ -1060,6 +1065,15 @@ function fundraiser_sustainers_upgrade_tokenize_confirmation($status, $confirmat
   return $confirmation_message;
 }
 
+function fundraiser_sustainers_upgrade_email_wrappers_email_body_messages_alter(&$data) {
+  $payload = fundraiser_sustainers_upgrade_get_session_payload();
+  if (!empty($payload)
+    && !empty($data['message']['params']['node']->type)
+    && $data['message']['params']['node']->type == 'sustainers_upgrade_form') {
+    $data['message']['params']['donation'] = fundraiser_donation_get_donation($payload['did']);
+  }
+}
+
 /**
  * Implements hook_process_webform_confirmation().
  *
@@ -1271,13 +1285,12 @@ function fundraiser_sustainers_upgrade_form_sustainers_upgrade_form_node_form_al
  * Add sustainers upgrade create link to Springboard donation form menu.
  */
 function fundraiser_sustainers_upgrade_springboard_admin_admin_menu_items_alter(&$items) {
-  $items['admin/springboard/donation-forms/all']['_children']['node/add/sustainers-upgrade-form'] = array(
-    'link_path' => 'node/add/sustainers-upgrade-form',
-    'link_title' => 'Create a Sustainers Upgrade Form',
+  $items['admin/springboard/donation-forms/all']['_children']['admin/springboard/donation-forms/sustainers_upgrade_form'] = array(
+    'link_path' => 'admin/springboard/donation-forms/sustainers_upgrade_form',
+    'link_title' => 'Sustainer Upgrade Forms',
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 1,
     'access callback' => 'user_access',
     'access arguments' => array(
       'create sustainers_upgrade_form content',
@@ -1285,6 +1298,14 @@ function fundraiser_sustainers_upgrade_springboard_admin_admin_menu_items_alter(
   );
 }
 
+/**
+ * Implements springboard_admin_enabled_form_types_alter().
+ */
+function fundraiser_sustainers_upgrade_springboard_admin_enabled_form_types_alter(&$sb_types) {
+  // Add this type to the list of forms.
+  $type = node_type_get_type('sustainers_upgrade_form');
+  $sb_types[$type->type] = $type->name;
+}
 
 /**
  * Implements hook_TAG_query_alter().
@@ -1334,4 +1355,32 @@ function fundraiser_sustainers_upgrade_node_access($node, $op, $account) {
   }
   // Returning nothing from this function would have the same effect.
   return NODE_ACCESS_IGNORE;
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_field_info_alter().
+ *
+ * Add internal name to salesforce configuration options on upgrade
+ * forms.
+ */
+function fundraiser_sustainers_upgrade_salesforce_genmap_map_field_info_alter(&$fields, $node, $module) {
+  if ($module == 'webform'
+    && isset($node->field_sustainers_upgrade_name)
+    && !isset($fields['salesforce_node_map']['#fields']['internal_name'])) {
+    $fields['salesforce_node_map']['#fields']['internal_name'] = 'Internal Name';
+  }
+}
+
+/**
+ * Implements hook_salesforce_genmap_map_fields_alter().
+ *
+ * Add internal name to salesforce configuration options on upgrade forms
+ * forms.
+ */
+function fundraiser_sustainers_upgrade_salesforce_genmap_map_fields_alter(&$fields, $context) {
+  if ($context['module'] == 'webform'
+    && isset($context['node']->field_sustainers_upgrade_name)
+    && isset($context['map']->field_map['salesforce_node_map']['internal_name'])) {
+    $fields[$context['map']->field_map['salesforce_node_map']['internal_name']] = $context['node']->field_sustainers_upgrade_name[$context['node']->language][0]['value'];
+  }
 }

@@ -1,5 +1,8 @@
 ;(function($) {
   var error = function() {
+    var console = {};
+    console.log = function() {};
+    console.error = function() {};
     return !!console && console.error.apply(this, arguments);
   };
 

@@ -166,6 +166,15 @@ function salesforce_genmap_permission() {
 }
 
 /**
+ * Implements hook_module_implements_alter().
+ */
+function salesforce_genmap_module_implements_alter(&$implementations, $hook) {
+  if ($hook == 'entity_load' && isset($implementations['salesforce_mapping'])) {
+    unset($implementations['salesforce_mapping']);
+  }
+}
+
+/**
  * Implements hook_node_delete().
  */
 function salesforce_genmap_node_delete($node) {

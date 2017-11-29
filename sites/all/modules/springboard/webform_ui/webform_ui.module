@@ -174,10 +174,6 @@ function webform_ui_form_webform_client_form_alter(&$form, &$form_state) {
  * Deny access to a couple paths if settings are enabled.
  */
 function webform_ui_menu_alter(&$items) {
-  if (variable_get('webform_ui_use_alternate_submission', FALSE)) {
-    $items['node/%webform_menu/webform-results']['page callback'] = 'webform_ui_submission_results';
-    $items['node/%webform_menu/webform-results']['page arguments'] = array(1);
-  }
   if (variable_get('webform_ui_hide_clear_all', FALSE)) {
     $items['node/%webform_menu/webform-results/clear']['access callback'] = 'webform_ui_submission_access';
   }

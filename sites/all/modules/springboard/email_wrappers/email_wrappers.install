@@ -47,8 +47,9 @@ function email_wrappers_uninstall() {
  * Implements hook_schema().
  */
 function email_wrappers_schema() {
+  $t = get_t();
   $schema['email_wrappers_webform'] = array(
-    'description' => t('Stores data for donation_form nodes.'),
+    'description' => $t('Stores data for donation_form nodes.'),
     'fields' => array(
       'nid' => array(
         'description' => 'node id.',
@@ -63,30 +64,32 @@ function email_wrappers_schema() {
         'not null' => TRUE,
       ),
       'tid' => array(
-        'description' => t('template node id.'),
+        'description' => $t('template node id.'),
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
       ),
       'html_message' => array(
-        'description' => t('HTML version of the email message.'),
+        'description' => $t('HTML version of the email message.'),
         'type' => 'text',
+        'size' => 'medium',
       ),
       'html_message_format' => array(
-        'description' => t('Input format'),
+        'description' => $t('Input format'),
         'type' => 'int',
         'unsigned' => TRUE,
       ),
       'text_message' => array(
-        'description' => t('Text version of the email message.'),
+        'description' => $t('Text version of the email message.'),
         'type' => 'text',
+        'size' => 'medium',
       ),
       'bcc_email' => array(
-        'description' => t('BCC addresses'),
+        'description' => $t('BCC addresses'),
         'type' => 'text',
       ),
       'extra' => array(
-        'description' => t('Extra settings defined by other modules.'),
+        'description' => $t('Extra settings defined by other modules.'),
         'type' => 'text',
       ),
     ),
@@ -97,7 +100,7 @@ function email_wrappers_schema() {
   );
 
   $schema['email_wrappers'] = array(
-    'description' => t('Stores data for donation_form nodes.'),
+    'description' => $t('Stores data for donation_form nodes.'),
     'fields' => array(
       'mid' => array(
         'description' => 'mail id.',
@@ -145,21 +148,23 @@ function email_wrappers_schema() {
         'not null' => TRUE,
       ),
       'html_message' => array(
-        'description' => t('HTML version of the email message.'),
+        'description' => $t('HTML version of the email message.'),
         'type' => 'text',
+        'size' => 'medium',
       ),
       'html_message_format' => array(
-        'description' => t('Input format'),
+        'description' => $t('Input format'),
         'type' => 'varchar',
         'length' => 50,
         'not null' => TRUE,
       ),
       'text_message' => array(
-        'description' => t('Text version of the email message.'),
+        'description' => $t('Text version of the email message.'),
         'type' => 'text',
+        'size' => 'medium',
       ),
       'extra' => array(
-        'description' => t('Extra settings defined by other modules.'),
+        'description' => $t('Extra settings defined by other modules.'),
         'type' => 'text',
       ),
     ),
@@ -172,164 +177,66 @@ function email_wrappers_schema() {
 }
 
 /**
- * Implements hook_update().
+ * Remove the email wrapper reply-to field.
  */
-function email_wrappers_update_7001() {
-  require_once DRUPAL_ROOT . "/sites/all/modules/webform/includes/webform.emails.inc";
-  if (!function_exists('webform_email_insert')) {
-    $ret[] = 'Unable to locate webform module';
-    return $ret;
+function email_wrappers_update_7004() {
+  $field = field_info_instance('node', 'email_wrapper_reply_email', 'email_wrapper');
+  if (!empty($field)) {
+    field_delete_instance($field);
   }
-  $ret = array();
-  // If email_confirmations.module was installed prior to migration,
-  // if not we bail.
-  $ec_exists = db_table_exists('fundraiser_confirmations');
-  if (!$ec_exists) {
-    $ret[] = 'email confirmation not found';
-    return $ret;
+  $field_base = field_info_field('email_wrapper_reply_email');
+  if (!empty($field_base)) {
+    field_delete_field('email_wrapper_reply_email');
   }
-  $ret[] = 'email confirmation found, migrating';
-
-  // get nodes
-  $results = db_query('
-    SELECT
-      c.nid,
-      c.field_confirmation_from_email_email as from_mail,
-      c.field_confirmation_from_name_value as from_name,
-      cf.field_confirmation_bcc_email as bcc_email,
-      nr.body_value as html_template,
-      nr.body_format as html_template_format,
-      c.field_confirmation_html_message_value as html_message,
-      c.field_confirmation_html_message_format as html_message_format,
-      c.field_confirmation_subject_value as subject,
-      c.field_confirmation_text_value as text_template,
-      c.field_confirmation_text_message_value as text_message
-    FROM {content_type_confirmation_template} c
-    INNER JOIN {field_revision_body} nr
-      ON nr.entity_id = c.nid
-    LEFT JOIN {content_field_confirmation_bcc} cf
-      ON cf.nid = c.nid
-  ');
-  while ($confirmation = $results->fetchAssoc()) {
-    $nid = $confirmation['nid'];
-    // populate field tables.
-    // from email
-    _email_wrappers_update_field_value('email_wrapper_from_email', $nid, $confirmation['from_mail']);
-    _email_wrappers_update_field_value('email_wrapper_reply_email', $nid, $confirmation['from_mail']);
-    // reply to email
-    // from name
-    _email_wrappers_update_field_value('email_wrapper_from_name', $nid, $confirmation['from_name']);
-    // bcc
-    _email_wrappers_update_field_value('email_wrapper_bcc_email', $nid, $confirmation['bcc_email']);
-    // subject email_wrapper_subject
-    _email_wrappers_update_field_value('email_wrapper_subject', $nid, $confirmation['subject']);
-    // html template email_wrapper_html_template
-    _email_wrappers_update_field_value('email_wrapper_html_template', $nid, $confirmation['html_template'], 0, $confirmation['html_template_format']);
-    // html message email_wrapper_html_message
-    _email_wrappers_update_field_value('email_wrapper_html_message', $nid, $confirmation['html_message'], 0, $confirmation['html_message_format']);
-    // text template email_wrapper_text_template
-    _email_wrappers_update_field_value('email_wrapper_text_template', $nid, $confirmation['text_template']);
-    // text message email_wrapper_text_message
-    _email_wrappers_update_field_value('email_wrapper_text_message', $nid, $confirmation['text_message']);
-
-    // change node type in {node}
-    db_query("UPDATE {node} SET type = :type WHERE nid = :nid", array(':type' => 'email_wrapper', ':nid' => $nid));
-  }
-
-
-  // copy data from {fundraiser_confirmations} to {email_wrappers}.
-  $results = db_select('fundraiser_confirmations', 'f')
-    ->fields('f', array(
-    'nid',
-    'tid',
-    'subject',
-    'from_name',
-    'reply_to_email',
-    'bcc_email',
-    'html_message',
-    'html_message_format',
-    'text_message',
-  ))
-    ->execute();
-
-  while ($confirmation = $results->fetchAssoc()) {
-    // get email component cid for the webform in question
-    $nid = $confirmation['nid'];
-    $component_cid = db_query("SELECT cid FROM {webform_component} WHERE nid = :nid AND form_key IN (:keys)", array(':nid' => $nid, ':keys' => array('mail', 'email')))->fetchColumn();
-    // insert into {webform_emails}, capture eid
-    $email = array(
-      'nid' => $confirmation['nid'],
-      'eid' => '',
-      'email' => $component_cid,
-      'subject' => $confirmation['subject'],
-      'from_name' => $confirmation['from_name'],
-      'from_address' => $confirmation['reply_to_email'],
-      'template' => '',
-      'excluded_components' => '',
-      'html' => 0,
-      'attachments' => 0,
-    );
-    $eid = webform_email_insert($email);
-    $eid = $eid ? $eid : 0;
-    // insert into {email_wrappers_webform}
-    db_insert('email_wrappers_webform')
-      ->fields(array(
-      'nid' => $confirmation['nid'],
-      'eid' => $eid,
-      'tid' => $confirmation['tid'],
-      'html_message' => $confirmation['html_message'],
-      'html_message_format' => $confirmation['html_message_format'],
-      'text_message' => $confirmation['text_message'],
-      'bcc_email' => $confirmation['bcc_email'],
-    ))
-      ->execute();
-  }
-
-  // Move settings data from variable emaiL_confirmation_og_filter to
-  // email_wrapper_og_filter.
-  $og_filter = variable_get('email_confirmation_og_filter');
-  variable_set('email_wrapper_og_filter', $og_filter);
-  variable_del('email_confirmation_og_filter');
-
-  return $ret;
-
-  // TODO: delete original email confirmation tables.
 }
 
 /**
- * Unpublish existing nodes.
+ * Change length of html_message field to mediumtext.
  */
-function email_wrappers_update_7002() {
-  variable_set('node_options_email_wrapper', array());
-  $results = db_select('node', 'n')
-  ->fields('n', array('nid'))
-  ->condition('type', 'email_wrapper')
-  ->execute();
-  while ($nid = $results->fetchField()) {
-    $node = node_load($nid);
-    $node->status = 0;
-    $node->promote = 0;
-    node_save($node);
-  }
-  return array();
+function email_wrappers_update_7005() {
+  db_change_field('email_wrappers', 'html_message', 'html_message',
+    array(
+      'type' => 'text',
+      'size' => 'medium',
+      'description' => 'HTML version of the email message.',
+    )
+  );
+  db_change_field('email_wrappers_webform', 'html_message', 'html_message',
+    array(
+      'type' => 'text',
+      'size' => 'medium',
+      'description' => 'HTML version of the email message.',
+    )
+  );
 }
 
 /**
- * Add indexes to tables.
+ * Change length of text_message field to mediumtext.
  */
-function email_wrappers_update_7003() {
-  db_add_index('email_wrappers_webform', 'nid', array('nid'));
-  db_add_index('email_wrappers', 'module_delta', array('module', 'delta'));
-
-  return t('Added index to {email_wrappers_webform} and {email_wrappers} tables.');
+function email_wrappers_update_7006() {
+  db_change_field('email_wrappers', 'text_message', 'text_message',
+    array(
+      'type' => 'text',
+      'size' => 'medium',
+      'description' => 'Text version of the email message',
+    )
+  );
+  db_change_field('email_wrappers_webform', 'text_message', 'text_message',
+    array(
+      'type' => 'text',
+      'size' => 'medium',
+      'description' => 'Text version of the email message',
+    )
+  );
 }
 
 /**
- * Create required fields and associate them with the "Email Template" content type.
+ * Create required fields and associate them with the "Email Template"
+ * content type.
  */
 function _email_wrappers_create_fields() {
   $t = get_t();
-  // implement node type.
+  // Implement node type.
   if (!in_array('email_wrapper', node_type_get_names())) {
     $type = array(
       'type' => 'email_wrapper',
@@ -389,26 +296,6 @@ function _email_wrappers_create_fields() {
         'widget' => array(
           'type' => 'text_textfield',
           'weight' => 2,
-          'settings' => array(),
-        ),
-      ),
-    ),
-    'reply_to_email' => array(
-      'field_name' => 'email_wrapper_reply_email',
-      'type' => 'text',
-      'cardinality' => 1,
-      'settings' => array(),
-      'entity_types' => array('node'),
-      '_instance' => array(
-        'field_name' => 'email_wrapper_reply_email',
-        'entity_type' => 'node',
-        'bundle' => 'email_wrapper',
-        'required' => TRUE,
-        'label' => st('Reply To Email'),
-        'description' => st('The email address to display in the "Reply To:" portion of the email.'),
-        'widget' => array(
-          'type' => 'text_textfield',
-          'weight' => 3,
           'settings' => array(),
         ),
       ),
@@ -549,7 +436,6 @@ function _email_wrappers_delete_fields() {
   $fields = array(
     'email_wrapper_from_name',
     'email_wrapper_from_email',
-    'email_wrapper_reply_email',
     'email_wrapper_bcc_email',
     'email_wrapper_subject',
     'email_wrapper_html_template',
@@ -557,9 +443,13 @@ function _email_wrappers_delete_fields() {
   );
   foreach ($fields as $field_name) {
     $field = field_info_instance('node', $field_name, 'email_wrapper');
-    field_delete_instance($field);
-    $field = field_info_field($field_name);
-    field_delete_field($field_name);
+    if (!empty($field)) {
+      field_delete_instance($field);
+    }
+    $field_base = field_info_field($field_name);
+    if (!empty($field_base)) {
+      field_delete_field($field_name);
+    }
   }
   drupal_set_message('Email Template fields deleted.');
 }

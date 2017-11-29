@@ -15,7 +15,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $view->description = '';
   $view->tag = 'default';
   $view->base_table = 'node';
-  $view->human_name = 'Peer to peer Personal campaigns admin';
+  $view->human_name = 'Peer to Peer Personal campaigns admin';
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
@@ -42,10 +42,10 @@ function springboard_p2p_personal_campaign_views_default_views() {
     'field_p2p_personal_campaign_goal' => 'field_p2p_personal_campaign_goal',
     'field_p2p_campaign_progress_1' => 'field_p2p_campaign_progress_1',
     'field_p2p_personal_submit_goal' => 'field_p2p_personal_submit_goal',
+    'clone_node' => 'clone_node',
     'edit_node' => 'edit_node',
-    'delete_node' => 'edit_node',
-    'clone_node' => 'edit_node',
-    'view_node' => 'edit_node',
+    'view_node' => 'view_node',
+    'ctools_dropdown' => 'ctools_dropdown',
   );
   $handler->display->display_options['style_options']['default'] = 'field_p2p_campaign_progress';
   $handler->display->display_options['style_options']['info'] = array(
@@ -98,22 +98,22 @@ function springboard_p2p_personal_campaign_views_default_views() {
       'separator' => '',
       'empty_column' => 0,
     ),
-    'edit_node' => array(
-      'align' => '',
-      'separator' => ' | ',
-      'empty_column' => 0,
-    ),
-    'delete_node' => array(
-      'align' => '',
-      'separator' => '',
-      'empty_column' => 0,
-    ),
     'clone_node' => array(
       'align' => '',
       'separator' => '',
       'empty_column' => 0,
     ),
+    'edit_node' => array(
+      'align' => '',
+      'separator' => '',
+      'empty_column' => 0,
+    ),
     'view_node' => array(
+      'align' => '',
+      'separator' => '',
+      'empty_column' => 0,
+    ),
+    'ctools_dropdown' => array(
       'align' => '',
       'separator' => '',
       'empty_column' => 0,
@@ -177,19 +177,39 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $handler->display->display_options['fields']['field_p2p_personal_submit_goal']['id'] = 'field_p2p_personal_submit_goal';
   $handler->display->display_options['fields']['field_p2p_personal_submit_goal']['table'] = 'field_data_field_p2p_personal_submit_goal';
   $handler->display->display_options['fields']['field_p2p_personal_submit_goal']['field'] = 'field_p2p_personal_submit_goal';
-  /* Field: Content: Edit link */
-  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
-  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['label'] = 'Action';
   /* Field: Content: Clone link */
   $handler->display->display_options['fields']['clone_node']['id'] = 'clone_node';
   $handler->display->display_options['fields']['clone_node']['table'] = 'node';
   $handler->display->display_options['fields']['clone_node']['field'] = 'clone_node';
+  $handler->display->display_options['fields']['clone_node']['exclude'] = TRUE;
+  /* Field: Content: Edit link */
+  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
+  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['label'] = 'Edit';
+  $handler->display->display_options['fields']['edit_node']['exclude'] = TRUE;
   /* Field: Content: Link */
   $handler->display->display_options['fields']['view_node']['id'] = 'view_node';
   $handler->display->display_options['fields']['view_node']['table'] = 'views_entity_node';
   $handler->display->display_options['fields']['view_node']['field'] = 'view_node';
+  $handler->display->display_options['fields']['view_node']['exclude'] = TRUE;
+  /* Field: Springboard Views: Ctools Dropdown */
+  $handler->display->display_options['fields']['ctools_dropdown']['id'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['table'] = 'springboard_views__global';
+  $handler->display->display_options['fields']['ctools_dropdown']['field'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['label'] = 'Action';
+  $handler->display->display_options['fields']['ctools_dropdown']['fields'] = array(
+    'clone_node' => 'clone_node',
+    'edit_node' => 'edit_node',
+    'view_node' => 'view_node',
+    'title' => 0,
+    'title_1' => 0,
+    'title_2' => 0,
+    'field_p2p_campaign_progress' => 0,
+    'field_p2p_personal_campaign_goal' => 0,
+    'field_p2p_campaign_progress_1' => 0,
+    'field_p2p_personal_submit_goal' => 0,
+  );
   /* Sort criterion: Content: Progress (field_p2p_campaign_progress:amount) */
   $handler->display->display_options['sorts']['field_p2p_campaign_progress_amount']['id'] = 'field_p2p_campaign_progress_amount';
   $handler->display->display_options['sorts']['field_p2p_campaign_progress_amount']['table'] = 'field_data_field_p2p_campaign_progress';
@@ -270,56 +290,6 @@ function springboard_p2p_personal_campaign_views_default_views() {
       'override_label' => 0,
       'label' => '',
     ),
-    'action::views_bulk_operations_script_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_make_sticky_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_make_unsticky_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::views_bulk_operations_modify_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-      'settings' => array(
-        'show_all_tokens' => 1,
-        'display_values' => array(
-          '_all_' => '_all_',
-        ),
-      ),
-    ),
-    'action::views_bulk_operations_argument_selector_action' => array(
-      'selected' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-      'settings' => array(
-        'url' => '',
-      ),
-    ),
-    'action::node_promote_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
     'action::node_publish_action' => array(
       'selected' => 1,
       'postpone_processing' => 0,
@@ -327,57 +297,8 @@ function springboard_p2p_personal_campaign_views_default_views() {
       'override_label' => 0,
       'label' => '',
     ),
-    'action::node_unpromote_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_save_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::system_send_email_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::panelizer_set_status_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::_fundraiser_gateway_switch_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
     'action::node_unpublish_action' => array(
       'selected' => 1,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_unpublish_by_keyword_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::pathauto_node_update_action' => array(
-      'selected' => 0,
       'postpone_processing' => 0,
       'skip_confirmation' => 0,
       'override_label' => 0,
@@ -431,19 +352,40 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $handler->display->display_options['fields']['field_p2p_personal_submit_goal']['id'] = 'field_p2p_personal_submit_goal';
   $handler->display->display_options['fields']['field_p2p_personal_submit_goal']['table'] = 'field_data_field_p2p_personal_submit_goal';
   $handler->display->display_options['fields']['field_p2p_personal_submit_goal']['field'] = 'field_p2p_personal_submit_goal';
-  /* Field: Content: Edit link */
-  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
-  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['label'] = 'Action';
   /* Field: Content: Clone link */
   $handler->display->display_options['fields']['clone_node']['id'] = 'clone_node';
   $handler->display->display_options['fields']['clone_node']['table'] = 'node';
   $handler->display->display_options['fields']['clone_node']['field'] = 'clone_node';
+  $handler->display->display_options['fields']['clone_node']['exclude'] = TRUE;
+  /* Field: Content: Edit link */
+  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
+  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['label'] = 'Edit';
+  $handler->display->display_options['fields']['edit_node']['exclude'] = TRUE;
   /* Field: Content: Link */
   $handler->display->display_options['fields']['view_node']['id'] = 'view_node';
   $handler->display->display_options['fields']['view_node']['table'] = 'views_entity_node';
   $handler->display->display_options['fields']['view_node']['field'] = 'view_node';
+  $handler->display->display_options['fields']['view_node']['exclude'] = TRUE;
+  /* Field: Springboard Views: Ctools Dropdown */
+  $handler->display->display_options['fields']['ctools_dropdown']['id'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['table'] = 'springboard_views__global';
+  $handler->display->display_options['fields']['ctools_dropdown']['field'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['label'] = 'Action';
+  $handler->display->display_options['fields']['ctools_dropdown']['fields'] = array(
+    'clone_node' => 'clone_node',
+    'edit_node' => 'edit_node',
+    'view_node' => 'view_node',
+    'views_bulk_operations' => 0,
+    'title' => 0,
+    'title_1' => 0,
+    'title_2' => 0,
+    'field_p2p_campaign_progress' => 0,
+    'field_p2p_personal_campaign_goal' => 0,
+    'field_p2p_campaign_progress_1' => 0,
+    'field_p2p_personal_submit_goal' => 0,
+  );
   $handler->display->display_options['defaults']['filter_groups'] = FALSE;
   $handler->display->display_options['defaults']['filters'] = FALSE;
   /* Filter criterion: Content: Published */
@@ -535,7 +477,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $view->description = '';
   $view->tag = 'default';
   $view->base_table = 'node';
-  $view->human_name = 'Peer to peer Personal campaigns by campaign';
+  $view->human_name = 'Peer to Peer Personal campaigns by campaign';
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
@@ -606,7 +548,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $view->description = '';
   $view->tag = 'default';
   $view->base_table = 'node';
-  $view->human_name = 'Peer to peer Personal campaigns by campaigner';
+  $view->human_name = 'Peer to Peer Personal campaigns by campaigner';
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
@@ -798,7 +740,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $view->description = '';
   $view->tag = 'default';
   $view->base_table = 'node';
-  $view->human_name = ' Peer to peer Personal campaigns by category';
+  $view->human_name = ' Peer to Peer Personal campaigns by category';
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
@@ -875,7 +817,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $view->description = 'The suggested donation for a user on a p2p personal campaign page';
   $view->tag = 'default';
   $view->base_table = 'node';
-  $view->human_name = 'P2P Suggested Donation';
+  $view->human_name = 'Peer to Peer Suggested Donation';
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
@@ -970,7 +912,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $handler->display->display_options['filters']['status']['expose']['operator'] = FALSE;
 
   /* Display: P2P Personal Suggested */
-  $handler = $view->new_display('panel_pane', 'P2P Personal Suggested', 'panel_pane_1');
+  $handler = $view->new_display('panel_pane', 'Peer to Peer Personal Suggested', 'panel_pane_1');
   $handler->display->display_options['defaults']['fields'] = FALSE;
   /* Field: Content: Suggested Donation Amount */
   $handler->display->display_options['fields']['field_p2p_suggested_donation_amt']['id'] = 'field_p2p_suggested_donation_amt';
@@ -991,11 +933,11 @@ function springboard_p2p_personal_campaign_views_default_views() {
     'scale' => '2',
     'prefix_suffix' => 1,
   );
-  $handler->display->display_options['pane_category']['name'] = 'Springboard P2P';
+  $handler->display->display_options['pane_category']['name'] = 'Springboard Peer to Peer';
   $handler->display->display_options['pane_category']['weight'] = '0';
 
   /* Display: P2P Campaign Suggested */
-  $handler = $view->new_display('panel_pane', 'P2P Campaign Suggested', 'panel_pane_2');
+  $handler = $view->new_display('panel_pane', 'Peer to Peer Campaign Suggested', 'panel_pane_2');
   $handler->display->display_options['defaults']['fields'] = FALSE;
   /* Field: Content: Suggested Donation Amount */
   $handler->display->display_options['fields']['field_p2p_suggested_donation']['id'] = 'field_p2p_suggested_donation';
@@ -1026,7 +968,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $handler->display->display_options['filters']['status']['value'] = 1;
   $handler->display->display_options['filters']['status']['group'] = 1;
   $handler->display->display_options['filters']['status']['expose']['operator'] = FALSE;
-  $handler->display->display_options['pane_category']['name'] = 'Springboard P2P';
+  $handler->display->display_options['pane_category']['name'] = 'Springboard Peer to Peer';
   $handler->display->display_options['pane_category']['weight'] = '0';
   $export['p2p_suggested_donation'] = $view;
 
@@ -1035,7 +977,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $view->description = '';
   $view->tag = 'default';
   $view->base_table = 'node';
-  $view->human_name = 'Peer to peer Top Personal campaigns by category';
+  $view->human_name = 'Peer to Peer Top Personal campaigns by category';
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
@@ -1164,7 +1106,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $handler->display->display_options['pager']['options']['items_per_page'] = '4';
   $handler->display->display_options['pager']['options']['offset'] = '0';
   $handler->display->display_options['pager']['options']['id'] = '0';
-  $handler->display->display_options['pane_category']['name'] = 'Springboard P2P';
+  $handler->display->display_options['pane_category']['name'] = 'Springboard Peer to Peer';
   $handler->display->display_options['pane_category']['weight'] = '0';
 
   /* Display: Campaign contextual Attachment */
@@ -1238,7 +1180,7 @@ function springboard_p2p_personal_campaign_views_default_views() {
   $handler->display->display_options['pager']['options']['offset'] = '0';
   $handler->display->display_options['pager']['options']['id'] = '0';
   $handler->display->display_options['defaults']['arguments'] = FALSE;
-  $handler->display->display_options['pane_category']['name'] = 'Springboard P2P';
+  $handler->display->display_options['pane_category']['name'] = 'Springboard Peer to Peer';
   $handler->display->display_options['pane_category']['weight'] = '0';
 
   /* Display: Landing Attachment */

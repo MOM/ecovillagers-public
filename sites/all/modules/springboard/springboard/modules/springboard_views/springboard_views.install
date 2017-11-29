@@ -121,3 +121,31 @@ function springboard_views_create_aggregator_feed() {
 
   aggregator_save_feed($feed);
 }
+
+
+/**
+ * Enable the node expire module.
+ */
+function springboard_views_update_7001() {
+  if (!module_exists('node_expire')) {
+    module_enable(array('node_expire'));
+  }
+}
+
+/**
+ * Enable springboard_taxonomy dependency.
+ */
+function springboard_views_update_7002() {
+  if (!module_exists('springboard_taxonomy')) {
+    module_enable(array('springboard_taxonomy'));
+  }
+}
+
+/**
+ * Enable the node expire module.
+ */
+function springboard_views_update_7003() {
+  if (!module_exists('springboard_node_expire')) {
+    module_enable(array('springboard_node_expire'));
+  }
+}

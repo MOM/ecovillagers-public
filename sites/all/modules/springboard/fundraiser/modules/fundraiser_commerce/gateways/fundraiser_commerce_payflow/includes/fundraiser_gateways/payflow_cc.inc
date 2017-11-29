@@ -31,6 +31,7 @@ function fundraiser_commerce_payflow_cc_gateway_info($method_instance) {
   if ($method_instance['settings']['recurring-billing'] === 'recurring-billing-profile') {
     $info['allow_recurring'] = array('credit');
     $info['offsite_recurring'] = array('credit');
+    $info['offsite_recurring_external'] = array('credit');
   }
   elseif ($method_instance['settings']['recurring-billing'] === 'pnref-token') {
     $info['allow_recurring'] = array('credit');

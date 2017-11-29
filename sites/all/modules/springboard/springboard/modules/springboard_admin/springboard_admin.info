@@ -8,3 +8,4 @@ dependencies[] = menu
 dependencies[] = springboard
 
 files[] = springboard_admin.menu.inc
+files[] = views/springboard_admin_views_handler_area_empty_content_type_result.inc

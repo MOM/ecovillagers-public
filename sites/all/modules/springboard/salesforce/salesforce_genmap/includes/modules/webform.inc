@@ -331,6 +331,13 @@ function salesforce_genmap_webform_submission_delete($node, $submission) {
 }
 
 /**
+ * Implements hook_webform_user_assign_submission().
+ */
+function salesforce_genmap_webform_user_assign_submission($node, $submission) {
+  salesforce_genmap_send_object_to_queue('webform', 'update', $node, $submission->sid, $submission, $node->nid);
+}
+
+/**
  * Implements hook_entity_update().
  */
 function webform_entity_update($entity, $type) {

@@ -1,0 +1,15 @@
+name = "Springboard Export"
+description = "Add support for queuing and download of view-based, filterable CSV data exports."
+package = "Jackson River Springboard"
+core = 7.x
+version = 7.x-4.x
+
+dependencies[] = "views"
+dependencies[] = "date_api"
+dependencies[] = "date_popup"
+dependencies[] = "date_views"
+dependencies[] = "views_bulk_operations"
+dependencies[] = "views_watchdog"
+dependencies[] = "springboard_dw"
+
+files[] = springboard_export.drush.inc

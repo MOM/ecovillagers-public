@@ -1,0 +1,5 @@
+name = Remote Market Source
+description = Supports the Remote Market Source Transfer application.
+core = 7.x
+package = Jackson River Springboard
+dependencies[] = market_source

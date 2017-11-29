@@ -13,7 +13,6 @@
 </header>
 
 </div><!--// header-wrapper-->
-
 <div id="page-title-wrapper">
   <div class="page-title-inner clearfix container">
     <div class="row-fluid">
@@ -25,9 +24,9 @@
         <?php print render($title_suffix); ?>
       </div>
 
-      <?php if (isset($is_loggedin) && (isset($sb_dashboard))): ?>
+      <?php if (isset($is_loggedin)): ?>
       <div id="user-welcome" class="span4">
-          <h2><?php print t('Welcome back,'); ?> <a href="<?php print $user_id; ?>"><?php print $the_user; ?>.</a></h2>
+          <h2><?php print t('Welcome back,'); ?> <a href="<?php print $user_id; ?>"><?php print $the_user; ?></a> | <?php echo l('Logout', 'user/logout'); ?></a></h2>
       </div>
       <?php endif; ?>
 

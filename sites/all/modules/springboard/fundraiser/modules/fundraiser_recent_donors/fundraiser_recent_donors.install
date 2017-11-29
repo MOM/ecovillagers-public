@@ -34,6 +34,62 @@ function fundraiser_recent_donors_schema() {
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE),
+      'first_name' => array(
+        'description' => 'Donor first name.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'last_name' => array(
+        'description' => 'Donor last name.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'mail' => array(
+        'description' => 'Donor email.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'zip' => array(
+        'description' => 'Donor zip code.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'city' => array(
+        'description' => 'Donor city.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'state' => array(
+        'description' => 'Donor state abbreviated.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'state_full' => array(
+        'description' => 'Donor state.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'amount' => array(
+        'description' => 'Amount of donation.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
     ),
     'primary key' => array('did'),
   );
@@ -74,4 +130,103 @@ function fundraiser_recent_donors_enable() {
     ->condition('type', 'module')
     ->condition('name', 'fundraiser_recent_donors')
     ->execute();
+}
+
+/**
+ * Add donor info to opt in table.
+ */
+function fundraiser_recent_donors_update_7001() {
+  $fields = array(
+    'first_name',
+    'last_name',
+    'mail',
+    'zip',
+    'city',
+    'state',
+    'state_full',
+    'amount',
+  );
+  $schema = module_invoke('fundraiser_recent_donors', 'schema');
+  if(db_table_exists('fundraiser_donor_opt_in') !== FALSE) {
+    foreach ($fields as $field) {
+      if (db_field_exists('fundraiser_donor_opt_in', $field) == FALSE) {
+        db_add_field('fundraiser_donor_opt_in', $field, $schema['fundraiser_donor_opt_in']['fields'][$field]);
+      }
+    }
+  }
+}
+
+/**
+ * Populate fundraiser_donor_opt_in table with existing user data.
+ */
+function fundraiser_recent_donors_update_7002(&$sandbox) {
+  $default_currency = variable_get('commerce_default_currency', 'USD');
+  $batch = 50;
+  $update_fields = array(
+    'first_name' => 'sbp_first_name',
+    'last_name' => 'sbp_last_name',
+    'mail' => 'mail',
+    'zip' => 'sbp_zip',
+    'city' => 'sbp_city',
+    'state' => 'sbp_state',
+  );
+  
+  $form_nids = db_query("SELECT distinct(nid) from {fundraiser_donor_opt_in} ORDER BY nid ASC")->fetchCol();
+  $query = "SELECT did FROM {fundraiser_donor_opt_in} WHERE nid = :nid ORDER BY created DESC LIMIT 100";
+  if (!isset($sandbox['max'])) {
+    $sandbox['progress'] = 0;
+    $sandbox['max'] = count($form_nids);
+    // store current form nid
+    $sandbox['current_nid'] = array_pop($form_nids);
+    $sandbox['current_did'] = 0;
+    // store all form nids to operate on
+    $sandbox['form_nids'] = $form_nids;
+  }
+  
+  // Get the most recent 100 opt-ins for the current form.
+  $result = db_query($query, array(':nid' => $sandbox['current_nid']));
+  
+  while ($record = $result->fetchAssoc()) {
+    // If the user no longer exists, we won't have data, but we will get php notices from entity.inc.
+    $donation_query = "SELECT uid, nid, amount from {fundraiser_donation} WHERE did = :did";
+    $donation = db_query($donation_query, array(':did' => $record['did']))->fetchAssoc();
+    $exists = db_query("select 1 from {users} where uid = :uid", array(':uid' => $donation['uid']))->fetchField();
+
+    if ($exists) {
+      // Load the account and wrap it.
+      $account = user_load($donation['uid']);
+      $account_wrapper = entity_metadata_wrapper('user', $account);
+      $form_currency = db_query(
+        "select field_fundraiser_currency_value from {field_data_field_fundraiser_currency} WHERE entity_id = :nid and entity_type = :type",
+        array(':nid' => $donation['nid'], ':type' => 'node')
+      )->fetchField();
+      $currency = $form_currency ? $form_currency : $default_currency;
+      $update_record = array();
+      foreach ($update_fields as $to => $from) {
+        $update_record[$to] = isset($account_wrapper->$from) ? $account_wrapper->$from->value() : '';
+      }
+      $update_record['amount'] = commerce_currency_format(commerce_currency_decimal_to_amount($donation['amount'], $currency), $currency);
+      if (isset($update_record['state'])) {
+        $update_record['state_full'] = _fundraiser_recent_donors_opt_in_full_state($update_record['state']);
+      }
+      // Trim out empty values before performing the update.
+      $update_record = array_filter($update_record);
+      if (!empty($update_record)) {
+        $update_record['did'] = $record['did'];
+        drupal_write_record('fundraiser_donor_opt_in', $update_record, array('did'));
+      }
+    }
+
+    $sandbox['current_did'] = $record['did'];
+  }
+  
+  // Update progress and get the next form nid to work on.
+  $sandbox['progress']++;
+  $sandbox['current_nid'] = array_pop($sandbox['form_nids']);
+  
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+
+  if ($sandbox['#finished'] >= 1) {
+    return t('fundraiser_donor_opt_in table populated with user data.');
+  }
 }

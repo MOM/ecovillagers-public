@@ -128,26 +128,88 @@ function _fundraiser_recent_donors_donation_form_submit($form, &$form_state) {
   // Determine if the donor checked the opt-in box by flattening the webform component values to account
   // for placement in or outside of fieldset:
   $flattened_values = _fundraiser_webform_submission_flatten($form['#node']->nid, $form_state['input']['submitted']);
+  if (isset($form_state['#donation']) && isset($form_state['#donation']->currency)) {
+    $currency = $form_state['#donation']->currency;
+    $amount = $form_state['#donation']->amount;
+  }
+  else {
+    $amount = 0;
+    $currency = 'USD';
+  }
   if (!isset($flattened_values[FUNDRAISER_RECENT_DONORS_OPT_IN_FORM_KEY])) { 
     return;
   }
-
+  // Get the formatted amount string and pass along with the rest of the submission.
+  $flattened_values['amount_formatted'] = commerce_currency_format(commerce_currency_decimal_to_amount($amount, $currency), $currency);
   // Get the donation ID:
-  $did_query = db_query("SELECT did FROM {fundraiser_donation} WHERE sid = :sid AND nid = :nid",
+  $did_query = db_query("SELECT did FROM {fundraiser_donation} WHERE sid = :sid AND nid = :nid AND status = :status",
     array(
       ':sid' => $form_state['values']['details']['sid'],
       ':nid' => $form_state['values']['details']['nid'],
+      ':status' => 'payment_received',
     )
   );
   foreach ($did_query as $did_data) {
+    $data = fundraiser_recent_donors_submission_signer_data($flattened_values);
     _fundraiser_recent_donors_insert_donor_optin(
       $form_state['values']['details']['sid'],
       $form_state['values']['details']['nid'],
-      $did_data->did
+      $did_data->did,
+      $data
     );
     return;
   }
 }
+
+/**
+ * Helper function, extract user data from form submission for saving
+ * to opt-in table.
+ * @param array $submission
+ *   The webform submission array.
+ * @return array $data
+ *   An array populated with values to write to the opt-in table.
+ */
+function fundraiser_recent_donors_submission_signer_data($submission) {
+  $donor_fields = array(
+    'first_name',
+    'last_name',
+    'mail',
+    'city',
+    'state',
+    'zip',
+    'amount',
+  );
+  $data = array();
+  foreach ($donor_fields as $form_key) {
+    $data[$form_key] = isset($submission[$form_key]) && !empty($submission[$form_key]) ? $submission[$form_key] : NULL;
+  }
+  $state_full = NULL;
+  if (isset($data['state'])) {
+    $state_full = _fundraiser_recent_donors_opt_in_full_state($data['state']);
+  }
+  $data['state_full'] = $state_full;
+  $data['amount'] = $submission['amount_formatted'];
+  return $data;
+}
+
+
+/**
+ * Helper function to get full state name from an abbreviation.
+ * @param string $state_abbrev
+ *   The abbreviated state.
+ * @return string
+ *   The full state name.
+ */
+function _fundraiser_recent_donors_opt_in_full_state($state_abbrev) {
+  $states = &drupal_static(__FUNCTION__);
+  if (!isset($states)) {
+    $field = field_info_field('sbp_state');
+    $allowed_values = list_allowed_values($field);
+    $states = $allowed_values;
+  }
+  return isset($states[$state_abbrev]) ? $states[$state_abbrev] : NULL;
+}
+
 
 /**
  * Implements hook_commerce_paypal_ipn_process().
@@ -161,10 +223,16 @@ function fundraiser_recent_donors_commerce_paypal_ipn_process($order, $payment_m
     // Track this donation's opt-in if the opt-in box was checked:
     if (isset($donation->submission_data[FUNDRAISER_RECENT_DONORS_OPT_IN_FORM_KEY])
       && !empty($donation->submission_data[FUNDRAISER_RECENT_DONORS_OPT_IN_FORM_KEY])) {
+      // Add the formatted amount for saving to opt-in table.
+      $amount = $donation->amount;
+      $currency = $donation->currency;
+      $donation->submission_data['amount_formatted'] = commerce_currency_format(commerce_currency_decimal_to_amount($amount, $currency), $currency);
+      $data = fundraiser_recent_donors_submission_signer_data($donation->submisson_data);
       _fundraiser_recent_donors_insert_donor_optin(
         $donation->sid,
         $donation->nid,
-        $donation->did
+        $donation->did,
+        $data
       );      
     }
   }
@@ -488,21 +556,32 @@ function _fundraiser_recent_donors_set_node_opt_in_data($nid, $is_enabled, $min_
  * @param $donation_timestamp
  *   Timestamp of when the donation was made.
  */
-function _fundraiser_recent_donors_insert_donor_optin($sid, $nid, $did, $donation_timestamp = FALSE) {
+function _fundraiser_recent_donors_insert_donor_optin($sid, $nid, $did, $data, $donation_timestamp = FALSE) {
   $donation_timestamp = !$donation_timestamp ? time() : $donation_timestamp;
 
   $exists = db_query("SELECT did FROM {fundraiser_donor_opt_in} WHERE did = :did", array(':did' => $did))
    ->fetchField();
 
   if (!$exists) {
-    db_query("INSERT INTO {fundraiser_donor_opt_in} VALUES (:sid, :nid, :did, :created)", 
+    db_query("INSERT INTO {fundraiser_donor_opt_in} VALUES (:sid, :nid, :did, :created, :first_name, :last_name,:mail, :zip, :city, :state, :state_full, :amount)", 
       array(
         ':sid' => $sid,
         ':nid' => $nid,
         ':did' => $did,
         ':created' => $donation_timestamp,
+        ':first_name' => $data['first_name'],
+        ':last_name' => $data['last_name'],
+        ':mail' => $data['mail'],
+        ':zip' => $data['zip'],
+        ':city' => $data['city'],
+        ':state' => $data['state'],
+        ':state_full' => $data['state_full'],
+        ':amount' => $data['amount'],
       )
     );
+  
+  module_invoke_all('fundraiser_recent_donors_opt_in', $did, $nid, $sid);
+
   }
 }
 

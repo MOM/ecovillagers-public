@@ -74,6 +74,7 @@ function springboard_dw_queue_legacy_missing($type = '') {
       'petition_message' => dt('petition_message'),
       'payment' => dt('payment'),
       'salesforce_sync' => dt('salesforce_sync'),
+      'line_item' => dt('line_item'),
     );
     $type = drush_choice($options, dt('What kind of record would you like to queue?'));
   }
@@ -116,6 +117,7 @@ function springboard_dw_queue_legacy_setup_batch($type = '') {
       'petition_message' => dt('petition_message'),
       'payment' => dt('payment'),
       'salesforce_sync' => dt('salesforce_sync'),
+      'line_item' => dt('line_item'),
     );
     $type = drush_choice($options, dt('What kind of record would you like to queue?'));
   }
@@ -230,7 +232,12 @@ function springboard_dw_queue_legacy_contact($records, $operation_details, $idli
       $user_data = springboard_dw_get_all_entity_properties($user_obj);
 
       // Map the user contact.
-      $contact_item = springboard_dw_map_contact_item($record->id, $user_data);
+      $contact_item = springboard_dw_map_contact_item(
+        $record->id,
+        $user_data,
+        FALSE,
+        'legacy'
+      );
 
       // Create the queue item to update the contact record.
       $queue = DrupalQueue::get("springboard_dw_export");
@@ -253,15 +260,21 @@ function springboard_dw_queue_legacy_contact($records, $operation_details, $idli
  * Batch process callback for processing donations.
  */
 function springboard_dw_queue_legacy_donation($records, $operation_details, $idlist, &$context) {
+  // Enable Garbage Collection.
+  gc_enable();
+
+  // Get the Drupal queue.
   $queue = DrupalQueue::get("springboard_dw_export");
+
+  // Loop through the donation records and add them to the queue for processing.
   foreach ($records as $record) {
+
+    // Get the full donation record by it's donation id.
     $donation = fundraiser_donation_get_donation($record->id);
-    // Massage values into format springboard_dw_map_donation_item() expects.
-    foreach ($donation->submission_data as $key => $value) {
-      if (!array_key_exists($key, $donation->donation)) {
-        $donation->donation[$key] = $value;
-      }
+    if (!$donation) {
+      continue;
     }
+
     // If $donation->data could not decrypted, just set the expected values to
     // empty string.
     if (!is_array($donation->data)) {
@@ -272,7 +285,8 @@ function springboard_dw_queue_legacy_donation($records, $operation_details, $idl
       $donation->data['payment_fields']['credit']['card_expiration_year'] = '';
     }
     if (!springboard_dw_item_is_warehoused('donation', $record->id)) {
-      $donation_item = springboard_dw_map_donation_item($donation);
+      $donation_item = springboard_dw_map_donation_item($donation,
+        FALSE, 'legacy');
       $queue->createItem($donation_item);
       springboard_dw_log_queue_item($donation_item);
       springboard_dw_track_item_warehouse_queued('donation', $record->id);
@@ -280,9 +294,19 @@ function springboard_dw_queue_legacy_donation($records, $operation_details, $idl
     else {
       drush_log('Attempted to queue donation ' . $record->id . ' but it is already warehoused', 'warning');
     }
-    // Set highwater mark.
-    springboard_dw_queue_legacy_set_highwater_mark('donation', $record->id, $idlist);
+
+    // Save our progress.
+    $highwater_record_id = $record->id;
+
+    // Clear the donation object out of memory.
+    unset($donation);
+
+    // Run garbage collection on open cycles.
+    gc_collect_cycles();
   }
+  // Save the highwater mark at the end of each batch.
+  springboard_dw_queue_legacy_set_highwater_mark('donation', $highwater_record_id, $idlist);
+
   $context['message'] = $operation_details;
 }
 
@@ -297,7 +321,7 @@ function springboard_dw_queue_legacy_form($records, $operation_details, $idlist,
 
     // Create the form item in the queue if not warehoused.
     if (!springboard_dw_item_is_warehoused('form', $record->id)) {
-      $form_item = springboard_dw_map_form_item($node);
+      $form_item = springboard_dw_map_form_item($node, FALSE, 'legacy');
       $queue->createItem($form_item);
       springboard_dw_log_queue_item($form_item);
       springboard_dw_track_item_warehouse_queued('form', $record->id);
@@ -310,6 +334,42 @@ function springboard_dw_queue_legacy_form($records, $operation_details, $idlist,
   }
   $context['message'] = $operation_details;
 }
+
+/**
+ * Batch process callback for processing users.
+ */
+function springboard_dw_queue_legacy_line_item($records, $operation_details, $idlist, &$context) {
+  foreach ($records as $record) {
+    // Create the line_item item in the queue if not warehoused.
+    if (!springboard_dw_item_is_warehoused('line_item', $record->id)) {
+
+      // Load the line_item entity.
+      $line_item = commerce_line_item_load($record->id);
+      $line_item_wrapper = entity_metadata_wrapper('commerce_line_item', $line_item);
+      // Map the line item.
+      $line_item_item = springboard_dw_map_line_item_item(
+        $line_item_wrapper,
+        $line_item_wrapper->commerce_total->currency_code->value(),
+        'legacy'
+      );
+
+      // Create the queue item to update the contact record.
+      $queue = DrupalQueue::get("springboard_dw_export");
+      $queue->createItem($line_item_item);
+      // Log the queue item.
+      springboard_dw_log_queue_item($line_item_item);
+      // Mark the item as queued.
+      springboard_dw_track_item_warehouse_queued('line_item', $record->id);
+    }
+    else {
+      drush_log('Attempted to queue line_item ' . $record->id . ' but it is already warehoused', 'warning');
+    }
+    // Set highwater mark.
+    springboard_dw_queue_legacy_set_highwater_mark('line_item', $record->id, $idlist);
+  }
+  $context['message'] = $operation_details;
+}
+
 
 /**
  * Batch process callback for processing payments
@@ -331,7 +391,12 @@ function springboard_dw_queue_legacy_payment($records, $operation_details, $idli
       $payment['remote_status'] = $record->remote_status;
       $payment['created'] = $record->created;
       $payment['changed'] = $record->changed;
-      $payment_item = springboard_dw_map_payment_item($payment, $donation);
+      $payment_item = springboard_dw_map_payment_item(
+        $payment,
+        $donation,
+        array(),
+        'legacy'
+      );
       $queue->createItem($payment_item);
       springboard_dw_log_queue_item($payment_item);
       springboard_dw_track_item_warehouse_queued('payment', $record->id);
@@ -359,6 +424,9 @@ function springboard_dw_queue_legacy_submission($records, $operation_details, $i
   foreach ($records as $record) {
     $node = node_load($record->nid);
     $submission = webform_get_submission($record->nid, $record->id);
+
+    $submitted_data = array();
+
     // If submission is false, the webform_submitted_data table was probably
     // cleared out at some point. So, let's populate a $submission object with
     // the data we have available from the webform_submissions table.
@@ -371,7 +439,6 @@ function springboard_dw_queue_legacy_submission($records, $operation_details, $i
       $submission->remote_addr = $record->remote_addr;
     }
     if (is_array($submission->data)) {
-      $submitted_data = array();
       // Put the submission data in key/value pair format.
       foreach ($submission->data as $cid => $submittted_value) {
         if (array_key_exists($cid, $node->webform['components'])) {
@@ -380,7 +447,11 @@ function springboard_dw_queue_legacy_submission($records, $operation_details, $i
       }
     }
     if (!springboard_dw_item_is_warehoused('submission', $record->id)) {
-      $submission_item = springboard_dw_map_submission_item($submission, $submitted_data);
+      $submission_item = springboard_dw_map_submission_item(
+        $submission,
+        $submitted_data,
+        'legacy'
+      );
       // Create the queue item.
       $queue->createItem($submission_item);
       springboard_dw_log_queue_item($submission_item);
@@ -406,7 +477,7 @@ function springboard_dw_queue_legacy_action($records, $operation_details, $idlis
     $action = new stdClass();
     $action->node = node_load($record->nid);
     $action->webform = springboard_dw_webform_submission_data_keyed($record->nid, $record->sid);
-    $action->sid = $record->sid;
+    $action->sid = $record->id;
     $action->uid = $record->uid;
     $action->ip_address = $record->remote_addr;
 
@@ -414,7 +485,10 @@ function springboard_dw_queue_legacy_action($records, $operation_details, $idlis
     if ($record->type == 'sba_message_action' || $record->type == 'sba_social_action') {
       // Create the Advocacy action item in the queue if not warehoused.
       if (!springboard_dw_item_is_warehoused('advocacy action', $record->id)) {
-        $action_item = springboard_dw_map_advocacy_action_item($action);
+        $action_item = springboard_dw_map_advocacy_action_item(
+          $action,
+          'legacy'
+        );
         $queue->createItem($action_item);
         springboard_dw_log_queue_item($action_item);
         springboard_dw_track_item_warehouse_queued('advocacy action', $record->id);
@@ -454,7 +528,11 @@ function springboard_dw_queue_legacy_petition_message($records, $operation_detai
     // Create the Advocacy action item in the queue if not warehoused.
     if (!springboard_dw_item_is_warehoused('advocacy petition message', $record->id)) {
       $action = springboard_dw_queue_legacy_build_action($record);
-      $petition_item = springboard_dw_map_petition_submission_item($action, '');
+      $petition_item = springboard_dw_map_petition_submission_item(
+        $action,
+        '',
+        'legacy'
+      );
       $queue->createItem($petition_item);
       springboard_dw_log_queue_item($petition_item);
       springboard_dw_track_item_warehouse_queued('advocacy petition message', $record->id);
@@ -479,6 +557,7 @@ function springboard_dw_queue_legacy_message($messages, $operation_details, $idl
     if (!springboard_dw_item_is_warehoused('advocacy message', $message['_id']['$id'])) {
       $message_item = array();
       $message_item['queue_type'] = 'advocacy message';
+      $message_item['warehouse_type'] = 'legacy';
       $message_item['message_id'] = $message['_id']['$id'];
       $message_item['action_id'] = $message['alertId'];
       $tracking_response = springboard_dw_queue_legacy_get_endpoint($message['_id']['$id'], 'warehouse/track');
@@ -505,7 +584,10 @@ function springboard_dw_queue_legacy_salesforce_sync($records, $operation_detail
   foreach ($records as $record) {
     if (!springboard_dw_item_is_warehoused('salesforce sync', $record->id)) {
       $salesforce_sync_array = (array) $record;
-      $salesforce_sync_item = springboard_dw_map_sync_map_item($salesforce_sync_array);
+      $salesforce_sync_item = springboard_dw_map_sync_map_item(
+        $salesforce_sync_array,
+        'legacy'
+      );
       $queue = DrupalQueue::get("springboard_dw_export");
       $queue->createItem($salesforce_sync_item);
       springboard_dw_log_queue_item($salesforce_sync_item);
@@ -533,10 +615,8 @@ function springboard_dw_queue_legacy_build_action($submission) {
   $action = new stdClass();
   $action->node = $node;
   $action->contact = $user;
-  // @TODO how to populate $data? What even goes in there?
-  $action->data = $data;
   $action->webform = $webform_submission_data;
-  $action->sid = $sid;
+  $action->sid = $submission->sid;
   return $action;
 }
 
@@ -636,6 +716,20 @@ function springboard_dw_queue_legacy_get_records($type, $limit = FALSE, $highwat
       }
       break;
 
+    case 'line_item':
+      $query = db_select('commerce_line_item', 'c', array('target' => 'slave'));
+      $query->addField('c', 'line_item_id', 'id');
+      $query->addField('c', 'created', 'created');
+      $query->orderBy('line_item_id', 'ASC');
+      $query->condition('type', 'donation', '<>');
+      if ($idlist) {
+        $query->condition('line_item_id', $idlist, 'IN');
+      }
+      elseif ($highwater) {
+        $query->condition('line_item_id', $highwater, '>');
+      }
+      break;
+
     case 'donation':
       $query = db_select('fundraiser_donation', 'f', array('target' => 'slave'));
       $query->addField('f', 'did', 'id');
@@ -676,6 +770,7 @@ function springboard_dw_queue_legacy_get_records($type, $limit = FALSE, $highwat
     case 'petition_message':
       $query = db_select('webform_submissions', 's', array('target' => 'slave'));
       $query->addField('s', 'sid', 'id');
+      $query->addField('s', 'sid');
       $query->addField('s', 'nid');
       $query->addField('s', 'uid');
       $query->addField('s', 'submitted', 'created');
@@ -804,6 +899,23 @@ function springboard_dw_queue_legacy_get_missing_records($type) {
                             SELECT 'springboard_data_warehouse' as table_name, drupal_id as id
                               FROM {springboard_data_warehouse}
                               WHERE type = 'contact'
+                          ) tmp
+                          GROUP BY id
+                          HAVING COUNT(*) = 1")->fetchAll();
+      break;
+
+    case 'line_item':
+      $result = db_query("SELECT table_name, id
+                          FROM
+                          (
+                            SELECT 'commerce_line_item' as table_name, line_item_id as id
+                              FROM
+                              {commerce_line_item} c
+                              WHERE  (type <> 'donation')
+                            UNION ALL
+                            SELECT 'springboard_data_warehouse' as table_name, drupal_id as id
+                              FROM {springboard_data_warehouse}
+                              WHERE type = 'line_item'
                           ) tmp
                           GROUP BY id
                           HAVING COUNT(*) = 1")->fetchAll();

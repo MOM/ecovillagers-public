@@ -50,7 +50,7 @@ function springboard_cookie_permission() {
 function springboard_cookie_inspect($uid) {
   // check if secure prepopulate is configured. If not, post a warning.
   if(!secure_prepopulate_get_key_and_vector()) {
-    drupal_set_message(t("You must <a href='@link'>configure Secure Prepopulate</a>  to save profile data in the Springboard cookie.", array('@link' => '/admin/config/system/secure-prepopulate')), 'warning');
+    drupal_set_message(t("You must <a href='@link'>configure Secure Autofill</a> to save profile data in the Springboard cookie.", array('@link' => '/admin/config/system/secure-autofill')), 'warning');
   }
   $cookie = springboard_cookie_get_cookie();
   $output = array();

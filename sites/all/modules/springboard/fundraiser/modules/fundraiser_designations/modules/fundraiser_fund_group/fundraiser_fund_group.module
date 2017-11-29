@@ -490,7 +490,7 @@ function fundraiser_fund_group_load_multiple($fundraiser_fund_group_ids = array(
   $overrides = db_query('SELECT * FROM {fundraiser_fund_group_overrides}');
   foreach ($overrides as $override) {
     if (!empty($groups[$override->gid])) {
-      $groups[$override->gid]->fd_overrides['pid'] = $override->gid;
+      $groups[$override->gid]->fd_overrides['gid'] = $override->gid;
       $groups[$override->gid]->fd_overrides['status'] = $override->status;
       $groups[$override->gid]->fd_overrides['price_set'] = $override->price_set;
     }

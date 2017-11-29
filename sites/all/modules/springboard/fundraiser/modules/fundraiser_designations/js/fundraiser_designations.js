@@ -2,7 +2,9 @@
 
   Drupal.behaviors.fundraiserDesignations = {
     attach: function(context, settings) {
+      $('body').once('designation-cart-form', function() {
         new Drupal.fundraiserDesignations(settings);
+      });
     }
   };
 
@@ -176,7 +178,7 @@
   }
 
     // The displayAmount is currency formatted, and can be different than the line item amount (i.e., totaled)
-    var displayAmt = Drupal.settings.fundraiser.currency.symbol + (parseInt(amt)).formatMoney(2, '.', ',');
+    var displayAmt = Drupal.settings.fundraiser.currency.symbol + (parseFloat(amt)).formatMoney(2, '.', ',');
 
     // Grab the quantity. Update the display Amount.
     var quant = 1;
@@ -184,7 +186,7 @@
     if (type == 'fund' && quantity.length > 0) {
       quant = quantity.val();
       displayAmt = amt * quant;
-      displayAmt = Drupal.settings.fundraiser.currency.symbol + (parseInt(displayAmt)).formatMoney(2, '.', ',');
+      displayAmt = Drupal.settings.fundraiser.currency.symbol + (parseFloat(displayAmt)).formatMoney(2, '.', ',');
       if (quant > 1) {
         displayQuant = ' (' + quant + ' x ' + Drupal.settings.fundraiser.currency.symbol + amt + ')';
       }
@@ -217,6 +219,12 @@
       rcr.each(function(){
         if ($(this).val() === item) {
           $(this).prop('checked', true);
+          $(this).prop('disabled', false);
+          $(this).trigger('change');
+        }
+        else {
+          $(this).prop('checked', false);
+          $(this).prop('disabled', true);
         }
       });
     }
@@ -239,7 +247,7 @@
     var amt = item.fundAmount;
 
     // The displayAmount is currency formatted, and can be different than the line item amount (i.e., totaled)
-    var displayAmt = Drupal.settings.fundraiser.currency.symbol + (parseInt(amt)).formatMoney(2, '.', ',');
+    var displayAmt = Drupal.settings.fundraiser.currency.symbol + (parseFloat(amt)).formatMoney(2, '.', ',');
 
     // Grab the quantity. Update the display Amount.
     var quant = item.fundQuantity;
@@ -247,7 +255,7 @@
     var type = typeof(item.fundId) != 'undefined' ? 'fund' : 'addon';
     if (type == 'fund') {
       displayAmt = amt * quant;
-      displayAmt = Drupal.settings.fundraiser.currency.symbol + (parseInt(displayAmt)).formatMoney(2, '.', ',');
+      displayAmt = Drupal.settings.fundraiser.currency.symbol + (parseFloat(displayAmt)).formatMoney(2, '.', ',');
       if (quant > 1) {
         displayQuant = ' (' + quant + ' x ' + Drupal.settings.fundraiser.currency.symbol + amt + ')';
       }
@@ -282,10 +290,10 @@
     $('tr', self.cart).each(function(){
       if($(this).attr('data-fund-id') == fundId && $(this).attr('data-fund-amount') == amt && type == 'fund') {
 
-        var oldAmt = parseInt($('.fund-amount', $(this)).text().replace('$', '').replace(',', ''));
+        var oldAmt = parseFloat($('.fund-amount', $(this)).text().replace('$', '').replace(',', ''));
         var oldQuant = $(this).attr('data-fund-quantity');
         var newQuant = parseInt(oldQuant) + parseInt(quant);
-        var newAmt = parseInt($('.fund-amount', newRow).text().replace('$', '').replace(',', '')) + oldAmt;
+        var newAmt = parseFloat($('.fund-amount', newRow).text().replace('$', '').replace(',', '')) + oldAmt;
 
         newRow.attr('data-fund-quantity', newQuant);
         if (newQuant > 1) {
@@ -294,7 +302,7 @@
 
         $('.fund-name', newRow).text(fundName + displayQuant);
 
-        $('.fund-amount', newRow).text(Drupal.settings.fundraiser.currency.symbol + (parseInt(newAmt)).formatMoney(2, '.', ','));
+        $('.fund-amount', newRow).text(Drupal.settings.fundraiser.currency.symbol + (parseFloat(newAmt)).formatMoney(2, '.', ','));
 
         $(this).replaceWith(newRow);
         exists = true;
@@ -308,6 +316,15 @@
     // Insert a new row if not exists.
     if (!exists) {
       newRow.insertBefore('.cart-total-row').hide().show(300);
+    }
+
+    if(cook = $.cookie('designations_' + Drupal.settings.fdNid)) {
+      // Page reload/
+      cook = cook.replace(/&quot;/g, '"');
+      if (cook.length > 0) {
+        cook = JSON.parse(cook);
+        self.repopForm(cook.recurs);
+      }
     }
 
     // Set the json encoded fund values in the hidden field.
@@ -451,8 +468,14 @@
     if (dual == 1) {
       var rcr = $('input[name*="[recurs_monthly]"]');
       rcr.attr('readonly', false);
+      rcr.attr('disabled', false);
       if(state == 1) {
         rcr.attr('readonly', 'readonly');
+        rcr.each(function(){
+          if(!$(this).is(':checked')) {
+            $(this).attr('disabled', true);
+          }
+        })
         rcr.bind( "click.stopClick", function() {
           return false;
         });
@@ -484,7 +507,7 @@
     var self = this;
     var total = 0;
     $.each($('td.fund-amount', self.cart), function(i, price) {
-      total = total + parseInt($(price).text().replace('$', '').replace(',', ''));
+      total = total + parseFloat($(price).text().replace('$', '').replace(',', ''));
     });
     total = total > 0 ? total : 0;
     return total;

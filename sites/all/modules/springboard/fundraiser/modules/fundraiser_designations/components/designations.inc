@@ -152,6 +152,11 @@ function _webform_render_funds_multiple(&$element, $node, $group, $funds, $amoun
   $child['#title'] = '';
   $element[$id]['funds_select_' . $id] = $child;
 
+  if (!empty($group->fd_overrides) && !empty($group->fd_overrides['status'])) {
+    // If there are overrides, set that on each group.
+    $element[$id]['#extra']['class'][] = 'overridden';
+  }
+
   _fundraiser_designations_build_child_elements($id, $element, $amounts, $group, $node);
 }
 
@@ -371,9 +376,15 @@ function theme_fundraiser_designations_fund_groups_component($variables) {
       if (!empty($image)) {
         $image['path'] = file_create_url($image['uri']);
       }
-      $build['content'] = array(
 
-        '#prefix' => '<div class="designation-group-wrapper ' . $element[$id]['#extra']['position'] . '" id="designation-group-' . $element[$id]['#extra']['group_id'] . '">',
+      if (isset($element[$id]['#extra']['class'])) {
+        $classes = ' ' . implode(', ', $element[$id]['#extra']['class']);
+      }
+      else {
+        $classes = '';
+      }
+      $build['content'] = array(
+        '#prefix' => '<div class="designation-group-wrapper ' . $element[$id]['#extra']['position'] . $classes . '" id="designation-group-' . $element[$id]['#extra']['group_id'] . '">',
         '#suffix' => '</div>',
 
         'fund_group_title' => array(
@@ -486,38 +497,6 @@ function fundraiser_designations_get_form_display_amounts($node) {
     $recurring_default_amount = $node->recurring_default_amount;
     $dynamic = FALSE;
 
-    if (module_exists('dynamic_gift_strings')) {
-      if (isset($_SESSION['dynamic_gift_string_values'][$node->nid]) && is_array($_SESSION['dynamic_gift_string_values'][$node->nid])) {
-        $dynamic = TRUE;
-        $gs = $_SESSION['dynamic_gift_string_values'][$node->nid];
-        if (!empty($gs['amounts'])) {
-          $dynamic = TRUE;
-          $gs_amounts = _dynamic_gift_strings_parse_amounts($gs['amounts'], $node->show_other_amount, $node->nid);
-          if ($gs_amounts) {
-            $donation_amounts = [];
-            $default_amount = $_SESSION['dynamic_gift_string_values'][$node->nid]['default'];
-            foreach ($gs_amounts as $plain => $c_coded) {
-              if (is_numeric($plain)) {
-                $donation_amounts[] = array($plain, $c_coded);
-              }
-            }
-          }
-        }
-        if (!empty($gs['recurring_amounts'])) {
-          $gs_recurring_amounts = _dynamic_gift_strings_parse_amounts($gs['recurring_amounts'], $node->recurring_show_other_amount, $node->nid);
-          if ($gs_recurring_amounts) {
-            $recurring_amounts = [];
-            $recurring_default_amount = $_SESSION['dynamic_gift_string_values'][$node->nid]['recurring_default'];
-            foreach ($gs_recurring_amounts as $plain => $c_coded) {
-              if (is_numeric($plain)) {
-                $recurring_amounts[] = array($plain, $c_coded);
-              }
-            }
-          }
-        }
-      }
-    }
-
     $price_sets = [];
     $price_sets['default_amount'] = $default_amount;
     $price_sets['recurring_default_amount'] = $recurring_default_amount;
@@ -592,7 +571,6 @@ function fundraiser_designations_get_group_display_amounts($group, $node) {
       }
       $donation_amounts['recurring'][$key][] = check_plain($price['amount']);
       $donation_amounts['recurring'][$key][] = check_plain($price['label']);
-
     }
   }
   elseif(isset($node_form_amounts['recurring'])) {

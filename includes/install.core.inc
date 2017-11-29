@@ -238,6 +238,9 @@ function install_begin_request(&$install_state) {
   // This must go after drupal_bootstrap(), which unsets globals!
   global $conf;
 
+  // Initialize the locking system.
+  require_once DRUPAL_ROOT . '/' . variable_get('lock_inc', 'includes/lock.inc');
+  lock_initialize();
   require_once DRUPAL_ROOT . '/modules/system/system.install';
   require_once DRUPAL_ROOT . '/includes/common.inc';
   require_once DRUPAL_ROOT . '/includes/file.inc';

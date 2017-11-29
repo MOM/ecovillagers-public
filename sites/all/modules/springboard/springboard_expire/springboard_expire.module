@@ -1,0 +1,210 @@
+<?php
+
+/**
+ * @file
+ * springboard_expire.module
+ * Provides expire module integration for actions taken in Springboard
+ * that would not cause a cache expiration natively.
+ */
+
+/**
+ * Implements hook_webform_component_update().
+ */
+function springboard_expire_webform_component_update($component) {
+  springboard_expire_node($component['nid']);
+}
+
+/**
+ * Implements hook_webform_component_insert().
+ */
+function springboard_expire_webform_component_insert($component) {
+  springboard_expire_node($component['nid']);
+}
+
+/**
+ * Implements hook_webform_component_delete().
+ */
+function springboard_expire_webform_component_delete($component) {
+  springboard_expire_node($component['nid']);
+}
+
+/**
+ * Implements hook_page_wrappers_update().
+ */
+function springboard_expire_page_wrappers_update($wrapper_node, $nids) {
+  springboard_expire_nodes($nids);
+}
+
+/**
+ * Implements hook_entity_update().
+ *
+ * Expires a message action node when any attached message is updated.
+ */
+function springboard_expire_entity_update($entity, $type) {
+  switch ($type) {
+    case 'sba_message': 
+    case 'fundraiser_fund_group':
+      springboard_expire_node($entity->nid);  
+      break;
+  }
+}
+
+function springboard_expire_entity_insert($entity, $type) {
+  switch ($type) {
+    case 'sba_message': 
+    case 'fundraiser_fund_group':
+      springboard_expire_node($entity->nid);  
+      break;
+  }
+}
+
+function springboard_expire_entity_delete($entity, $type) {
+  // TODO: Use entitymetadata wrappers here.
+  switch ($type) {
+    case 'sba_message': 
+      springboard_expire_node($entity->field_sba_action_id['und'][0]['target_id']);
+      break;
+    case 'fundraiser_fund_group':
+      springboard_expire_node($entity->field_ffg_form_id['und'][0]['target_id']);
+      break;
+  }
+}
+
+/**
+ * Implements hook_fundraiser_tickets_inventory_update().
+ *
+ * Expires the ticketed event node whenever ticket inventory is updated.
+ * Inventory is updated on insert, update, and purchase.
+ */
+function springboard_expire_fundraiser_tickets_inventory_update($node_wrapper, $ticket_types) {
+  $nid = $node_wrapper->getIdentifier();
+  springboard_expire_node($nid);
+}
+
+/**
+ * Implements hook_springboard_petition_opt_in().
+ */
+function springboard_expire_springboard_petition_opt_in($nid, $uid, $sid) {
+  if (variable_get('springboard_expire_node_after_petition_opt_in', TRUE)) {
+    springboard_expire_node($nid); 
+  }
+}
+
+/**
+ * Implements hook_advocacy_action_opt_in().
+ */
+function springboard_expire_springboard_advocacy_action_opt_in($nid, $uid, $sid) {
+  if (variable_get('springboard_expire_node_after_action_opt_in', TRUE)) {
+    springboard_expire_node($nid); 
+  } 
+}
+
+/**
+ * Implements hook_fundraiser_recent_donors_opt_in().
+ */
+function springboard_expire_fundraiser_recent_donors_opt_in($did, $nid, $sid) {
+  if (variable_get('springboard_expire_node_after_donor_opt_in', TRUE)) {
+    springboard_expire_node($nid); 
+  }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function springboard_expire_form_alter(&$form, &$form_state, $form_id) {
+  if ($form_id === 'fundraiser_fund_groups_addon_form') {
+    $form['#submit'][] = 'springboard_expire_designation_addon_submit';
+  }
+}
+
+/**
+ * Implements hook_fundraiser_commerce_gateway_setting_changed().
+ *
+ * Expires forms when their assigned gateway has been updated in any way.
+ */
+function springboard_expire_fundraiser_commerce_gateway_setting_changed($gateway_id, $uid, $changed) {
+  $donation_forms = db_query("SELECT nid, gateways FROM {fundraiser}");
+  if ($donation_forms) {
+    // Compile list of forms using this gateway.
+    $matching_donation_forms = array();
+    while ($donation_form = $donation_forms->fetchAssoc()) {
+      $gateways = unserialize($donation_form['gateways']);
+      foreach ($gateways as $gateway) {
+        if (!empty($gateway['id'])) {
+          if ($gateway['id'] == $gateway_id && $gateway['status'] == 1) {
+            $matching_donation_forms[] = $donation_form['nid'];
+          }
+        }
+      }
+    }
+    // If there are any forms using this active gateway, expire them.
+    if (!empty($matching_donation_forms)) {
+      springboard_expire_nodes($matching_donation_forms);
+    }
+  }
+}
+
+/**
+ * Implements hook_springboard_p2p_save_personal_campaign_action_alter().
+ *
+ * Expires a Peer to Peer personal campaign's parent campaign when a donation is made.
+ */
+function springboard_expire_springboard_p2p_save_personal_campaign_action_alter($record, $key) {
+  // Checking for $key because this is actually called twice during a p2p donation and
+  // we only need to expire the campaign once.
+  if (!empty($key) && isset($record['campaign_nid'])) {
+    $nid = $record['campaign_nid'];
+    springboard_expire_node($nid); 
+  }
+}
+
+/**
+ * Submit handler for designations add-on form.
+ *
+ * Expire the node when the add-on donation settings are saved.
+ */
+function springboard_expire_designation_addon_submit($form, &$form_state) {
+  $nid = $form['nid']['#value'];
+  springboard_expire_node($nid); 
+}
+
+/**
+ * Expires a single node id.
+ */
+function springboard_expire_node($nid) {
+  $node = node_load($nid);
+  expire_execute_expiration('node', $node, EXPIRE_NODE_UPDATE); 
+}
+
+/**
+ * Expires multiple node ids.
+ */
+function springboard_expire_nodes($nids) {
+  $nodes = node_load_multiple($nids);
+  foreach ($nodes as $node) {
+    springboard_expire_node($node->nid);
+  }
+}
+
+/**
+ * Implements hook_expire_cache_alter().
+ *
+ * Some operations, like updating/inserting a webform component or cloning a
+ * webform will cause multiple expiration calls for the same content over
+ * and over. This function will prevent the same url from being expired more 
+ * than once during a single request.
+ */
+function springboard_expire_expire_cache_alter(&$urls, $object_type, $object, $absolute_urls_passed) {
+  $nodes_expired = &drupal_static(__FUNCTION__);
+  if (!isset($nodes_expired)) {
+    foreach($urls as $path => $url) {
+      $nodes_expired[] = $path;
+    }
+  } else {
+    foreach($urls as $path => $url) {
+      if (in_array($path, $nodes_expired)) {
+        unset($urls[$path]); 
+      }
+    }
+  }
+}

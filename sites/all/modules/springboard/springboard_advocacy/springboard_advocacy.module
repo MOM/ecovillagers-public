@@ -62,7 +62,7 @@ function springboard_advocacy_menu() {
     ) + springboard_advocacy_menu_common(FALSE, TRUE);
 
   $items['admin/springboard/advocacy/message-actions/all'] = array(
-      'title' => 'Advocacy: All Message Actions',
+      'title' => 'Message Actions',
       'page arguments' => array('message-actions/all'),
       'access callback' => 'springboard_advocacy_user_can_access_type',
       'access arguments' => array(
@@ -71,7 +71,7 @@ function springboard_advocacy_menu() {
     ) + springboard_advocacy_menu_common(FALSE, TRUE);
 
   $items['admin/springboard/advocacy/social-actions/all'] = array(
-      'title' => 'Advocacy: All Social Actions',
+      'title' => 'Social Actions',
       'page arguments' => array('social-actions/all'),
       'access callback' => 'springboard_advocacy_user_can_access_type',
       'access arguments' => array(
@@ -80,7 +80,7 @@ function springboard_advocacy_menu() {
     ) + springboard_advocacy_menu_common(FALSE, TRUE);
 
   $items['admin/springboard/advocacy/petitions/all'] = array(
-      'title' => 'Advocacy: All Petitions',
+      'title' => 'Petitions',
       'page arguments' => array('petitions/all'),
       'access callback' => 'springboard_advocacy_user_can_access_type',
       'access arguments' => array(
@@ -229,86 +229,76 @@ function springboard_advocacy_taxonomy_access() {
  * Add the advocacy links to springboard admin.
  */
 function springboard_advocacy_springboard_admin_admin_menu_items_alter(&$items) {
-    // Top Level: Springboard Advocacy.
-    $items['admin/springboard/advocacy/actions'] = array(
-      'link_path' => 'admin/springboard/advocacy/actions',
-      'link_title' => t('Advocacy'),
-      'menu_name' => 'springboard_admin_menu',
-      'expanded' => 1,
-      'customized' => 1,
-      'weight' => 3,
-      '_children' => array(),
+  // Top Level: Advocacy
+  $items['admin/springboard/advocacy/actions'] = array(
+    'link_path' => 'admin/springboard/advocacy/actions',
+    'link_title' => t('Advocacy'),
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => -80,
+    '_children' => array(),
+  );
+  if (user_access('view springboard advocacy reports')) {
+    $types = node_type_get_types();
+
+    // Set the links and order of appearance.
+    $view_all_type_paths_map = array(
+      'sba_message_action' => 'admin/springboard/advocacy/message-actions/all',
+      'sba_social_action' => 'admin/springboard/advocacy/social-actions/all',
+      'springboard_petition' => 'admin/springboard/advocacy/petitions/all',
     );
+    $view_all_type_order = array_keys($view_all_type_paths_map);
 
-    $items['admin/springboard/advocacy/actions']['_children']['admin/springboard/advocacy/actions'] = array(
-      'link_path' => 'admin/springboard/advocacy/actions',
-      'link_title' => 'View All Actions',
-      'menu_name' => 'springboard_admin_menu',
-      'expanded' => 1,
-      'customized' => 1,
-      'weight' => -2,
-    );
-
-
-  $types = node_type_get_types();
-
-  foreach ($types as $type) {
-
-    if (module_exists('springboard_petition')) {
-      $petition = springboard_petition_is_petition_type($type->type);
-    }
-    // Only create the item if the node type uses Webform User
-    // but not Fundraiser.
-    if ($type && (springboard_advocacy_is_action_type($type->type)  || !empty($petition))) {
-      $pattern = 'node/add/' . preg_replace('/_/', '-', $type->type);
-      if (isset($items['admin/springboard/forms/all']['_children'][$pattern])) {
-        unset($items['admin/springboard/forms/all']['_children'][$pattern]);
+    foreach ($types as $type) {
+      if (module_exists('springboard_petition')) {
+        $petition = springboard_petition_is_petition_type($type->type);
       }
-      // Forms > $type->type.
-      $items['admin/springboard/advocacy/actions']['_children'][$pattern] = array(
-        'link_path' => $pattern,
-        'link_title' => 'Create a ' . $type->name,
-        'menu_name' => 'springboard_admin_menu',
-        'expanded' => 1,
-        'customized' => 1,
-        'weight' => -1,
-        'access callback' => 'user_access',
-        'access arguments' => array(
-          'create ' . $type->type . ' content',
-        ),
-      );
+      // Only create the item if the node type uses Webform User
+      // but not Fundraiser.
+      if ($type && array_key_exists($type->type, $view_all_type_paths_map) && (springboard_advocacy_is_action_type($type->type)  || !empty($petition))) {
+        // Forms > $type->type.
+        $items['admin/springboard/advocacy/actions']['_children'][$view_all_type_paths_map[$type->type]] = array(
+          'link_path' => $view_all_type_paths_map[$type->type],
+          'link_title' => $type->name . (substr($type->name, -1) != 's' ? 's' : ''),
+          'menu_name' => 'springboard_admin_menu',
+          'expanded' => 1,
+          'customized' => 1,
+          'weight' => array_search($type->type, $view_all_type_order),
+        );
+      }
     }
   }
-  if (module_exists('springboard_target')) {
 
-    // Springboard Advocacy > Custom Targets.
+  if (module_exists('springboard_target')) {
+    // Advocacy > Custom Targets & Groups
     $items['admin/springboard/advocacy/actions']['_children']['admin/springboard/advocacy/targets'] = array(
       'link_path' => 'admin/springboard/advocacy/targets',
       'link_title' => 'Custom Targets & Groups',
       'menu_name' => 'springboard_admin_menu',
       'expanded' => 1,
       'customized' => 1,
-      'weight' => 2,
+      'weight' => 5,
     );
 
-    // Springboard Advocacy > Custom Individual Targets.
+    // Advocacy > Custom Individual Targets
     $items['admin/springboard/advocacy/actions']['_children']['admin/springboard/advocacy/targets']['_children']['admin/springboard/advocacy/targets/custom-targets'] = array(
       'link_path' => 'admin/springboard/advocacy/targets/custom-targets',
       'link_title' => 'Custom Individual Targets',
       'menu_name' => 'springboard_admin_menu',
       'expanded' => 1,
       'customized' => 1,
-      'weight' => 1,
+      'weight' => 8,
     );
 
-    // Springboard Advocacy > Custom Group Targets.
+    // Advocacy > Custom Group Targets
     $items['admin/springboard/advocacy/actions']['_children']['admin/springboard/advocacy/targets']['_children']['admin/springboard/advocacy/targets/custom-groups'] = array(
       'link_path' => 'admin/springboard/advocacy/targets/custom-groups',
       'link_title' => 'Custom Groups',
       'menu_name' => 'springboard_admin_menu',
       'expanded' => 1,
       'customized' => 1,
-      'weight' => 2,
+      'weight' => 11,
     );
   }
 }
@@ -761,7 +751,7 @@ function springboard_advocacy_springboard_admin_alias_patterns() {
  * @param int $sid
  *   Submission ID.
  */
-function springboard_advocacy_log_opt_in($nid, $uid, $opt_in, $sid) {
+function springboard_advocacy_log_opt_in($nid, $uid, $data, $opt_in, $sid) {
 
   db_delete('springboard_action_opt_in')
     ->condition('sid', $sid, '=')
@@ -773,9 +763,17 @@ function springboard_advocacy_log_opt_in($nid, $uid, $opt_in, $sid) {
     'uid' => $uid,
     'opt_in' => $opt_in ? 1 : 0,
     'created' => time(),
+    'first_name' => $data['sbp_first_name'],
+    'last_name' => $data['sbp_last_name'],
+    'mail' => $data['mail'],
+    'city' => $data['sbp_city'],
+    'state' => $data['sbp_state'],
+    'state_full' => $data['state_full'],
+    'zip' => $data['sbp_zip'],
   );
 
   drupal_write_record('springboard_action_opt_in', $record);
+  module_invoke_all('springboard_advocacy_action_opt_in', $nid, $uid, $sid);
 }
 
 /**
@@ -796,8 +794,77 @@ function springboard_advocacy_get_opt_in_uid($node, $submission) {
     $sid = $submission->sid;
     $result = db_query('SELECT uid FROM {webform_submissions} WHERE sid = :sid', array(':sid' => $sid));
     $uid = $result->fetchField();
-    springboard_advocacy_log_opt_in($node->nid, $uid, TRUE, $sid);
+    $data = springboard_advocacy_submission_signer_data($node->nid, $submission);
+    springboard_advocacy_log_opt_in($node->nid, $uid, $data, TRUE, $sid);
   }
+}
+
+/**
+ * Helper function, gather submission data for writing to opt-in table.
+ * @param int $nid
+ *   The nid of the form
+ * @param array $submission
+ *   The submitted form values.
+ * @return array
+ *   Data array for inserting into opt-in table.
+ */
+function springboard_advocacy_submission_signer_data($nid, $submission) {
+  $signer_fields = array(
+    'sbp_first_name',
+    'sbp_last_name',
+    'mail',
+    'sbp_city',
+    'sbp_state',
+    'sbp_zip',
+  );
+  $data = array();
+  foreach ($signer_fields as $form_key) {
+    $cid = springboard_advocacy_webform_get_cid_by_form_key($nid, $form_key);
+    $data[$form_key] = $submission->data[$cid]['value'][0];
+  }
+   $state_full = NULL;
+  if (isset($data['sbp_state'])) {
+    $state_full = _springboard_advocacy_opt_in_full_state($data['sbp_state']);
+  }
+  $data['state_full'] = $state_full;
+  return $data;
+}
+
+/**
+ * Helper function to get full state name from an abbreviation.
+ * @param string $state_abbrev
+ *   The abbreviated state.
+ * @return string
+ *   The full state name.
+ */
+function _springboard_advocacy_opt_in_full_state($state_abbrev) {
+  $states = &drupal_static(__FUNCTION__);
+  if (!isset($states)) {
+    $field = field_info_field('sbp_state');
+    $allowed_values = list_allowed_values($field);
+    $states = $allowed_values;
+  }
+  return isset($states[$state_abbrev]) ? $states[$state_abbrev] : NULL;
+}
+
+/**
+ * Helper function to find the cid for a given form key.
+ * @param int $nid
+ *   The nid of the form.
+ * @param string $form_key
+ *   The form_key of the component.
+ * @return int
+ *   The component cid.
+ */
+function springboard_advocacy_webform_get_cid_by_form_key($nid, $form_key) {
+  $result = db_query('SELECT cid from {webform_component} ' .
+    'WHERE nid = :nid ' .
+    'AND form_key = :form_key',
+    array(
+      ':nid' => $nid,
+      ':form_key' => $form_key,
+    ))->fetchField();
+  return $result;
 }
 
 /**
@@ -917,6 +984,7 @@ function springboard_advocacy_parse_redirect($node, $submission) {
   $redirect = NULL;
   if (isset($node->webform['redirect_url'])) {
     $redirect_url = trim($node->webform['redirect_url']);
+    module_load_include('inc', 'webform', 'includes/webform.submissions');
     $redirect_url = _webform_filter_values($redirect_url, $node, $submission, NULL, FALSE, TRUE);
 
     // Remove the site domain name from the redirect if present.
@@ -965,11 +1033,11 @@ function springboard_advocacy_node_delete($node) {
 }
 
 /**
- * Implements hook_webform_submission_insert().
+ * Implements hook_webform_user_assign_submission().
  *
  * Update opt-in block when submitted by a logged in user.
  */
-function springboard_advocacy_webform_submission_insert($node, $submission) {
+function springboard_webform_user_assign_submission($node, $submission) {
   $types = variable_get('sba_action_types', array());
   if (in_array($node->type, $types)) {
     $node_wrapper = entity_metadata_wrapper('node', $node);

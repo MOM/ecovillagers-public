@@ -9,14 +9,14 @@
 
 /**
  * Invoked whenever a client is tagged with a user ID for the first time.
- * 
- * I.e., there wasn’t a uid in the cookie before, and now there is. In essence, this means we 
- * just learned who an anonymous user is. This will fire when an anonymous user logs into Drupal, 
- * and it will fire when an email is added via the "sbck" query string parameter to a cookie 
+ *
+ * I.e., there wasn’t a uid in the cookie before, and now there is. In essence, this means we
+ * just learned who an anonymous user is. This will fire when an anonymous user logs into Drupal,
+ * and it will fire when an email is added via the "sbck" query string parameter to a cookie
  * without an email.
- * 
+ *
  * @param array $new_cookie
- *   An array of name/value pairs, including the pre-existing client_id and the new uid and 
+ *   An array of name/value pairs, including the pre-existing client_id and the new uid and
  *   associated user email.
  */
 function hook_springboard_cookie_uid($new_cookie) {

@@ -248,6 +248,7 @@ function market_source_admin_settings_form($form, &$form_state) {
     '#type' => 'submit',
     '#value' => t('Save settings'),
   );
+
   $form['#submit'][] = 'market_source_admin_settings_form_submit';
   return $form;
 }
@@ -279,6 +280,10 @@ function market_source_admin_settings_form_validate($form, &$form_state) {
     if (!empty($field['key']) && !preg_match('/^[a-zA-Z0-9_]+$/', $field['key'])) {
       form_set_error('market_source_global_fields][custom_fields_wrapper][' . $i . '][key',
         t('The field key may only contain alphanumeric characters and underscores.'));
+    }
+    if (!empty($field['key']) && is_numeric($field['key'])) {
+      form_set_error('market_source_global_fields][custom_fields_wrapper][' . $i . '][key',
+        t('The field key may not be numeric only. The field key may only contain alphanumeric characters and underscores.'));
     }
     if (!empty($field['default']) && !preg_match('|^[a-zA-Z0-9_+\-:\\\/\s%\[\]]+$|', $field['default'])) {
       form_set_error('market_source_global_fields][custom_fields_wrapper][' . $i . '][default',

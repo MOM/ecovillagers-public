@@ -1,5 +1,5 @@
 name = Salesforce Peer to Peer
-description = Salesforce integration support for peer to peer functionality.
+description = Salesforce integration support for Peer to Peer functionality.
 package = Salesforce
 core = 7.x
 version = 7.x-4.x-dev

@@ -1,0 +1,4 @@
+name = Springboard Performance
+description = Experimental performance tweaks for Springboard
+package = Jackson River Springboard - extras
+core = 7.x

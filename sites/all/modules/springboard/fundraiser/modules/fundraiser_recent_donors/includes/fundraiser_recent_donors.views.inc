@@ -103,18 +103,53 @@ function fundraiser_recent_donors_views_data() {
   $data['fundraiser_donor_opt_in']['created'] = array(
     'title' => t('Donation opt-in: Timestamp'),
     'help' => t('Timestamp when a donor opted in to having their donation displayed.'),
+    'argument' => array(
+      'handler' => 'views_handler_argument_numeric',
+    ),
     'field' => array(
-      'handler' => 'views_handler_field',
+      'handler' => 'views_handler_field_date',
       'click sortable' => TRUE,
     ),
     'filter' => array(
-      'handler' => 'views_handler_filter_string',
+      'handler' => 'views_handler_filter_date',
     ),
     'sort' => array(
-      'handler' => 'views_handler_sort',
+      'handler' => 'views_handler_sort_date',
     ),
-    'argument' => array(
-      'handler' => 'views_handler_argument_numeric',
+  );
+  $data['fundraiser_donor_opt_in']['first_name'] = array(
+    'title' => t('Donor user first name'),
+    'help' => t('Donor\'s first name.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['fundraiser_donor_opt_in']['last_name'] = array(
+    'title' => t('Donor user last name'),
+    'help' => t('Donor\'s last name.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['fundraiser_donor_opt_in']['state'] = array(
+    'title' => t('Donor user state abbreviated'),
+    'help' => t('Donor\'s state abbreviated.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['fundraiser_donor_opt_in']['state_full'] = array(
+    'title' => t('Donor user state'),
+    'help' => t('Donor\'s state'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['fundraiser_donor_opt_in']['amount'] = array(
+    'title' => t('Donation amount'),
+    'help' => t('Donation amount'),
+    'field' => array(
+      'handler' => 'views_handler_field',
     ),
   );
   return $data;

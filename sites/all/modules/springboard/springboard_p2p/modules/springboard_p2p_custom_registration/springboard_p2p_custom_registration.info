@@ -1,5 +1,5 @@
 ; $Id: $
-name = Springboard P2P Custom Registration
+name = Springboard Peer to Peer Custom Registration
 description = Manages integration between Webform User registration forms and Peer to Peer.
 core = 7.x
 version = 7.x-4.x-dev

@@ -1,8 +1,28 @@
 <?php
 /**
  * @file
- * Secure pre-populate install/schema hooks.
+ * Secure Autofill install/schema hooks.
  */
+
+/**
+ * Implements hook_uninstall().
+ */
+function secure_prepopulate_uninstall() {
+  $secure_prepopulate_vars = array(
+    'secure_prepopulate_key',
+    'secure_prepopulate_iv',
+    'secure_prepopulate_toggle_expiration',
+    'secure_prepopulate_expired_date_limit',
+    'secure_prepopulate_dynamic_gift_strings_never_expire',
+    'secure_prepopulate_not_me',
+  );
+  // Delete secure autofill vars.
+  foreach ($secure_prepopulate_vars AS $var) {
+    if (variable_get($var, FALSE)) {
+      variable_delete($var);
+    }
+  }
+}
 
 /**
  * Implements hook_requirements().
@@ -17,8 +37,8 @@ function secure_prepopulate_requirements($phase) {
   }
   $requirements = array(
     array(
-      'title' => 'Secure Pre-populate',
-      'description' => t('Secure Pre-populate requires that PHP Mcrypt extension be installed on the web server.'),
+      'title' => 'Secure Autofill',
+      'description' => t('Secure Autofill requires that PHP Mcrypt extension be installed on the web server.'),
       'severity' => $severity,
       'value' => 'PHP Mcrypt extension ' . $status,
     ),
@@ -32,12 +52,18 @@ function secure_prepopulate_requirements($phase) {
 function secure_prepopulate_schema() {
   $schema = array();
   $schema['secure_prepopulate_expired'] = array(
-    'description' => 'Expired pre-populate strings',
+    'description' => 'Expired autofill strings.',
     'fields' => array(
       'hash' => array(
-        'description' => 'The hashed qs string',
+        'description' => 'The encrypted string',
         'type' => 'varchar',
-        'length' => '40',
+        'length' => '800',
+        'not null' => FALSE,
+      ),
+      'userhash' => array(
+        'description' => 'Unique per-user hash',
+        'type' => 'varchar',
+        'length' => '16',
         'not null' => FALSE,
       ),
       'expire_date' => array(
@@ -47,24 +73,32 @@ function secure_prepopulate_schema() {
       ),
     ),
     'indexes' => array(
-      'hash' => array('hash'),
+      'userhash' => array('userhash'),
       'expired' => array('expire_date'),
     ),
   );
-  $schema['secure_prepopulate_synonyms'] = array(
-    'description' => 'Token string keys and their associated webform component form_keys',
+
+  $schema['secure_prepopulate_ggs'] = array(
+    'description' => 'Store per-node global gift string config.',
     'fields' => array(
-      'token_key' => array(
-        'type' => 'varchar',
-        'length' => 40,
-        'not null' => FALSE,
+      'nid' => array(
+        'description' => 'Node id',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
       ),
-      'synonyms' => array(
-        'type' => 'text',
+      'ggs_omit' => array(
+        'description' => 'Omit ths node from ggs.',
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => FALSE,
+        'default' => 0,
       ),
     ),
-    'primary key' => array('token_key'),
+    'primary key' => array('nid'),
   );
+
   return $schema;
 }
 
@@ -117,7 +151,7 @@ function secure_prepopulate_update_7002(&$sandbox) {
         'value' => 0,
         'weight' => 13,
         'email' => 1,
-        '#extra' => array(
+        'extra' => array(
           'description' => '',
           'hidden_type' => 'hidden',
         ),
@@ -130,5 +164,84 @@ function secure_prepopulate_update_7002(&$sandbox) {
 
   if ($sandbox['#finished']) {
     return t('Autofill field has been added to existing webforms.');
+  }
+}
+
+/**
+ * Remove old variables related to consolidation of secure prepop and dynamic gift strings.
+ * Add new user hash column.
+ */
+function secure_prepopulate_update_7003() {
+  // Remove hash index and add userhash index from secure_propulate_expired.
+  db_drop_index('secure_prepopulate_expired', 'hash');
+
+  // Lengthen hash column to 800.
+  $hash = array(
+    'description' => 'The encrypted string',
+    'type' => 'varchar',
+    'length' => '800',
+    'not null' => FALSE,
+  );
+
+  db_change_field('secure_prepopulate_expired', 'hash', 'hash', $hash);
+
+  // Copy old dynamic gift strings variable.
+  $secure_prepopulate_vars = array(
+      'dynamic_gift_strings_never_expire' => 'secure_prepopulate_dynamic_gift_strings_never_expire'
+    );
+
+  foreach($secure_prepopulate_vars AS $old => $new) {
+    if (variable_get($old, FALSE)) {
+      // Copy old settings to new.
+      variable_set($new, variable_get($old));
+      variable_del($old);
+    }
+  }
+
+  // Remove vars that don't exist in our version upgrade of secure_prepopulate.
+  variable_del('secure_prepopulate_precedence');
+  variable_del('dynamic_gift_strings_send_alert');
+  variable_del('dynamic_gift_strings_alert_email');
+
+  // Remove system table entries for dynamic gift strings.
+  $modules = array(
+    'dynamic_gift_strings'
+  );
+  db_delete('system')
+    ->condition('name', $modules, 'IN')
+    ->condition('type', 'module')
+    ->execute();
+
+  // Remove secure prepopulate synonyms.
+  db_drop_table('secure_prepopulate_synonyms');
+
+  // Add new userhash column to secure prepopulate table.
+  $spec = array(
+    'description' => 'Unique per-user hash',
+    'type' => 'varchar',
+    'length' => '16',
+    'not null' => FALSE,
+  );
+
+  db_add_field('secure_prepopulate_expired', 'userhash', $spec);
+
+  // Add index for this field.
+  db_add_index('secure_prepopulate_expired', 'userhash', array('userhash'));
+}
+
+/**
+ * Enable JS module.
+ */
+function secure_prepopulate_update_7004() {
+    module_enable(['js']);
+}
+
+/**
+ *  Add ggs tracking table.
+ */
+function secure_prepopulate_update_7005() {
+  $schema = module_invoke('secure_prepopulate', 'schema');
+  if (db_table_exists('secure_prepopulate_ggs') == FALSE) {
+    db_create_table('secure_prepopulate_ggs', $schema['secure_prepopulate_ggs']);
   }
 }

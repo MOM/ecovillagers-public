@@ -113,6 +113,7 @@ function fundraiser_fund_group_default_ask(&$form, $form_state, $type, $data, $n
       }
     }
     else {
+      form_load_include($form_state, 'inc', 'fundraiser_designations', 'components/designations');
       $node_form_amounts = fundraiser_designations_get_form_display_amounts($node);
       $price_set = $node_form_amounts[$type];
     }

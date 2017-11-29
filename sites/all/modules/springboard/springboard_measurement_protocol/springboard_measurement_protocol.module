@@ -32,21 +32,6 @@ function springboard_measurement_protocol_menu() {
 }
 
 /**
- * Implements hook_springboard_admin_menu_items_alter().
- */
-function springboard_measurement_protocol_springboard_admin_admin_menu_items_alter(&$items) {
-  // Add a menu item for the admin page.
-  $items['admin/springboard/marketing-analytics']['_children']['admin/springboard/measurement-protocol'] = array(
-    'link_path' => 'admin/config/system/springboard-measurement-protocol',
-    'link_title' => t('Measurement Protocol'),
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 20,
-  );
-}
-
-/**
  * Implements hook_commerce_paypal_ipn_process().
  */
 function springboard_measurement_protocol_commerce_paypal_ipn_process($order, $payment_method, $ipn) {

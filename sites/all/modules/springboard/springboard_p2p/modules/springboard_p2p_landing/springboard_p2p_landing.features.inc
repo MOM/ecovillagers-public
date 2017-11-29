@@ -28,7 +28,7 @@ function springboard_p2p_landing_image_default_styles() {
   // Exported image style: p2p_campaign_image_landing.
   $styles['p2p_campaign_image_landing'] = array(
     'name' => 'p2p_campaign_image_landing',
-    'label' => 'P2P Campaign Image Thumb',
+    'label' => 'Peer to Peer Campaign Image Thumb',
     'effects' => array(
       3 => array(
         'label' => 'Scale',
@@ -68,7 +68,7 @@ function springboard_p2p_landing_image_default_styles() {
   // Exported image style: p2p_campaign_image_slideshow.
   $styles['p2p_campaign_image_slideshow'] = array(
     'name' => 'p2p_campaign_image_slideshow',
-    'label' => 'P2P Campaign Image Slideshow',
+    'label' => 'Peer to Peer Campaign Image Slideshow',
     'effects' => array(
       3 => array(
         'label' => 'Scale',

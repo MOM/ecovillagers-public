@@ -13,9 +13,8 @@ function braintree_vault_schema() {
     'fields' => array(
       'customer_id' => array(
         'description' => 'The Braintree customer ID.',
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
+        'type' => 'varchar',
+        'length' => 36,
       ),
       'uid' => array(
         'description' => 'The user ID.',
@@ -68,9 +67,8 @@ function braintree_vault_schema() {
     'fields' => array(
       'customer_id' => array(
         'description' => 'The Braintree customer ID.',
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
+        'type' => 'varchar',
+        'length' => 36,
       ),
       'uid' => array(
         'description' => 'The user ID.',
@@ -267,4 +265,20 @@ function braintree_vault_update_7001() {
   );
   db_create_table('braintree_vault_addresses', $schema['braintree_vault_addresses']);
   db_create_table('braintree_vault_payment_methods', $schema['braintree_vault_payment_methods']);
+}
+
+/**
+ * Braintree Customer ID can be 36 varchar, not int.
+ */
+function braintree_vault_update_7002() {
+
+  db_drop_index('braintree_vault_addresses', 'customer_id');
+  db_change_field('braintree_vault_addresses', 'customer_id', 'customer_id',
+    array('type' => 'varchar', 'length' => 36));
+  db_add_index('braintree_vault_addresses', 'customer_id', array('customer_id'));
+
+  db_drop_index('braintree_vault_payment_methods', 'customer_id');
+  db_change_field('braintree_vault_payment_methods', 'customer_id', 'customer_id',
+    array('type' => 'varchar', 'length' => 36));
+  db_add_index('braintree_vault_payment_methods', 'customer_id', array('customer_id'));
 }

@@ -12,6 +12,7 @@ function commerce_authnet_echeck_fundraiser_commerce_fundraiser_gateway_info() {
   return array(
     'payment_method' => array('bank account'),
     'allow_recurring' => array('bank account'),
+    'offsite_recurring_external' => array('bank account'),
     'form callback' => 'commerce_authnet_echeck_fundraiser_commerce_submit_form',
     'cleanup callback' => 'commerce_authnet_echeck_fundraiser_commerce_cleanup',
     'scrub callback' => 'commerce_authnet_echeck_fundraiser_commerce_scrub',
@@ -72,14 +73,14 @@ function commerce_authnet_echeck_fundraiser_commerce_submit_form($payment_method
  */
 function commerce_authnet_echeck_fundraiser_commerce_scrub($fields) {
   // Scrub sensitive donation fields if they exists.
-  if (isset($fields['bank account']['aba_code'])) {
-    $fields['bank account']['aba_code'] = substr($fields['bank account']['aba_code'], -3);
+  if (isset($fields['bank account']['routing_number'])) {
+    $fields['bank account']['routing_number'] = substr($fields['bank account']['routing_number'], -3);
   }
-  if (isset($fields['bank account']['acct_num'])) {
-    $fields['bank account']['acct_num'] = substr($fields['bank account']['acct_num'], -3);
+  if (isset($fields['bank account']['account_number'])) {
+    $fields['bank account']['account_number'] = substr($fields['bank account']['account_number'], -3);
   }
   // Unset confirmation for account number
-  unset($fields['bank account']['confirm_acct_num']);
+  unset($fields['bank account']['confirm_account_number']);
   return $fields;
 }
 
@@ -137,8 +138,9 @@ function commerce_authnet_echeck_fundraiser_commerce_charge($method_instance, $d
     if (!empty($card_data) && $donation->status <> 'failed') {
       // If the next recurring series entry doesn't exist, create one.
       if (_fundraiser_sustainers_count_donations_recurr_remaining($donation->recurring->master_did) < 1) {
-        // Move card expiration date ahead one month.
-        $new_expire_time = mktime(0, 0, 0, ($card_data->card_exp_month + 1), 1, $card_data->card_exp_year);
+        // Move series ahead by one.
+        $charge_count = db_query('SELECT count(did) FROM {fundraiser_sustainers} WHERE master_did = :master_did', array(':master_did' => $donation->recurring->master_did))->fetchField();
+        $new_expire_time = strtotime("now +" . $charge_count ." months");
 
         $card_data->card_exp_month = date('m', $new_expire_time);
         $card_data->card_exp_year = date('Y', $new_expire_time);
@@ -180,7 +182,7 @@ function commerce_authnet_echeck_fundraiser_commerce_cardonfile($donation) {
 /**
  * Expiration date callback.
  */
-function commerce_authnet_echeck_fundraiser_commerce_expire($submission_fields) {
+function commerce_authnet_echeck_fundraiser_commerce_expire($submission_fields, $info = NULL) {
   $expires = array();
 
   if (!empty($submission_fields) && array_key_exists('card_expiration_month', $submission_fields['payment_fields']['bank account']) && array_key_exists('card_expiration_year', $submission_fields['payment_fields']['bank account'])) {
@@ -189,12 +191,10 @@ function commerce_authnet_echeck_fundraiser_commerce_expire($submission_fields) 
     $expires['year'] = $submission_fields['payment_fields']['bank account']['card_expiration_year'];
   }
   else {
-    // TODO this is causing a problem on billing updates, wherein future orders are deleted
-    // If no expiration date given, use current date + 2 years
-    $expire_time = strtotime("now + 2 years");
-
-    $expires['month'] = date('m', $expire_time);
-    $expires['year'] = date('Y', $expire_time);
+    $exp_month_count = variable_get('commerce_authnet_echeck_sustainer_series_start_count', 24);
+    $exp_timestamp = strtotime('+' . $exp_month_count . ' months');
+    $expires['month'] = date('m', $exp_timestamp);
+    $expires['year'] = date('Y', $exp_timestamp);
   }
 
   return $expires;
@@ -259,9 +259,9 @@ function commerce_authnet_echeck_fundraiser_commerce_update($donation, $card_dat
     $card_data->card_number = $cardonfile_fields['card_number'];
 
     // We're mirroring the commerce_authnet_cim_cardonfile_update function so setup values that function uses, see that function for details
-    $form['bank account']['acct_num']['#default_value'] = '';
-    $form_state['values']['bank account']['acct_num'] = $pane_values['bank account']['acct_num'];
-    $form_state['values']['bank account']['aba_code'] = $pane_values['bank account']['aba_code'];
+    $form['bank account']['account_number']['#default_value'] = '';
+    $form_state['values']['bank account']['account_number'] = $pane_values['bank account']['account_number'];
+    $form_state['values']['bank account']['routing_number'] = $pane_values['bank account']['routing_number'];
     $form_state['values']['bank account']['acct_name'] = $pane_values['bank account']['acct_name'];
     $form_state['values']['bank account']['owner'] = isset($donation->donation['first_name']) ? $donation->donation['first_name'] : '';
     $form_state['values']['bank account']['owner'] .= isset($donation->donation['last_name']) ? ' ' . $donation->donation['last_name'] : '';
@@ -284,8 +284,8 @@ function commerce_authnet_echeck_fundraiser_commerce_update($donation, $card_dat
   elseif ($action == 'new') {
     // We're using the built in function that requires a payment details array and the order
     $payment_details = array(
-      'routingNumber' => $pane_values['bank account']['aba_code'],
-      'accountNumber' => $pane_values['bank account']['acct_num'],
+      'routingNumber' => $pane_values['bank account']['routing_number'],
+      'accountNumber' => $pane_values['bank account']['account_number'],
       'nameOnAccount' => $pane_values['bank account']['acct_name']
     );
 
@@ -341,8 +341,8 @@ function _commerce_authnet_echeck_fundraiser_commerce_authnet_cim_cardonfile_upd
   // Extract the Customer Profile and Payment Profile IDs from the remote_id.
   list($cim_customer_profile_id, $cim_payment_profile_id) = explode('|', $card_data->remote_id);
 
-  if ($form_state['values']['bank account']['acct_num'] != $form['bank account']['acct_num']['#default_value']) {
-    $number = $form_state['values']['bank account']['acct_num'];
+  if ($form_state['values']['bank account']['account_number'] != $form['bank account']['account_number']['#default_value']) {
+    $number = $form_state['values']['bank account']['account_number'];
   }
   else {
     $number = 'XXXX' . $card_data->card_number;
@@ -387,8 +387,8 @@ function _commerce_authnet_echeck_fundraiser_commerce_authnet_cim_cardonfile_upd
       ),
       'payment' => array(
         'bankAccount' => array(
-          'routingNumber' => $form_state['values']['bank account']['aba_code'],
-          'accountNumber' => $form_state['values']['bank account']['acct_num'],
+          'routingNumber' => $form_state['values']['bank account']['routing_number'],
+          'accountNumber' => $form_state['values']['bank account']['account_number'],
           'nameOnAccount' => $form_state['values']['bank account']['acct_name']
         ),
       ),
@@ -436,7 +436,7 @@ function commerce_authnet_echeck_cardonfile_fields($donation) {
   $pane_values = commerce_authnet_echeck_pane_values($donation);
 
   $data = array(
-    'card_number' => substr($pane_values['bank account']['acct_num'], -3),
+    'card_number' => substr($pane_values['bank account']['account_number'], -3),
   );
 
   return $data + array('instance_id' => $donation->gateway['id'], 'uid' => $donation->uid);

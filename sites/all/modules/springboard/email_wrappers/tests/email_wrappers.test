@@ -43,7 +43,6 @@ class EmailWrappersTestCase extends AJAXTestCase {
       'title' => 'Test Email Wrapper',
       'email_wrapper_from_name[und][0][value]' => 'Email Wrappers Test',
       'email_wrapper_from_email[und][0][value]' => 'from@example.com',
-      'email_wrapper_reply_email[und][0][value]' => 'replyto@example.com',
       'email_wrapper_subject[und][0][value]' => 'Test webform submission mail',
       'email_wrapper_bcc_email[und][0][value]' => 'bcc0@example.com',
       //'email_wrapper_bcc_email[und][1][value]' => 'bcc1@example.com',

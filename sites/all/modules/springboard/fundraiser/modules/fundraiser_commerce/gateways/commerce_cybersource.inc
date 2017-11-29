@@ -12,7 +12,9 @@ function commerce_cybersource_fundraiser_commerce_fundraiser_gateway_info() {
   return array(
     'payment_method' => array('credit'),
     'allow_recurring' => array('credit'),
+    'offsite_recurring_external' => array('credit'),
     'allow_refund' => array('credit'),
+    'auto_extend' => array('credit'),
     'form callback' => 'commerce_cybersource_fundraiser_commerce_form',
     'cleanup callback' => 'commerce_cybersource_fundraiser_commerce_cleanup',
     'scrub callback' => 'commerce_cybersource_fundraiser_commerce_scrub',
@@ -101,7 +103,7 @@ function commerce_cybersource_fundraiser_commerce_charge($payment_method, $donat
 
   $pane_values = _fundraiser_commerce_credit_card_pane_values($donation);
   _fundraiser_commerce_submit_handler_pane_values($pane_values, $donation);
-  
+
   // Customer data for charge pulls from the customer profile given on the order, so we can ignore that.
   // If the charge fails, returns false, else nothing.
   $result = commerce_cybersource_soap_cc_submit_form_submit($payment_method, $pane_form, $pane_values, $order, $charge, $donation);

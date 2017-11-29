@@ -62,7 +62,7 @@ function market_source_menu() {
   return $items;
 }
 
-/** 
+/**
  * Implements hook_springboard_admin_alias_patterns().
  */
 function market_source_springboard_admin_alias_patterns() {
@@ -85,24 +85,14 @@ function market_source_springboard_admin_alias_patterns() {
  * Implements hook_springboard_admin_admin_menu_items_alter().
  */
 function market_source_springboard_admin_admin_menu_items_alter(&$items) {
-  // Marketing & Analytics > Source Codes.
+  // Marketing > Source Codes
   $items['admin/springboard/marketing-analytics']['_children']['admin/config/search/market-source'] = array(
     'link_path' => 'admin/config/search/market-source',
     'link_title' => 'Source Codes',
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 3,
-  );
-  
-  // Settings > Settings > Source Codes.
-  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/config/search/market-source'] = array(
-    'link_path' => 'admin/config/search/market-source',
-    'link_title' => 'Source Codes',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 7,
+    'weight' => -70,
   );
 }
 
@@ -114,7 +104,7 @@ function market_source_permission() {
     'administer market source' => array(
       'title' => t("Administer Market Source"),
       'description' => t('Configure the Market Source module, create and edit source codes.'),
-    ),    
+    ),
   );
 }
 
@@ -360,35 +350,6 @@ function market_source_webform_after_build($form, &$form_state) {
     // Add form_keys to the JS settings array.
     drupal_add_js(array('market_source' => $settings), 'setting');
 
-    // Populate device info fields.
-    if (libraries_load('mobiledetect')) {
-      $mobile_detect = new Market_Source_Mobile_Detect();
-
-      if (!empty($mobile_detect->getUserAgent())) {
-        $device_properties = $mobile_detect->getDeviceProperties();
-
-        if (!$mobile_detect->isMobile()) {
-          if (libraries_load('phpuseragent')) {
-            $ua_parse = parse_user_agent($mobile_detect->getUserAgent());
-
-            $device_properties['os'] = $ua_parse['platform'];
-            $device_properties['browser'] = $ua_parse['browser'] . ' ' . $ua_parse['version'];
-          }
-        }
-
-        $device_type = &_market_source_form_find_element($form, 'device_type');
-        $device_type['#value'] = $device_properties['type'];
-
-        $device_name = &_market_source_form_find_element($form, 'device_name');
-        $device_name['#value'] = $device_properties['name'];
-
-        $device_os = &_market_source_form_find_element($form, 'device_os');
-        $device_os['#value'] = $device_properties['os'];
-
-        $device_browser = &_market_source_form_find_element($form, 'device_browser');
-        $device_browser['#value'] = $device_properties['browser'];
-      }
-    }
   }
 
   // Mandatory return value for #after_build callbacks.
@@ -416,6 +377,41 @@ function market_source_generic_form_after_build($form, &$form_state) {
   drupal_add_js(array('market_source' => $settings), 'setting');
   // Mandatory return value for #after_build callbacks.
   return $form;
+}
+
+/**
+ * Implements hook_webform_submission_presave().
+ */
+function market_source_webform_submission_presave($node, &$submission) {
+  // Populate device info fields.
+  if (libraries_load('mobiledetect')) {
+    $mobile_detect = new Market_Source_Mobile_Detect();
+
+    if (!empty($mobile_detect->getUserAgent())) {
+
+      $device_properties = $mobile_detect->getDeviceProperties();
+
+      if (!$mobile_detect->isMobile()) {
+        if (libraries_load('phpuseragent')) {
+          $ua_parse = parse_user_agent($mobile_detect->getUserAgent());
+
+          $device_properties['os'] = $ua_parse['platform'];
+          $device_properties['browser'] = $ua_parse['browser'] . ' ' . $ua_parse['version'];
+        }
+      }
+      $device_type_cid = webform_get_cid($node, 'device_type', 0);
+      $submission->data[$device_type_cid]['value'][0] = $device_properties['type'];
+
+      $device_name_cid = webform_get_cid($node, 'device_name', 0);
+      $submission->data[$device_name_cid]['value'][0] = $device_properties['name'];
+
+      $device_os_cid = webform_get_cid($node, 'device_os', 0);
+      $submission->data[$device_os_cid]['value'][0] = $device_properties['os'];
+
+      $device_browser_cid = webform_get_cid($node, 'device_browser', 0);
+      $submission->data[$device_browser_cid]['value'][0] = $device_properties['browser'];
+    }
+  }
 }
 
 /**
@@ -764,6 +760,14 @@ function market_source_field_info() {
     $fields = module_invoke_all('market_source_field_info');
     // Allow for others to modify as needed.
     drupal_alter('market_source_field_info', $fields);
+    foreach ($fields as $index => $field) {
+      // @see https://app.assembla.com/spaces/springboard/tickets/2016
+      // Numeric keys get wiped out by module_invoke_all and replaced
+      // by a numeric index which breaks webform component validation.
+      if (is_numeric($index)) {
+        unset($fields[$index]);
+      }
+    }
   }
   // And return.
   return $fields;

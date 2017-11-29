@@ -2,18 +2,21 @@
 
 /**
  * @file
- * Support for Fundraiser donations
+ * Support for Fundraiser donations.
  */
 
 /**
- * Destination class for a fundraiser donation
+ * Destination class for a fundraiser donation.
  */
 class FundraiserDonationDestination extends MigrateDestination {
-  public function __construct() {
-    parent::__construct();
-  }
 
-  static public function getKeySchema() {
+  /**
+   * Set the Key for migrate.
+   *
+   * @return array
+   *   Array of values expected by migrate.
+   */
+  public static function getKeySchema() {
     return array(
       'did' => array(
         'type' => 'int',
@@ -23,16 +26,18 @@ class FundraiserDonationDestination extends MigrateDestination {
     );
   }
 
+  /**
+   * Migrate may call this class like a string.
+   */
   public function __toString() {
-    $output = t('Donations');
-    return $output;
+    return 'Donations';
   }
 
   /**
    * Delete a batch of donations at once.
    *
-   * @param $dids
-   *  Array of donation IDs to be deleted.
+   * @param array $dids
+   *   Array of donation IDs to be deleted.
    */
   public function bulkRollback(array $dids) {
     $rids = array();
@@ -40,10 +45,7 @@ class FundraiserDonationDestination extends MigrateDestination {
     foreach ($dids as $did) {
       $donation = fundraiser_donation_get_donation($did);
 
-      // Allow add-on modules to do their cleanup
-      fundraiser_donation_delete($donation);
-
-      // Delete the webform submission
+      // Delete the webform submission.
       if (!empty($donation->sid)) {
         module_load_include('inc', 'webform', 'includes/webform.submissions');
         $node = node_load($donation->nid);
@@ -51,11 +53,12 @@ class FundraiserDonationDestination extends MigrateDestination {
         webform_submission_delete($node, $submission);
       }
 
+      // Delete the recurring donations.
       $recurring = _fundraiser_sustainers_get_donations_recurr_by_masterdid($donation->did);
 
       if (!empty($recurring)) {
         foreach ($recurring as $recur) {
-          // Delete the main record
+          // Delete the recurring donation records.
           db_delete('fundraiser_donation')
             ->condition('did', $recur->did)
             ->execute();
@@ -65,8 +68,6 @@ class FundraiserDonationDestination extends MigrateDestination {
           // Delete sustainer log records.
           db_delete('fundraiser_sustainers_log')->condition('did', $recur->did)->execute();
         }
-
-        commerce_order_delete_multiple($rids);
       }
 
       // Delete cardonfile record.
@@ -74,30 +75,42 @@ class FundraiserDonationDestination extends MigrateDestination {
         commerce_cardonfile_delete($donation->data['cardonfile']);
       }
 
-      // Delete the main record
-      db_delete('fundraiser_donation')
-        ->condition('did', $did)
-        ->execute();
-      
-      // Fundraiser sustainers implemenation of hook_fundraiser_donation_delete() 
-      // doesn't remove associated fundraiser_sustainer records :(
-      db_delete('fundraiser_sustainers')->condition('master_did', $did)->execute();
+      // Delete the series entity.
       entity_delete('fundraiser_sustainers_series', $did);
 
       // Delete sustainer log records.
       db_delete('fundraiser_sustainers_log')->condition('did', $did)->execute();
+
+      // Delete the main donation record.
+      fundraiser_donation_delete($donation);
+      db_delete('fundraiser_donation')
+        ->condition('did', $did)
+        ->execute();
     }
 
-    // Delete the orders
-    commerce_order_delete_multiple($dids);
+    // Delete the orders.
+    commerce_order_delete_multiple(array_merge($rids, $dids));
 
-    // Delete everything from the queue
-    db_delete('salesforce_queue')
-      ->condition('drupal_id', array_merge($rids, $dids), 'IN')
-      ->condition('module', array('salesforce_donation', 'fundraiser_sustainers'), 'IN')
-      ->execute();
+    // Delete everything from the queue and sync map.
+    $sf_types = array(
+      'salesforce_donation',
+      'fundraiser_sustainers',
+      'fundraiser_sustainers_series',
+    );
+    if (module_exists('salesforce_queue')) {
+      db_delete('salesforce_queue')
+        ->condition('drupal_id', array_merge($rids, $dids), 'IN')
+        ->condition('module', $sf_types, 'IN')
+        ->execute();
+    }
+    if (module_exists('salesforce_sync')) {
+      db_delete('salesforce_sync_map')
+        ->condition('drupal_id', array_merge($rids, $dids), 'IN')
+        ->condition('module', $sf_types, 'IN')
+        ->execute();
+    }
 
-    $this->completeRollback($dids); 
+    $this->completeRollback($dids);
   }
 
   /**
@@ -141,7 +154,7 @@ class FundraiserDonationDestination extends MigrateDestination {
       $updating = FALSE;
     }
 
-    // Create a webform submission if that has been passed
+    // Create a webform submission if that has been passed.
     if (!empty($row->submission)) {
       module_load_include('inc', 'webform', 'includes/webform.submissions');
 
@@ -389,26 +402,21 @@ class FundraiserDonationDestination extends MigrateDestination {
       // Update the recurring table.
       _fundraiser_sustainers_create_recurring($recurring_donation);
 
-      // Create the sustainer series entity      
+      // Create the fundraiser sustainers series entity.
       $fundraiser_sustainers_series_data = array(
         'did' => $donation->did,
         'uid' => $donation->uid,
         'amount' => $donation->donation['amount'],
-        'installments' => _fundraiser_sustainers_calculate_installments($donation)+1, // +1 because the function assumes the start date is now!
+        'status' => 'active',
+        'installments' => _fundraiser_sustainers_calculate_installments($donation),
       );
 
-      db_insert('fundraiser_sustainers_series')
-        ->fields($fundraiser_sustainers_series_data)
-        ->execute();
+      $fundraiser_sustainers_series = entity_create('fundraiser_sustainers_series', $fundraiser_sustainers_series_data);
+      $fundraiser_sustainers_series->save();
 
       // Now handle the recurring object, and the rest of the orders.
-      if (!_fundraiser_sustainers_offsite_recurring($info['offsite_recurring'], $donation->donation['payment_method'])) { // Is not an offline recurring
-        // Load the newly created recurring donation into salesforce.
-        if (module_exists('salesforce_genmap')) {
-          $sf_donation = fundraiser_donation_get_donation($donation->did, TRUE);
-          salesforce_genmap_send_object_to_queue('fundraiser_sustainers', 'insert', $sf_donation->node, $sf_donation->did, $sf_donation, 'recurring_donation');
-        }
-
+      $offsite = _fundraiser_sustainers_offsite_recurring($info, $donation->donation['payment_method']);
+      if (!$offsite) { // Is not an offline recurring
         if (isset($info['expire callback'])) {
           $expiration_func = $info['expire callback'];
           if (function_exists($expiration_func)) {

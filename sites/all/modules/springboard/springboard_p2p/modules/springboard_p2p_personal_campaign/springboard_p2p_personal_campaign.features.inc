@@ -38,7 +38,7 @@ function springboard_p2p_personal_campaign_image_default_styles() {
   // Exported image style: p2p_pers_campaign_image_thumb.
   $styles['p2p_pers_campaign_image_thumb'] = array(
     'name' => 'p2p_pers_campaign_image_thumb',
-    'label' => 'P2P Personal Campaign Image Thumb',
+    'label' => 'Peer to Peer Personal Campaign Image Thumb',
     'effects' => array(
       1 => array(
         'label' => 'Scale',

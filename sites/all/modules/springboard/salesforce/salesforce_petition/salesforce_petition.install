@@ -64,6 +64,7 @@ function salesforce_petition_create_petition_action_fieldmap() {
       'title' => 'Name',
       'action' => 'Action__c',
       'action_type' => 'Action_Type__c',
+      'internal_name' => 'Internal_Name__c',
     ),
     'salesforce_submission_map' => array(
       'sid' => 'Submission_ID__c',
@@ -443,4 +444,30 @@ function salesforce_petition_update_7001() {
     ))
     ->condition('module', 'springboard_petition')
     ->execute();
+}
+
+
+/**
+ * Maps the internal name field
+ */
+function salesforce_petition_update_7002() {
+  $result = db_query('SELECT mid, field_map FROM {salesforce_genmap_map} WHERE module = :module', array(':module' => 'salesforce_petition'));
+
+  foreach ($result as $record) {
+    $map_need_updating = FALSE;
+    $map = unserialize($record->field_map);
+    if (!array_key_exists('internal_name', $map['salesforce_node_map'])) {
+      $map['salesforce_node_map']['internal_name'] = 'Internal_Name__c';
+      $map_need_updating = TRUE;
+    }
+    // Only perform the update if the fields weren't already mapped manually.
+    if ($map_need_updating) {
+      db_update('salesforce_genmap_map')
+        ->fields(array(
+          'field_map' => serialize($map),
+        ))
+        ->condition('mid', $record->mid)
+        ->execute();
+    }
+  }
 }

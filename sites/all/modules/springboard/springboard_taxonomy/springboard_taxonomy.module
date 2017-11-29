@@ -46,8 +46,9 @@ function springboard_taxonomy_menu() {
     'title' => 'Settings',
     'description' => 'Configuration settings for Springboard Taxonomy.',
     'page callback' => 'springboard_taxonomy_settings_page',
-    'access callback' => 'springboard_taxonomy_access_check',
-    'access arguments' => array(3, 4),
+    'page arguments' => array(3),
+    'access callback' => 'springboard_taxonomy_access_check_settings',
+    'access arguments' => array(3),
     'type' => MENU_LOCAL_TASK,
     'file' => 'springboard_taxonomy.admin.inc',
   );
@@ -58,7 +59,7 @@ function springboard_taxonomy_menu() {
     'description' => 'Permissions for springboard taxonomy.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('user_admin_permissions'),
-    'access arguments' => array('administer permissions'),
+    'access callback' => 'springboard_taxonomy_access_check_permissions',
     'file path' => drupal_get_path('module', 'user'),
     'file' => 'user.admin.inc',
     'type' => MENU_LOCAL_TASK,
@@ -92,15 +93,29 @@ function springboard_taxonomy_vocab_name_load($name) {
  * @return bool
  *   True if accessible.
  */
-function springboard_taxonomy_access_check($vocab, $path = NULL) {
-  if (user_access('administer organization issues') && empty($path)) {
-    $allowed = springboard_taxonomy_allowed_vocabularies();
-    if (in_array($vocab->machine_name, $allowed)) {
-      return TRUE;
+function springboard_taxonomy_access_check($vocab) {
+  if (is_string($vocab)) {
+    $vocab = taxonomy_vocabulary_load_multiple(NULL, array('machine_name' => $vocab));
+    $vocab = reset($vocab);
+  }
+  if(!empty($vocab)) {
+    if (user_access('administer ' . $vocab->machine_name) || user_access('administer taxonomy')) {
+      $allowed = springboard_taxonomy_allowed_vocabularies();
+      if (is_array($allowed) && isset($vocab->machine_name) && in_array($vocab->machine_name, $allowed)) {
+        return TRUE;
+      }
     }
   }
-  if (user_access('administer springboard taxonomy settings') && $path == 'settings') {
-    if ($vocab->machine_name == 'sba_organization_issues') {
+  return FALSE;
+}
+
+/**
+ * @param $vocab
+ * @return bool
+ */
+function springboard_taxonomy_access_check_settings($vocab) {
+  if (user_access('administer ' . $vocab->machine_name . ' settings') || user_access('administer taxonomy')) {
+    if ($vocab->machine_name == 'sba_organization_issues' || $vocab->machine_name == 'sb_node_extras') {
       return TRUE;
     }
   }
@@ -108,10 +123,21 @@ function springboard_taxonomy_access_check($vocab, $path = NULL) {
 }
 
 /**
+ * @return bool
+ */
+function springboard_taxonomy_access_check_permissions() {
+  if (user_access('administer permissions')) {
+    return TRUE;
+  }
+  return FALSE;
+}
+
+
+/**
  * Restricts the springboard taxonomy UI to specific vocabularies.
  */
 function springboard_taxonomy_allowed_vocabularies() {
-  $allowed = array('sba_organization_issues');
+  $allowed = array('sba_organization_issues', 'sb_node_extras');
   drupal_alter('springboard_taxonomy_allowed_vocabularies', $allowed);
   return $allowed;
 }
@@ -120,14 +146,21 @@ function springboard_taxonomy_allowed_vocabularies() {
  * Implements hook_permission().
  */
 function springboard_taxonomy_permission() {
-  return array(
-    'administer organization issues' => array(
-      'title' => t('View term listings and add new terms'),
-    ),
-    'administer springboard taxonomy settings' => array(
-      'title' => t('Assign or remove the organization issues taxonomy to/from content types.'),
-    ),
+  $perms = array();
+  $allowed = springboard_taxonomy_allowed_vocabularies();
+  foreach ($allowed as $allow) {
+    $voc = springboard_taxonomy_vocab_name_load($allow);
+    if (!empty($voc)) {
+      $perms['administer ' . $allow] = array('title' => 'View term listings and add new terms in ' . check_plain($voc->name));
+      $perms['administer ' . $allow . ' settings'] = array(
+        'title' => t('Assign or remove the @name taxonomy to/from content types.', array('@name' => check_plain($voc->name))),
+      );
+    }
+  }
+  $perms['access the node extras vocabulary']  = array(
+    'title' => t('Access the node extras vocabulary on edit forms.'),
   );
+  return $perms;
 }
 
 /**
@@ -143,15 +176,27 @@ function springboard_taxonomy_form_alter(&$form, &$form_state, $form_id) {
     if (in_array($form['#node']->type, $taxonomy_types) && isset($form['field_sba_organization_issues'])) {
       springboard_taxonomy_taxonomy_form($form, $form_state, $form_id);
     }
+    if (isset($form['field_sb_node_extras'])) {
+      $form['field_sb_node_extras'][$form['field_sb_node_extras']['#language']]['#title'] = '';
+      if (!user_access('access the node extras vocabulary')) {
+        $form['field_sb_node_extras']['#access'] = FALSE;
+      }
+    }
   }
 
-  if($form_id == 'taxonomy_overview_terms' && arg(1) == 'springboard' && arg(3) == 'sba_organization_issues') {
+  if ($form_id == 'taxonomy_overview_terms' && arg(1) == 'springboard' && arg(3) == 'sba_organization_issues') {
     if (isset($form['actions']['reset_alphabetical'])) {
       $form['actions']['reset_alphabetical']['#access'] = FALSE;
     }
   }
 
-  if($form_id == 'taxonomy_form_term' && (arg(1) == 'springboard' && arg(3) == 'sba_organization_issues') || (arg(0) =='taxonomy' && arg(1) == 'term' && arg(3) == 'edit')) {
+  if ($form_id == 'taxonomy_overview_terms' && arg(1) == 'springboard' && arg(3) == 'sb_node_extras') {
+    if (isset($form['actions']['reset_alphabetical'])) {
+      $form['actions']['reset_alphabetical']['#access'] = FALSE;
+    }
+  }
+
+  if ($form_id == 'taxonomy_form_term' && (arg(1) == 'springboard' && (arg(3) == 'sba_organization_issues' || arg(3) == 'sba_node_extras')) || (arg(0) =='taxonomy' && arg(1) == 'term' && arg(3) == 'edit')) {
     $description = $form['description'];
     unset($form['description']);
     $form['description_wrapper'] = array(
@@ -315,12 +360,285 @@ function springboard_taxonomy_springboard_admin_alias_patterns() {
  * Put the link to the admin page under the springboard/settings/config.
  */
 function springboard_taxonomy_springboard_admin_admin_menu_items_alter(&$items) {
-  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/taxonomy/sba_organization_issues'] = array(
-    'link_path' => 'admin/springboard/taxonomy/sba_organization_issues',
-    'link_title' => t('Organization Issues'),
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 1,
-  );
+  if (springboard_taxonomy_access_check('sba_organization_issues')) {
+    $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/taxonomy/sba_organization_issues'] = array(
+      'link_path' => 'admin/springboard/taxonomy/sba_organization_issues',
+      'link_title' => t('Organization Issues'),
+      'attributes' => array('sb_link_group' => t('Springboard Settings')),
+      'menu_name' => 'springboard_admin_menu',
+      'expanded' => 1,
+      'customized' => 1,
+    );
+  }
+//  if (springboard_taxonomy_access_check('sb_node_extras')) {
+//    $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/taxonomy/sb_node_extras'] = array(
+//      'link_path' => 'admin/springboard/taxonomy/sb_node_extras',
+//      'link_title' => t('Node Extras'),
+//      'attributes' => array('sb_link_group' => t('Springboard Settings')),
+//      'menu_name' => 'springboard_admin_menu',
+//      'expanded' => 1,
+//      'customized' => 1,
+//    );
+//  }
 }
+
+
+/**
+ * Implements hook_default_views_alter().
+ *
+ * If the node extras filter is enabled for a views display (in this module's
+ * settings) alter it into the display.
+ */
+function springboard_taxonomy_views_default_views_alter(&$views) {
+
+  $alter = array_filter(variable_get('extras_filter_views', []));
+  $alterable_displays = array();
+  foreach ($alter as $item) {
+    $data = explode('|', $item);
+    $alterable_displays[$data[0]][] = $data[1];
+  }
+  if (!empty($alterable_displays)) {
+    $tids = array_keys(taxonomy_get_term_by_name("Save as clone template?", "sb_node_extras"));
+    if (!empty($tids)) {
+      $tid = reset($tids);
+    }
+  }
+  foreach ($alterable_displays as $view_name => $displays) {
+    foreach ($displays as $display_name) {
+      if (!empty($views[$view_name]->display[$display_name]->handler) && !empty($tid)) {
+        $handler =& $views[$view_name]->display[$display_name]->handler;
+        springboard_taxonomy_add_node_extras_filter_to_view($handler, $views[$view_name], $tid);
+      }
+    }
+  }
+}
+
+/**
+ * Add the "clone template" filter to enabled views.
+ *
+ * @param $view.
+ */
+function springboard_taxonomy_add_node_extras_filter_to_view(&$handler, $view, $tid) {
+  // If the current display is using the default display's filters,
+  // grab them and reapply them.
+  if (!isset($handler->display->display_options['defaults']['filters'])
+  || $handler->display->display_options['defaults']['filters'] === TRUE) {
+    $handler->display->display_options['defaults']['filters'] = FALSE;
+    $default_filters = $view->display['default']->handler->display->display_options['filters'];
+    foreach ($default_filters as $key => $filter) {
+      $handler->display->display_options['filters'][$key] = $filter;
+    }
+  }
+
+  // Add the new filter.
+  $handler->display->display_options['filters']['term_node_tid_depth']['id'] = 'term_node_tid_depth';
+  $handler->display->display_options['filters']['term_node_tid_depth']['table'] = 'node';
+  $handler->display->display_options['filters']['term_node_tid_depth']['field'] = 'term_node_tid_depth';
+  $handler->display->display_options['filters']['term_node_tid_depth']['exposed'] = TRUE;
+  $handler->display->display_options['filters']['term_node_tid_depth']['expose']['operator_id'] = 'term_node_tid_depth_op';
+  $handler->display->display_options['filters']['term_node_tid_depth']['expose']['label'] = 'Options';
+  $handler->display->display_options['filters']['term_node_tid_depth']['expose']['operator'] = 'term_node_tid_depth_op';
+  $handler->display->display_options['filters']['term_node_tid_depth']['expose']['identifier'] = 'term_node_tid_depth';
+  $handler->display->display_options['filters']['term_node_tid_depth']['expose']['multiple'] = TRUE;
+  $handler->display->display_options['filters']['term_node_tid_depth']['expose']['remember_roles'] = array(
+    2 => '2',
+    1 => 0,
+    3 => 0,
+    4 => 0,
+    5 => 0,
+  );
+  $handler->display->display_options['filters']['term_node_tid_depth']['is_grouped'] = TRUE;
+  $handler->display->display_options['filters']['term_node_tid_depth']['group_info']['label'] = 'Options';
+  $handler->display->display_options['filters']['term_node_tid_depth']['group_info']['identifier'] = 'term_node_tid_depth';
+  $handler->display->display_options['filters']['term_node_tid_depth']['group_info']['widget'] = 'radios';
+  $handler->display->display_options['filters']['term_node_tid_depth']['group_info']['multiple'] = TRUE;
+  $handler->display->display_options['filters']['term_node_tid_depth']['group_info']['group_items'] = array(
+    1 => array(
+      'title' => t('Show clone templates only'),
+      'operator' => 'or',
+      'value' => array(
+        1 => $tid,
+      ),
+    ),
+  );
+  $handler->display->display_options['filters']['term_node_tid_depth']['type'] = 'select';
+  $handler->display->display_options['filters']['term_node_tid_depth']['vocabulary'] = 'sb_node_extras';
+  $handler->display->display_options['filters']['term_node_tid_depth']['depth'] = '0';
+}
+
+/**
+ * Implements hook_views_pre_view().
+ *
+ * If the view that we're trying to add the "node extras" filter to is
+ * overriding code, we can force the filter using this hook.
+ */
+function springboard_taxonomy_views_pre_view(&$view, &$display_id, &$args) {
+  $alter = array_filter(variable_get('extras_filter_views', []));
+  $alterable_displays = array();
+  foreach ($alter as $item) {
+    $data = explode('|', $item);
+    $alterable_displays[$data[0]][] = $data[1];
+  }
+
+  if (!empty($alterable_displays)) {
+    $tids = array_keys(taxonomy_get_term_by_name("Save as clone template?", "sb_node_extras"));
+    if (!empty($tids)) {
+      $tid = reset($tids);
+    }
+  }
+
+  foreach ($alterable_displays as $view_name => $displays) {
+    if ($view_name == $view->name && !empty($tid)) {
+      foreach ($displays as $display_name) {
+        if ($view->current_display == $display_name) {
+          springboard_taxonomy_force_node_extras_filter_in_view($view, $tid);
+        }
+      }
+    }
+  }
+}
+
+
+/**
+ * Force the node extras filter in overridden views.
+ *
+ * @param $view
+ */
+function springboard_taxonomy_force_node_extras_filter_in_view(&$view, $tid) {
+
+  $filter = array(
+    'id' => 'term_node_tid_depth',
+    'exposed' => TRUE,
+    'is_grouped' => TRUE,
+    'type' => 'select',
+    'vocabulary' => 'sb_node_extras',
+    'depth' => 0,
+    'table' => 'node',
+    'group_info' => array(
+      'identifier' => 'term_node_tid_depth',
+      'label' => 'Options',
+      'widget' => 'radios',
+      'multiple' => TRUE,
+      'group_items' => array(
+        1 => array(
+          'title' => t('Show clone templates only'),
+          'operator' => 'or',
+          'value' => array(
+            1 => $tid,
+          ),
+        ),
+      ),
+    ),
+    'expose' => array(
+      'operator_id' => 'term_node_tid_depth_op',
+      'operator' => 'term_node_tid_depth_op',
+      'label' => '',
+      'identifier' => 'term_node_tid_depth',
+      'multiple' => TRUE,
+    ),
+  );
+
+  $types = views_object_types();
+  $display = &$view->display[$view->current_display];
+
+  // Check that the field does not already exist.
+  $existing_fields = $display->handler->get_option($types['filter']['plural']);
+
+  if (!isset($existing_fields['term_node_tid_depth'])) {
+    $view->add_item($view->current_display, 'filter', 'node', 'term_node_tid_depth', $filter, 'term_node_tid_depth');
+  }
+}
+
+
+/**
+ * Implements hook_clone_node_alter().
+ *
+ * Don't clone the clone value
+ */
+function springboard_taxonomy_clone_node_alter(&$node, $context) {
+  if (isset($node->field_sb_node_extras)) {
+    $node->field_sb_node_extras = NULL;
+  }
+}
+
+
+/**
+ * Bug fix for combine filter checkboxes:
+ * https://www.drupal.org/node/1986306
+ */
+function springboard_taxonomy_form_views_exposed_form_alter(&$form, &$form_state, $form_id) {
+  if (isset($form['form_id']['#value']) && $form['form_id']['#value'] == 'views_exposed_form') {
+    $alter = array_filter(variable_get('extras_filter_views', []));
+    $alterable_displays = array();
+    foreach ($alter as $item) {
+      $data = explode('|', $item);
+      $alterable_displays[$data[0]][] = $data[1];
+    }
+
+    if (!empty($alterable_displays)) {
+        foreach ($alterable_displays as $view_name => $displays) {
+          if ($form_state['view']->name == $view_name) {
+            foreach ($displays as $display_name) {
+            if ($display_name == $form_state['view']->current_display
+              && !empty($form_state['view']->display[$display_name]->handler)) {
+              $form['#submit'][] = 'springboard_taxonomy_views_exposed_form_submit';
+              foreach( $form['#submit'] as $key => $function_name) {
+                if ($function_name == 'views_exposed_form_submit') {
+                  unset($form['#submit'][$key]);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Bug fix for combine filter checkboxes:
+ *
+ * Refactors views_exposed_form_submit().
+ * https://www.drupal.org/node/1986306
+ */
+function springboard_taxonomy_views_exposed_form_submit(&$form, &$form_state) {
+  foreach (array('field', 'filter') as $type) {
+    $handlers = &$form_state['view']->$type;
+    foreach ($handlers as $key => $info) {
+      $handlers[$key]->exposed_submit($form, $form_state);
+    }
+  }
+  $form_state['view']->exposed_data = $form_state['values'];
+  $form_state['view']->exposed_raw_input = array();
+
+  $exclude = array('q', 'submit', 'form_build_id', 'form_id', 'form_token', 'exposed_form_plugin', '', 'reset');
+  $exposed_form_plugin = $form_state['exposed_form_plugin'];
+  $exposed_form_plugin->exposed_form_submit($form, $form_state, $exclude);
+
+  foreach ($form_state['values'] as $key => $value) {
+    if (!in_array($key, $exclude)) {
+      $form_state['view']->exposed_raw_input[$key] = $value;
+
+      // If we have a multiple checkbox with values set to zero, we don't want
+      // these included in the exposed_raw_input array as it breaks pagination.
+      if (is_array($value)) {
+        $field = isset($form[$key]) ? $form[$key] : NULL;
+
+        if ($field === NULL) {
+          // The field may be buried in a fieldset somewhere so find it.
+          foreach (element_children($form) as $child) {
+            if (isset($form[$child][$key])) {
+              $field = $form[$child][$key];
+              continue;
+            }
+          }
+        }
+
+        if (isset($field['#type']) && $field['#type'] === 'checkboxes') {
+          $form_state['view']->exposed_raw_input[$key] = array_filter($value);
+        }
+      }
+    }
+  }
+}
+

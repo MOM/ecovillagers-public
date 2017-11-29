@@ -11,6 +11,7 @@
 function commerce_sagepay_direct_fundraiser_commerce_fundraiser_gateway_info() {
   return array(
     'payment_method' => array('credit'),
+    'auto_extend' => array('credit'),
     'form callback' => 'commerce_sagepay_direct_fundraiser_commerce_form',
     'cleanup callback' => 'commerce_sagepay_direct_fundraiser_commerce_cleanup',
     'scrub callback' => 'commerce_sagepay_direct_fundraiser_commerce_scrub',

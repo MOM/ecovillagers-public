@@ -43,12 +43,9 @@ function braintree_payment_library() {
  * @param array $config
  *   The payment method configuration.
  */
-function braintree_form_elements($payment_type, $config, $billing_update = FALSE) {
+function braintree_form_elements($payment_type, $config) {
   global $user;
   $js_settings = array();
-  if ($billing_update) {
-    $js_settings['billing_update_type'] = $payment_type;
-  }
 
   $form = array();
   $form_processed = &drupal_static(__FUNCTION__);
@@ -89,16 +86,24 @@ function braintree_form_elements($payment_type, $config, $billing_update = FALSE
 
     $token = NULL;
     $arguments = array();
-    // Try to generate a Braintree token.
-    try {
-      $token = Braintree_ClientToken::generate($arguments);
+
+    $env = $payment_method_instance['settings']['environment'];
+    if (!empty($payment_method_instance['settings'][$env]['braintree_static_token'])) {
+      $token = $payment_method_instance['settings'][$env]['braintree_static_token'];
       $js_settings['clientToken'] = $token;
     }
-    catch (Exception $e) {
-      $error_message = braintree_report_error($e);
-      $message = t('Braintree token generation failed: @message. Please check Braintree gateway configuration.', array('@message' => $error_message));
-      drupal_set_message($message, 'error');
-      return array();
+    else {
+      // Try to generate a Braintree token.
+      try {
+        $token = Braintree_ClientToken::generate($arguments);
+        $js_settings['clientToken'] = $token;
+      }
+      catch (Exception $e) {
+        $error_message = braintree_report_error($e);
+        $message = t('Braintree token generation failed: @message. Please check Braintree gateway configuration.', array('@message' => $error_message));
+        drupal_set_message($message, 'error');
+        return array();
+      }
     }
 
     $form_processed = TRUE;
@@ -226,11 +231,76 @@ function _braintree_payment_default_fundraiser_fields() {
 }
 
 /**
- * Implements hook_fundraiser_update_billing_form_preprocess().
+ * Implements hook_form_FORM_ID_alter().
  */
-function braintree_payment_fundraiser_update_billing_form_preprocess_alter(&$data) {
-  if ($data['update payment'] && !empty($data['card']) && $data['card']->payment_method == 'braintree_paypal') {
-    $data['update payment'] = FALSE;
-    $data['update billing'] = FALSE;
+function braintree_payment_form_fundraiser_update_billing_form_alter(&$form, $form_state) {
+  if (!empty($form['#fundraiser_data']['donation']->gateway['id'])) {
+    list($method_id, $rule_name) = explode('|', $form['#fundraiser_data']['donation']->gateway['id']);
+    // Remove the billing update fields from certain braintree gateways.
+    $no_update = array(
+      'braintree_applepay',
+      'braintree_paypal',
+    );
+
+    if (in_array($method_id, $no_update)) {
+      if (!empty($form['billing_information'])) {
+        $form['billing_information']['#access'] = FALSE;
+      }
+      if (!empty($form['payment_fields'])) {
+        $form['payment_fields']['#access'] = FALSE;
+      }
+      if (!empty($form['actions'])) {
+        $form['actions']['submit']['#access'] = FALSE;
+
+        // Add a message so folks know why these fields are missing.
+        $form['actions']['braintree_no_update'] = array(
+          '#markup' => t('This payment method does not support changes to the billing information.'),
+        );
+      }
+    }
+
+    if ($method_id == 'braintree_hostedfields') {
+      // Hide the address button and change submit text as Braintree does not
+      // work with two submit buttons.
+      $form['billing_information']['address_update']['#access'] = FALSE;
+      $form['actions']['submit']['#value'] = t('Update Billing Details');
+
+      // Reset the validate handler to use one for braintree.
+      $form['actions']['submit']['#validate'] = ['braintree_payment_form_fundraiser_update_billing_form_validate'];
+
+      // Add a js setting for use by Braintree javascript.
+      $js_settings['billing_update_type'] = 'credit';
+      $form['#attached']['js'][] = array(
+        'data' => array('braintree' => $js_settings),
+        'type' => 'setting',
+      );
+    }
   }
+}
+
+/**
+ * Validation handler for fundraiser_update_billing_form().
+ */
+function braintree_payment_form_fundraiser_update_billing_form_validate(&$form, &$form_state) {
+  // If the nonce is set we switch to only use the address update only function.
+  $nonce = braintree_get_nonce();
+
+  // If there's no nonce we assume this was not a payment info update.
+  if (empty($nonce)) {
+    $form_state['update_payment'] = FALSE;
+  }
+}
+
+/**
+ * Helper function to determine if key exists in haystack using regex.
+ */
+function _braintree_payment_array_key_starts_with($needle, $haystack) {
+  $keys = array_keys($haystack);
+  $needle_length = strlen($needle);
+  foreach ($keys as $key) {
+    if (substr($key, 0, $needle_length)) {
+      return TRUE;
+    }
+  }
+  return FALSE;
 }

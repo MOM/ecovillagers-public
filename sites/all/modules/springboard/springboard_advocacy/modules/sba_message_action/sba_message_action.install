@@ -614,3 +614,12 @@ function sba_message_action_update_7030() {
     field_update_instance($field);
   }
 }
+
+/**
+ * Add the "Enable User-Preferred Salutations" checkbox field to message actions.
+ */
+function sba_message_action_update_7031() {
+  module_load_include('inc', 'sba_message_action', 'includes/install/sba_message_action.install_fields');
+  _sba_message_action_create_node_fields(TRUE);
+  _sba_message_action_add_salutations_to_fieldgroup();
+}

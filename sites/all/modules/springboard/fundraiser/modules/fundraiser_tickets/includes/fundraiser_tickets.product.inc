@@ -1,5 +1,6 @@
 <?php
 
+
 function _fundraiser_tickets_create_fundraiser_ticket_product() {
   // First check if the product type exists already and if not add
   $product_entities = commerce_product_entity_info();
@@ -316,23 +317,34 @@ function _fundraiser_tickets_product_fields() {
 
 
   $fields['fr_tickets_description'] = array(
-     'field_config' => array(
+    'field_config' => array(
       'active' => 1,
       'cardinality' => 1,
       'deleted' => 0,
       'entity_types' => array(),
       'field_name' => 'fr_tickets_description',
+      'foreign keys' => array(
+        'format' => array(
+          'columns' => array(
+            'format' => 'format',
+          ),
+          'table' => 'filter_format',
+        ),
+      ),
       'locked' => 0,
       'module' => 'text',
-      'settings' => array(
-        'max_length' => 255,
-      ),
+      'settings' => array(),
       'translatable' => 0,
-      'type' => 'text',
+      'type' => 'text_long',
     ),
     'field_instance' => array(
-      'bundle' =>'fundraiser_ticket',
-      'default_value' => NULL,
+      'bundle' => 'fundraiser_ticket',
+      'default_value' => array(
+        0 => array(
+          'value' => ' ',
+          'format' => 'filtered_html',
+        ),
+      ),
       'deleted' => 0,
       'description' => '',
       'display' => array(
@@ -354,17 +366,17 @@ function _fundraiser_tickets_product_fields() {
       'label' => 'Description',
       'required' => 0,
       'settings' => array(
-        'text_processing' => 0,
+        'text_processing' => 1,
         'user_register_form' => FALSE,
       ),
       'widget' => array(
         'active' => 1,
         'module' => 'text',
         'settings' => array(
-          'size' => 128,
+          'rows' => 5,
         ),
-        'type' => 'text_textfield',
-        'weight' => 2,
+        'type' => 'text_textarea',
+        'weight' => 9,
       ),
     )
   );

@@ -14,7 +14,7 @@ function springboard_p2p_personal_campaign_default_video_embed_styles() {
   $video_embed_style->disabled = FALSE; /* Edit this to true to make a default video_embed_style disabled initially */
   $video_embed_style->api_version = 1;
   $video_embed_style->name = 'p2p_video';
-  $video_embed_style->title = 'P2P Video';
+  $video_embed_style->title = 'Peer to Peer Video';
   $video_embed_style->data = array(
     'youtube' => array(
       'width' => '640px',

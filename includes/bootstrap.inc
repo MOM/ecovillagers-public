@@ -8,7 +8,7 @@
 /**
  * The current system version.
  */
-define('VERSION', '7.53');
+define('VERSION', '7.56');
 
 /**
  * Core API compatibility.
@@ -254,8 +254,13 @@ define('DRUPAL_PHP_FUNCTION_PATTERN', '[a-zA-Z_\x7f-\xff][a-zA-Z0-9_\x7f-\xff]*'
  * http://tools.ietf.org/html/rfc7231#section-7.1.1.1
  *
  * Example: Sun, 06 Nov 1994 08:49:37 GMT
+ *
+ * This constant was introduced in PHP 7.0.19 and PHP 7.1.5 but needs to be
+ * defined by Drupal for earlier PHP versions.
  */
-define('DATE_RFC7231', 'D, d M Y H:i:s \G\M\T');
+if (!defined('DATE_RFC7231')) {
+  define('DATE_RFC7231', 'D, d M Y H:i:s \G\M\T');
+}
 
 /**
  * Provides a caching wrapper to be used in place of large array structures.
@@ -719,6 +724,16 @@ function drupal_valid_http_host($host) {
 }
 
 /**
+ * Checks whether an HTTPS request is being served.
+ *
+ * @return bool
+ *   TRUE if the request is HTTPS, FALSE otherwise.
+ */
+function drupal_is_https() {
+  return isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) == 'on';
+}
+
+/**
  * Sets the base URL, cookie domain, and session name from configuration.
  */
 function drupal_settings_initialize() {
@@ -731,7 +746,7 @@ function drupal_settings_initialize() {
   if (file_exists(DRUPAL_ROOT . '/' . conf_path() . '/settings.php')) {
     include_once DRUPAL_ROOT . '/' . conf_path() . '/settings.php';
   }
-  $is_https = isset($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) == 'on';
+  $is_https = drupal_is_https();
 
   if (isset($base_url)) {
     // Parse fixed base URL from settings.php.
@@ -1161,26 +1176,47 @@ function variable_initialize($conf = array()) {
     $variables = $cached->data;
   }
   else {
-    // Cache miss. Avoid a stampede.
-    $name = 'variable_init';
-    if (!lock_acquire($name, 1)) {
-      // Another request is building the variable cache.
-      // Wait, then re-run this function.
-      lock_wait($name);
-      return variable_initialize($conf);
-    }
-    else {
-      // Proceed with variable rebuild.
-      $variables = array_map('unserialize', db_query('SELECT name, value FROM {variable}')->fetchAllKeyed());
-      cache_set('variables', $variables, 'cache_bootstrap');
-      lock_release($name);
-    }
+    // Signal to variable_reset_cache() that this is a read-only operation.
+    // In this case, if no lock can be acquired, the variable values are
+    // returned without writing to the persistent cache to avoid a race
+    // between reading and writing to the cache.
+    $variables = variable_reset_cache(FALSE);
   }
 
   foreach ($conf as $name => $value) {
     $variables[$name] = $value;
   }
 
+  return $variables;
+}
+
+/**
+ * Reset the variable cache safely.
+ *
+ * @param bool $variable_write
+ *   Flag to indicate if the cache rebuild was triggered by a change to the
+ *   variables table, defaults to TRUE so that the additional protection
+ *   against race conditions is utilized unless explicitly opted out of.
+ */
+function variable_reset_cache($variable_write = TRUE) {
+  $lock_name = __FUNCTION__;
+  if (!($lock_acquired = lock_acquire($lock_name, 1)) && $variable_write) {
+    // When we've made a change via variable_set() or variable_del(), we try
+    // harder to get the lock.
+    lock_wait($lock_name);
+    $lock_acquired = lock_acquire($lock_name, 1);
+  }
+  $variables = array_map('unserialize', db_query('SELECT name, value FROM {variable}')->fetchAllKeyed());
+  if ($lock_acquired) {
+    cache_set('variables', $variables, 'cache_bootstrap');
+    lock_release($lock_name);
+  }
+  elseif ($variable_write) {
+    // When we've made a change via variable_set() or variable_del() and failed
+    // to rebuild the cache, we need to clear it to ensure that subsequent
+    // requests pick up the changes.
+    cache_clear_all('variables', 'cache_bootstrap');
+  }
   return $variables;
 }
 
@@ -1226,12 +1262,11 @@ function variable_get($name, $default = NULL) {
  */
 function variable_set($name, $value) {
   global $conf;
+  $conf[$name] = $value;
 
   db_merge('variable')->key(array('name' => $name))->fields(array('value' => serialize($value)))->execute();
 
-  cache_clear_all('variables', 'cache_bootstrap');
-
-  $conf[$name] = $value;
+  variable_reset_cache();
 }
 
 /**
@@ -1253,9 +1288,10 @@ function variable_del($name) {
   db_delete('variable')
     ->condition('name', $name)
     ->execute();
-  cache_clear_all('variables', 'cache_bootstrap');
 
   unset($conf[$name]);
+
+  variable_reset_cache();
 }
 
 /**

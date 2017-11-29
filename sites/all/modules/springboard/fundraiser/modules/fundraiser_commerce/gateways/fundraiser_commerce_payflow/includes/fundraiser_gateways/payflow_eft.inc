@@ -30,6 +30,7 @@ function fundraiser_commerce_payflow_eft_gateway_info($method_instance) {
   if ($method_instance['settings']['recurring-billing'] === 'recurring-billing-profile') {
     $info['allow_recurring'] = array('bank account');
     $info['offsite_recurring'] = array('bank account');
+    $info['offsite_recurring_external'] = array('bank account');
   }
 
   return $info;

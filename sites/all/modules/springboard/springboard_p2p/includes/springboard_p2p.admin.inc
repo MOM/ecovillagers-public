@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Admin functions for peer to peer.
+ * Admin functions for Peer to Peer.
  */
 
 /**
@@ -10,17 +10,38 @@
  */
 function springboard_p2p_dashboard() {
   if (springboard_p2p_no_content_types_enabled()) {
-    drupal_set_message('No content types have been enabled for peer to peer.  Please visit the settings and configure them.', 'error');
+    drupal_set_message('No content types have been enabled for Peer to Peer.  Please visit the settings and configure them.', 'error');
   }
-  
+
   $views = array();
   $views['p2p_campaigns'] = array(
-    'header' => t('Active peer to peer campaigns'),
+    'header' => t('Active Peer to Peer campaigns'),
     'content' => views_embed_view('p2p_campaigns', 'block'),
     'viewmore_link' => array('title' => t('See all campaigns'), 'href' => 'admin/springboard/p2p/campaign'),
   );
   if (node_access('create', 'p2p_campaign')) {
     $views['p2p_campaigns']['create_link'] = array('title' => t('Create a new campaign'), 'href' => 'node/add/p2p-campaign');
+  }
+
+  $views['p2p_personal_campaigns_admin'] = array(
+    'header' => t('Personal campaigns'),
+    'content' => views_embed_view('p2p_personal_campaigns_admin', 'block_1'),
+    'viewmore_link' => array('title' => t('View all personal campaigns'), 'href' => 'admin/springboard/p2p/personal-campaigns'),
+  );
+
+  $views['p2p_user_approval'] = array(
+    'header' => t('Users awaiting approval'),
+    'content' => views_embed_view('p2p_user_approval', 'dashboard_page'),
+    'viewmore_link' => array('title' => t('Open approval queue'), 'href' => 'admin/springboard/p2p/approval/user'),
+  );
+
+  $views['p2p_landing_pages'] = array(
+    'header' => t('Landing pages'),
+    'content' => views_embed_view('p2p_landing_pages', 'block'),
+    'viewmore_link' => array('title' => t('View all landing pages'), 'href' => 'admin/springboard/p2p/landing-pages'),
+  );
+  if (node_access('create', 'p2p_campaign_landing')) {
+    $views['p2p_landing_pages']['create_link'] = array('title' => t('Create a new landing page'), 'href' => 'node/add/p2p-campaign-landing');
   }
 
   $views['p2p_categories'] = array(
@@ -32,27 +53,6 @@ function springboard_p2p_dashboard() {
     $views['p2p_categories']['create_link'] = array('title' => t('Create a new category'), 'href' => 'node/add/p2p-category');
   }
 
-  $views['p2p_user_approval'] = array(
-    'header' => t('Users awaiting approval'),
-    'content' => views_embed_view('p2p_user_approval', 'dashboard_page'),
-    'viewmore_link' => array('title' => t('Open approval queue'), 'href' => 'admin/springboard/p2p/approval/user'),
-  );
-
-  $views['p2p_personal_campaigns_admin'] = array(
-    'header' => t('Personal campaigns'),
-    'content' => views_embed_view('p2p_personal_campaigns_admin', 'block_1'),
-    'viewmore_link' => array('title' => t('View all personal campaigns'), 'href' => 'admin/springboard/p2p/personal-campaigns'),
-  );
-
-  $views['p2p_landing_pages'] = array(
-    'header' => t('Landing pages'),
-    'content' => views_embed_view('p2p_landing_pages', 'block'),
-    'viewmore_link' => array('title' => t('View all landing pages'), 'href' => 'admin/springboard/p2p/landing-pages'),
-  );
-  if (node_access('create', 'p2p_campaign_landing')) {
-    $views['p2p_landing_pages']['create_link'] = array('title' => t('Create a new landing page'), 'href' => 'node/add/p2p-campaign-landing');
-  }
-  
   return theme('springboard_p2p_dashboard', array('views' => $views));
 }
 
@@ -73,7 +73,7 @@ function springboard_p2p_admin_settings() {
     '#type' => 'fieldset',
     '#title' => t('Reset Aliases to Defaults'),
     '#weight' => -50,
-    '#description' => '<p>' . t('Be very careful with this; it will reset the URL patterns for all Peer-to-Peer content types.') . '</p>',
+    '#description' => '<p>' . t('Be very careful with this; it will reset the URL patterns for all Peer to Peer content types.') . '</p>',
   );
   $form['url_aliases']['reset'] = array(
     '#type' => 'submit',
@@ -128,7 +128,7 @@ function springboard_p2p_admin_settings() {
 
   $form['form_types'] = array(
     '#type' => 'fieldset',
-    '#title' => 'Peer to peer enabled form types',
+    '#title' => 'Peer to Peer enabled form types',
     '#weight' => -40,
   );
 

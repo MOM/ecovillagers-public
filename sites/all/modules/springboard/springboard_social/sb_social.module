@@ -102,6 +102,8 @@ function sb_social_entity_property_info() {
  */
 function sb_social_share_event_save($service, $id, $type, $market_source) {
   global $user;
+  $url_path = FALSE;
+  $settings_id = FALSE;
 
   // Submission-based shares (confirmation pages).
   if (isset($_GET['sid']) && is_numeric($_GET['sid']) && $type == 'nid') {
@@ -162,11 +164,13 @@ function sb_social_share_event_save($service, $id, $type, $market_source) {
   $client_id = '';
   if (module_exists('springboard_cookie')) {
     $cookie = springboard_cookie_get_cookie();
-    $client_id = $cookie['client_id'];
+    if (isset($cookie['client_id'])) {
+      $client_id = $cookie['client_id'];
+    }
     // If there's no uid (non-confirmation share by anonymous user)
     // then check the Springboard cookie
     // (if available) as a fallback.
-    if (!$uid && $cookie['uid']) {
+    if (!$uid && !empty($cookie['uid'])) {
       $record['uid'] = $cookie['uid'];
     }
   }
@@ -181,6 +185,7 @@ function sb_social_share_event_save($service, $id, $type, $market_source) {
 
   // Commit to the database and return the url.
   $settings = sb_social_settings_load($settings_id);
+
   return sb_social_share_save($record, $settings, $url_path);
 }
 
@@ -349,24 +354,14 @@ function sb_social_springboard_admin_alias_patterns() {
  * Implements hook_springboard_admin_admin_menu_items_alter().
  */
 function sb_social_springboard_admin_admin_menu_items_alter(&$items) {
-  // Marketing & Analytics > Social.
+  // Marketing > Social Share
   $items['admin/springboard/marketing-analytics']['_children']['admin/config/services/springboard_social'] = array(
     'link_path' => 'admin/config/services/springboard_social',
-    'link_title' => 'Social Share',
+    'link_title' => t('Social Share'),
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 2,
-  );
-
-  // Settings > Settings > Social.
-  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/config/services/springboard_social'] = array(
-    'link_path' => 'admin/config/services/springboard_social',
-    'link_title' => 'Social Share',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 6,
+    'weight' => -80,
   );
 }
 
@@ -748,53 +743,6 @@ function sb_social_market_source_external_field_keys() {
 }
 
 /**
- * Implements hook_webform_submission_update().
- *
- * Set tracking cookie when anonymous user submits a webform user enabled
- * webform.
- * hook_webform_submission_update() is invoked by Webform User after setting
- * the uid in the submission.
- */
-function sb_social_webform_submission_update($node, $submission) {
-
-  // Update/set tracking cookie when a webform user enabled form is submitted.
-  if (!empty($node->is_webform_user) && $node->is_webform_user) {
-    global $user;
-    // Prevent updating authenticated user's cookie when editing another
-    // user's submission.
-    if ($user->uid && ($submission->uid != $user->uid)) {
-      return;
-    }
-    // Find email field value.
-    // TODO: break dependency on fundraiser_webform.
-    $component = _fundraiser_webform_get_component_by_nid_key($node->nid, 'mail');
-    $mail = $submission->data[$component->cid]['value'][0];
-    _sb_social_set_tracking_cookie($submission->uid, $mail, $submission->sid);
-  }
-}
-
-/**
- * Implements hook_webform_submission_insert().
- *
- * Set tracking cookie when form is submitted by an authenticated user.
- * Since the submission has a valid UID, we can update the cookie.
- *
- * Anonymous webform submissions have to be handled during update since
- * webform_user() backfills the user id in the submission after it's been
- * inserted.
- */
-function sb_social_webform_submission_insert($node, $submission) {
-  if (!empty($node->is_webform_user) && $node->is_webform_user) {
-    global $user;
-    if ($user->uid == $submission->uid) {
-      $component = _fundraiser_webform_get_component_by_nid_key($node->nid, 'mail');
-      $mail = $submission->data[$component->cid]['value'][0];
-      _sb_social_set_tracking_cookie($submission->uid, $mail, $submission->sid);
-    }
-  }
-}
-
-/**
  * Implements hook_token_info().
  */
 function sb_social_token_info() {
@@ -1075,14 +1023,6 @@ function theme_sb_social_share_image_preview($variables) {
   }
   return $output;
 
-}
-
-/**
- * Set tracking cookie values.
- */
-function _sb_social_set_tracking_cookie($uid, $mail, $sid) {
-  $payload = $uid . '::' . $mail . '::' . $sid;
-  setcookie("sb_social.event_submission", $payload, strtotime('+1 year'), ini_get('session.cookie_path'));
 }
 
 /**

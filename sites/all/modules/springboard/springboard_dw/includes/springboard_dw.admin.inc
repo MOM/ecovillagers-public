@@ -36,10 +36,42 @@ function springboard_dw_settings_form() {
 
   $form['springboard_dw_watchdog_enabled'] = array(
     '#type'          => 'checkbox',
-    '#title'         => t('Enable watchdog logging of queue item processing'),
-    '#default_value' => variable_get('springboard_dw_watchdog_enabled', 1),
+    '#title'         => t('Enable additional debugging watchdog logging of queue item processing'),
+    '#default_value' => variable_get('springboard_dw_watchdog_enabled', 0),
   );
 
+  $form['springboard_dw_s3_settings'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Springboard Export - Amazon S3 File Export Settings'),
+    '#description' => t('These S3 settings are needed to send exported files to S3 upon generation.'),
+    '#weight' => 90,
+  );
+  $form['springboard_dw_s3_settings']['springboard_dw_reports_export_S3_region'] = array(
+    '#type' => 'textfield',
+    '#title' => 'S3 region',
+    '#default_value' => variable_get('springboard_dw_reports_export_S3_region', ''),
+  );
+  $form['springboard_dw_s3_settings']['springboard_dw_reports_export_S3_key'] = array(
+    '#type' => 'textfield',
+    '#title' => 'S3 key',
+    '#default_value' => variable_get('springboard_dw_reports_export_S3_key', ''),
+  );
+  $form['springboard_dw_s3_settings']['springboard_dw_reports_export_S3_secret'] = array(
+    '#type' => 'textfield',
+    '#title' => 'S3 secret',
+    '#default_value' => variable_get('springboard_dw_reports_export_S3_secret', ''),
+  );
+  $form['springboard_dw_s3_settings']['springboard_dw_reports_export_S3_bucket'] = array(
+    '#type' => 'textfield',
+    '#title' => 'S3 bucket',
+    '#default_value' => variable_get('springboard_dw_reports_export_S3_bucket', ''),
+  );
+  $form['springboard_dw_api_email_authentication_token'] = array(
+    '#type' => 'textfield',
+    '#title' => 'DW API email authentication token',
+    '#default_value' => variable_get('springboard_dw_api_email_authentication_token', ''),
+    '#weight' => 95,
+  );
   return system_settings_form($form);
 }
 

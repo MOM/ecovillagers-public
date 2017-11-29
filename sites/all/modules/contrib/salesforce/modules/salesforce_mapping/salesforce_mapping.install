@@ -209,6 +209,10 @@ function salesforce_mapping_schema() {
     ),
   );
 
+  $cache_schema = drupal_get_schema_unprocessed('system', 'cache');
+  $schema["cache_entity_salesforce_mapping"] = $cache_schema;
+  $schema["cache_entity_salesforce_mapping"]['description'] = "Cache table used to store salesforce_mapping entity records.";
+
   return $schema;
 }
 
@@ -234,4 +238,13 @@ function salesforce_mapping_update_7100(&$sandbox) {
     ),
   )
   );
+}
+
+/**
+ * Add entity cache support for salesforce mapping entities.
+ */
+function salesforce_mapping_update_7200(&$sandbox) {
+  $cache_schema = drupal_get_schema_unprocessed('system', 'cache');
+  db_create_table('cache_entity_salesforce_mapping', $cache_schema);
+  return 'Add cache_entity_salesforce_mapping table for entity cache usage.';
 }

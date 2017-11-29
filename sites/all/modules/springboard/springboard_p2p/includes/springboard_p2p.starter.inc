@@ -235,7 +235,7 @@ function springboard_p2p_create_starter_personal_campaigns(&$context) {
 }
 
 /**
- * Creates peer to peer campaigns.
+ * Creates Peer to Peer campaigns.
  *
  * @param array $context
  *   The drupal batch context.
@@ -332,7 +332,7 @@ function springboard_p2p_create_starter_campaigns(&$context) {
 }
 
 /**
- * Creates peer to peer categories.
+ * Creates Peer to Peer categories.
  */
 function springboard_p2p_create_starter_categories(&$context) {
   $context['message'] = t('Creating categories');
@@ -376,7 +376,7 @@ function springboard_p2p_starter_categories() {
 }
 
 /**
- * Provides default peer to peer campaign names.
+ * Provides default Peer to Peer campaign names.
  */
 function springboard_p2p_starter_campaigns() {
   return array(
@@ -395,7 +395,7 @@ function springboard_p2p_starter_campaigns() {
 }
 
 /**
- * Provides default peer to peer personal campaigns.
+ * Provides default Peer to Peer personal campaigns.
  */
 function springboard_p2p_starter_personal_campaigns() {
   return array(

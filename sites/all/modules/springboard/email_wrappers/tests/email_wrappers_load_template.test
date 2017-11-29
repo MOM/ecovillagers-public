@@ -39,7 +39,6 @@ class EmailWrappersLoadTemplateTestCase extends DrupalWebTestCase {
     $edit = array(
       'title' => 'Testing BCC bug',
       'email_wrapper_from_email[und][0][value]' => 'from@example.com',
-      'email_wrapper_reply_email[und][0][value]' => 'replyto@example.com',
       'email_wrapper_subject[und][0][value]' => 'Testing BCC bug',
       'email_wrapper_html_template[und][0][value]' => '<p>Thanks for the submission (HTML)</p>%html_message',
       'email_wrapper_html_template[und][0][format]' => 'filtered_html',

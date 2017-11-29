@@ -22,6 +22,9 @@ function springboard_views_views_handlers() {
       'springboard_webform_hidden_component_values' => array(
         'parent' => 'views_handler_field',
       ),
+      'springboard_views_ctools_dropdown' => array(
+        'parent' => 'views_handler_field',
+      ),
     ),
   );
 }
@@ -65,7 +68,47 @@ function springboard_views_views_data() {
     ),
   );
 
+  $data['springboard_views__global']['table']['group'] = t('Springboard Views');
+  $data['springboard_views__global']['table']['join'] = [
+    // #global is a special flag which let's a table appear all the time.
+    '#global' => [],
+  ];
+
+  $data['springboard_views__global']['ctools_dropdown'] = [
+    'title' => t('Ctools Dropdown'),
+    'help' => t('Present fields in a Ctools dropdown.'),
+    'field' => [
+      'handler' => 'SpringboardViewsCtoolsDropdown',
+    ],
+  ];
+
   return $data;
+}
+
+/**
+ * Implements hook_views_data_alter().
+ */
+function springboard_views_views_data_alter(&$data) {
+  $data['fundraiser_sustainers']['next_charge']['filter']['handler'] = 'date_views_filter_handler';
+
+  // Change some default handlers to our own.
+  $data['views_entity_node']['edit_node']['field']['handler'] = 'SpringboardViewsFieldNodeLinkEdit';
+  $data['node']['title']['field']['handler'] = 'SpringboardViewsFieldNodeLink';
+
+  // Content type with permission check.
+  $data['node']['type']['argument']['handler'] = 'SpringboardViewsArgumentNodeTypePermission';
+}
+
+/**
+ * Implements hook_views_pre_build().
+ */
+function springboard_views_pre_build(&$view) {
+  if ($view->name == 'sbv_donations' && $view->current_display == 'page') {
+    // Set default value for the the order status exposed filter:
+    if (!isset($_GET['status']) || empty($_GET['status'])) {
+      $view->exposed_input['status'] = 'payment_received';
+    }
+  }
 }
 
 /**

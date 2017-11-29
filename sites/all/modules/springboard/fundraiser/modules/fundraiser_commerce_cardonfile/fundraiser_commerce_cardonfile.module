@@ -31,27 +31,12 @@ function fundraiser_commerce_cardonfile_menu() {
  */
 function fundraiser_commerce_cardonfile_menu_alter(&$items) {
   if (module_exists('commerce_cardonfile')) {
-    $items['user/%user/cards/%commerce_cardonfile/edit'] += array(
-      'page callback' => 'fundraiser_commerce_cardonfile_form_commerce_cardonfile_card_form',
-      'page arguments' => array(3, 1),
-    );
+    $items['user/%user/cards/%commerce_cardonfile/edit'] = array(
+        'page callback' => 'fundraiser_commerce_cardonfile_form_commerce_cardonfile_card_form',
+        'page arguments' => array(3, 1),
+      ) + $items['user/%user/cards/%commerce_cardonfile/edit'];
   }
   return $items;
-}
-
-/**
- * Implements hook_springboard_admin_admin_menu_items_alter().
- */
-function fundraiser_commerce_cardonfile_springboard_admin_admin_menu_items_alter(&$items) {
-  // Settings > Settings > Sustainer Upsell.
-  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/options/fundraiser/fundraiser_commerce_cardonfile'] = array(
-    'link_path' => 'admin/springboard/options/fundraiser/fundraiser_commerce_cardonfile',
-    'link_title' => 'Fundraiser Cardonfile Settings',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 0,
-    'customized' => 1,
-    'weight' => 0,
-  );
 }
 
 /**
@@ -189,16 +174,23 @@ EOT;
 }
 
 /**
- * Implements hook_form_FORM_ID_alter().
+ * Menu callback to override cardonfile edit form.
+ *
+ * @param object $card
+ *   Cardonfile object.
+ * @param object $user
+ *   Owner of the card and donations to be updated.
  */
 function fundraiser_commerce_cardonfile_form_commerce_cardonfile_card_form($card, $user) {
   // Let other modules adjust the card we use.
   drupal_alter('fundraiser_commerce_cardonfile_update_billing_card', $card);
 
-  // Load the user's newest donation for the card's gateway.
-  $donation = fundraiser_donation_get_donations_by_uid($user->uid, 1, 'DESC', $card->instance_id, $card->card_id);
+  // Get the base donation for this card update.
+  $donation = fundraiser_commerce_cardonfile_donation_for_card_update($card);
+
+  // If still no donation exists we can't update this card.
   if (empty($donation)) {
-    return;
+    return t('This card cannot be updated.');
   }
 
   drupal_set_title('Edit Payment Method');
@@ -208,28 +200,30 @@ function fundraiser_commerce_cardonfile_form_commerce_cardonfile_card_form($card
     'donation' => $donation,
     'card' => $card,
     'update other orders' => TRUE,
-    'payment_fields' => array(
-      'credit' => array(
-        'expiration_date' => array(
-          'card_expiration_month' => array(
-            '#default_value' => $card->card_exp_month,
-          ),
-          'card_expiration_year' => array(
-            '#default_value' => $card->card_exp_year,
-          ),
-        ),
-      ),
-    ),
   );
 
   $form = drupal_get_form('fundraiser_update_billing_form', $data);
 
+  return drupal_render($form);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ */
+function fundraiser_commerce_cardonfile_form_fundraiser_update_billing_form_alter(&$form, &$form_state) {
+  // We only want to alter the update form when its appearing for cardonfile.
+  if ($form['#calling_module'] != 'fundraiser_commerce_cardonfile') {
+    return;
+  }
+
+  $card = $form_state['card'];
+  // Add the card details to the top of the form.
   $title = array(
     '#type' => 'html_tag',
     '#tag' => 'h4',
     '#value' => t('You are editing billing information for:'),
   );
-  $title = drupal_render($title);
+
   $card_title = array(
     '#type' => 'html_tag',
     '#tag' => 'span',
@@ -238,7 +232,7 @@ function fundraiser_commerce_cardonfile_form_commerce_cardonfile_card_form($card
       '@number' => $card->card_number,
     )),
   );
-  $card_title = drupal_render($card_title);
+
   $expires = array(
     '#type' => 'html_tag',
     '#tag' => 'div',
@@ -247,34 +241,292 @@ function fundraiser_commerce_cardonfile_form_commerce_cardonfile_card_form($card
       '@year' => $card->card_exp_year,
     )),
   );
-  $expires = drupal_render($expires);
+
   $form = array(
-    'message' => array(
-      '#type' => 'markup',
-      '#markup' => $title . $card_title . $expires,
-    ),
-  ) + $form;
+      'message' => array(
+        '#type' => 'markup',
+        '#weight' => -100,
+        'title' => $title,
+        'card_title' => $card_title,
+        'expires' => $expires,
+      ),
+    ) + $form;
+
+  // Use the cards address information instead of the donation.
+  $cardonfile_wrapper = entity_metadata_wrapper('commerce_cardonfile', $card);
+  if (
+    !empty($cardonfile_wrapper->commerce_cardonfile_profile)
+     && !empty($cardonfile_wrapper->commerce_cardonfile_profile->commerce_customer_address)
+  ) {
+    $map = array(
+      'first_name' => 'first_name',
+      'last_name' => 'last_name',
+      'address' => 'thoroughfare',
+      'address_line_2' => 'premise',
+      'city' => 'locality',
+      'country' => 'country',
+      'state' => 'administrative_area',
+      'zip' => 'postal_code',
+    );
+
+    $address_wrapper = $cardonfile_wrapper->commerce_cardonfile_profile->commerce_customer_address;
+    foreach ($map as $field_name => $profile_name) {
+      if (isset($form['billing_information'][$field_name])) {
+        $form['billing_information'][$field_name]['#default_value'] = $address_wrapper->{$profile_name}->value();
+      }
+    }
+  }
 
   $form['actions']['cancel'] = array(
     '#markup' => '<span class="cancel"> or ' . l(t('Cancel'), 'user/' . $card->uid . '/cards') . '</span>',
     '#weight' => 20,
   );
 
-  return $form;
+  // The billing update form defaults to using the fundraiser_sustainers module
+  // submission handlers. If this isn't an active recurring donation remove that
+  // handler and add our own.
+  if (
+    !empty($form['#donation']->recurring->master_did)
+    && $form['#donation']->status == 'pending_future_payment'
+  ) {
+    $form['master_did'] = [
+      '#type' => 'hidden',
+      '#value' => $form['#donation']->recurring->master_did,
+    ];
+  }
+  else {
+    if (($key = array_search('fundraiser_sustainers_update_billing_form_submit', $form['actions']['submit']['#submit'])) !== FALSE) {
+      unset($form['actions']['submit']['#submit'][$key]);
+    }
+    $form['actions']['submit']['#submit'][] = 'fundraiser_commerce_cardonfile_update_billing_form_submit';
+    // Add the address update handler to the billing update button as well.
+    $form['actions']['submit']['#submit'][] = 'fundraiser_commerce_cardonfile_update_billing_address_form_submit';
+
+    // Reset the update address button handler as well.
+    if (($key = array_search('fundraiser_sustainers_update_billing_address_only_form_submit', $form['billing_information']['address_update']['#submit'])) !== FALSE) {
+      unset($form['billing_information']['address_update']['#submit'][$key]);
+    }
+    $form['billing_information']['address_update']['#submit'][] = 'fundraiser_commerce_cardonfile_update_billing_address_form_submit';
+  }
+
+  // Add a submit handler that will update all series connected to this card.
+  $form['actions']['submit']['#submit'][] = 'fundraiser_commerce_cardonfile_update_connected_series_form_submit';
+
+  // Add this submit handler to set the redirect.
+  $form['actions']['submit']['#submit'][] = 'fundraiser_commerce_cardonfile_billing_update_form_submit_add_redirect';
+  $form['billing_information']['address_update']['#submit'][] = 'fundraiser_commerce_cardonfile_billing_update_form_submit_add_redirect';
 }
 
 /**
- * Implements hook_fundraiser_update_billing_form__CALLING_MODULE__alter().
+ * Form submit handler for billing address update form.
  *
- * Redirect to the users stored cards page after saving billing information.
+ * We only need to update the card's profile as this card is not connected to an
+ * active recurring series.
  */
-function fundraiser_commerce_cardonfile_fundraiser_update_billing_form__fundraiser_commerce_cardonfile__alter(&$form, $form_state) {
-  $form['actions']['submit']['#submit'][] = '_fundraiser_commerce_cardonfile_fundraiser_billing_update_form_submit';
+function fundraiser_commerce_cardonfile_update_billing_address_form_submit($form, &$form_state) {
+  // If the billing update handler has run use the new card.
+  if (isset($form_state['values']['cardonfile']['card'])) {
+    $card = $form_state['values']['cardonfile']['card'];
+  }
+  // Address update only, use the existing card.
+  else {
+    $card = $form_state['card'];
+  }
+
+  // If no card nothing to do.
+  if (empty($card)) {
+    return;
+  }
+
+  // Load the profile or create a new one.
+  $cardonfile_wrapper = entity_metadata_wrapper('commerce_cardonfile', $card);
+  if (!empty($cardonfile_wrapper->commerce_cardonfile_profile->value())) {
+    $profile = $cardonfile_wrapper->commerce_cardonfile_profile->value();
+  }
+  else {
+    $profile = commerce_customer_profile_new('billing', $card->uid);
+  }
+
+  $map = array(
+    'first_name' => 'first_name',
+    'last_name' => 'last_name',
+    'address' => 'thoroughfare',
+    'address_line_2' => 'premise',
+    'city' => 'locality',
+    'country' => 'country',
+    'state' => 'administrative_area',
+    'zip' => 'postal_code',
+  );
+
+  // Populate the profile's data array with the address information.
+  $field = field_info_field('commerce_customer_address');
+  $instance = field_info_instance('commerce_customer_profile', 'commerce_customer_address', 'billing');
+  $profile->data = addressfield_default_values($field, $instance);
+
+  $values = $form_state['values'];
+  foreach ($map as $field_name => $profile_name) {
+    $value = isset($values[$field_name]) ? $values[$field_name] : '';
+    $profile->data[$profile_name] = $value;
+  }
+  $profile->data['name_line'] = $profile->data['first_name'] . ' ' . $profile->data['last_name'];
+
+  // Set the address field to the value of the data array.
+  $profile->commerce_customer_address[LANGUAGE_NONE][0] = $profile->data;
+  commerce_customer_profile_save($profile);
+
+  if (!empty($profile->profile_id)) {
+    // Save the updated profile to the cardonfile record.
+    $cardonfile_wrapper->commerce_cardonfile_profile->set($profile->profile_id);
+    $cardonfile_wrapper->save();
+
+    drupal_set_message(t('Billing information successfully updated.'));
+  }
+}
+
+/**
+ * Form submit handler for billing address update form.
+ *
+ * This is only used when there is no active sustainer series connected to a
+ * card. Otherwise the sustainer update process is used. In this process the
+ * one-time donation is not updated, but the card is.
+ */
+function fundraiser_commerce_cardonfile_update_billing_form_submit($form, &$form_state) {
+  $donation = $form['#donation'];
+  $submission_fields = $form_state['values'];
+  $donation->donation = array_merge($donation->donation, $submission_fields);
+
+  // Add the old_card value for ocd.
+  $form_state['values']['cardonfile']['old_card'] = clone $form_state['card'];
+
+  // Update the gateway's stored data.
+  if (isset($donation->gateway['update callback']) && function_exists($donation->gateway['update callback'])) {
+    $update_callback = $donation->gateway['update callback'];
+  }
+  else {
+    drupal_set_message(t('Unable to update card data.'));
+    return;
+  }
+
+  // Allow the gateways to clean the data before going to the update function.
+  if (isset($donation->gateway['cleanup callback']) && function_exists($donation->gateway['cleanup callback'])) {
+    $cleaned = $donation->gateway['cleanup callback']($donation->donation, $donation->donation['payment_method']);
+    $donation->donation['payment_fields'] = $cleaned['payment_fields'];
+  }
+
+  // Update the card data through the callback.
+  $card_data = $update_callback($donation, $form_state['card']);
+  drupal_alter('fundraiser_commerce_donation_update_card_update', $donation, $card_data);
+
+  if (empty($card_data)) {
+    drupal_set_message(t('Unable to update payment information. Please check your information and try again.'), 'warning');
+    return;
+  }
+
+  // Add the new card data for the address update handler and ocd.
+  $form_state['values']['cardonfile']['card'] = $card_data;
+}
+
+/**
+ * Submit handler that updates sustainer series connected to a card.
+ *
+ * This is similar to fundraiser_sustainers_update_billing_form_submit(), but
+ * runs the processes for all series connected to a card.
+ */
+function fundraiser_commerce_cardonfile_update_connected_series_form_submit($form, &$form_state) {
+  $donation = $form['#donation'];
+  $submission_fields = $form_state['values'];
+  $update_billing = $form_state['update_billing'];
+  $update_payment = $form_state['update_payment'];
+
+  // If the billing update handler has run we'll have the new and old cards.
+  if (isset($form_state['values']['cardonfile']['card'])) {
+    $new_card = $form_state['values']['cardonfile']['card'];
+  }
+  if (isset($form_state['values']['cardonfile']['old_card'])) {
+    $old_card = $form_state['values']['cardonfile']['old_card'];
+  }
+
+  // If any of the card info is missing nothing to do.
+  if (empty($new_card) || empty($old_card)) {
+    return;
+  }
+
+  // Update other recurring series that use the old card id.
+  $results = db_query('SELECT DISTINCT(fs.master_did) FROM {fundraiser_sustainers} fs LEFT JOIN {fundraiser_donation} fd ON fd.did = fs.did WHERE fd.card_id = :card_id AND fs.master_did <> :master_did', array(
+    ':card_id' => $old_card->card_id,
+    ':master_did' => $donation->recurring->master_did,
+  ))->fetchAll();
+
+  foreach ($results as $result) {
+    $remaining = _fundraiser_sustainers_get_donations_recurr_remaining($result->master_did);
+
+    if (!empty($remaining)) {
+      global $user;
+
+      fundraiser_sustainers_update_billing_info_in_series($remaining, $submission_fields, $user->name, $update_billing, $update_payment);
+
+      // Load the master donation.
+      $master_donation = fundraiser_donation_get_donation($result->master_did);
+
+      // Use the first future donation for a template of new future donations.
+      $source_donation = fundraiser_donation_get_donation($remaining[0]->did);
+      $source_donation->donation['payment_fields'] = array_merge($source_donation->donation['payment_fields'], $donation->donation['payment_fields']);
+      $source_donation->data['payment_fields'] = array_merge($source_donation->data['payment_fields'], $donation->data['payment_fields']);
+      $source_donation->donation['cardonfile'] = $donation->donation['cardonfile'];
+      $source_donation->data['cardonfile'] = $donation->data['cardonfile'];
+
+      // Create the new donations.
+      fundraiser_sustainers_update_billing_info_create_new_donations($master_donation, $source_donation, $submission_fields);
+    }
+  }
 }
 
 /**
  * Submission handler for billing update form.
  */
-function _fundraiser_commerce_cardonfile_fundraiser_billing_update_form_submit($form, &$form_state) {
+function fundraiser_commerce_cardonfile_billing_update_form_submit_add_redirect($form, &$form_state) {
   $form_state['redirect'] = 'user/' . $form_state['card']->uid . '/cards';
+}
+
+/**
+ * Returns the best donation for a card update.
+ *
+ * @param object $card
+ *   Cardonfile object.
+ *
+ * @return mixed
+ *   Fully loaded donation object, or NULL if nothing was found.
+ */
+function fundraiser_commerce_cardonfile_donation_for_card_update($card) {
+  $donation = NULL;
+
+  // Query for the most recent sustainer attached to to this card.
+  $query = db_select('fundraiser_sustainers', 'fs');
+  $query->fields('fs', array('master_did'));
+  $query->join('fundraiser_donation', 'f', 'f.did = fs.did');
+  $query->condition('f.card_id', $card->card_id);
+  $query->condition('f.status', 'pending_future_payment');
+  $query->orderBy('f.created');
+  $query->range(0, 1);
+  $result = $query->execute()->fetchField();
+
+  // For a recurring donation be sure to grab the next to be charged in series.
+  if (!empty($result)) {
+    $remaining = _fundraiser_sustainers_get_donations_recurr_remaining($result);
+    if ($remaining) {
+      $donation = fundraiser_donation_get_donation($remaining[0]->did);
+    }
+  }
+
+  // If no series was found use the most recent one-time donation for this card.
+  if (empty($donation)) {
+    $donation = fundraiser_donation_get_donations_by_uid($card->uid, 1, 'DESC', $card->instance_id, $card->card_id);
+  }
+
+  // If no donation is connected to card, use one matching this gateway.
+  if (empty($donation)) {
+    $donation = fundraiser_donation_get_donations_by_uid($card->uid, 1, 'DESC', $card->instance_id);
+  }
+
+  return $donation;
 }

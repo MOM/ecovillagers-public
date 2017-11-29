@@ -8,10 +8,3 @@ dependencies[] = token_insert
 files[] = plugins/token_insert_wysiwyg.inc
 files[] = plugins/token_insert_wysiwyg/token_insert_wysiwyg.js
 files[] = plugins/token_insert_wysiwyg/token_insert_wysiwyg.css
-
-
-; Information added by drush on 2017-05-25
-version = "4630189ef4115ca05211507ddb3193d5af814f8b-dev"
-project = "token_insert"
-datestamp = "1495705144"
-

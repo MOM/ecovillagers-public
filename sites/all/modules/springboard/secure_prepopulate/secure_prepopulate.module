@@ -1,11 +1,11 @@
 <?php
+
 /**
  * @file
- * This module provides functionality for pre-popluating forms from
- *   an ecrypted query string parameter.
+ * This module provides functionality for pre-populating forms from
+ *   an encrypted query string parameter without bootstrapping drupal
+ *   or busting cache.
  */
-
-require_once 'secure_prepopulate.synonyms.inc';
 
 /**
  * Implements hook_implements_alter().
@@ -14,7 +14,6 @@ function secure_prepopulate_module_implements_alter(&$implementations, $hook) {
   // We need these hooks to run last.
   $hooks = array(
     'form_alter',
-    'form_webform_client_form_alter',
   );
 
   if (in_array($hook, $hooks) && isset($implementations['secure_prepopulate'])) {
@@ -25,320 +24,419 @@ function secure_prepopulate_module_implements_alter(&$implementations, $hook) {
 }
 
 /**
- * Implmentation of hook_menu().
+ * Implements hook_permission().
+ */
+function secure_prepopulate_permission() {
+  return array(
+    'administer secure autofill' => array(
+      'title' => t('Administer Secure Autofill'),
+      'description' => t('Administer Secure Autofill settings.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_cron().
+ */
+function secure_prepopulate_cron() {
+  // Cleanup the secure_prepopulate_expired table.
+  $max_days = variable_get('secure_prepopulate_expired_date_limit', 30);
+  $max_date = REQUEST_TIME - ($max_days * 24 * 60 * 60);
+  db_delete('secure_prepopulate_expired')
+    ->condition('expire_date', $max_date, '<')
+    ->execute();
+}
+
+/**
+ * Implements hook_menu().
  */
 function secure_prepopulate_menu() {
-  $items['admin/config/system/secure-prepopulate'] = array(
-    'title' => 'Secure Prepopulate',
-    'description' => 'Secure Prepopulate settings',
+  $items = array();
+  $items['admin/config/system/secure-autofill'] = array(
+    'title' => 'Secure Autofill',
+    'description' => 'Secure Autofill settings',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('secure_prepopulate_admin_settings'),
-    'access arguments' => array('administer secure pre-populate'),
+    'access arguments' => array('administer secure autofill'),
     'file' => 'secure_prepopulate.admin.inc',
   );
-  $items['admin/config/system/secure-prepopulate/settings'] = array(
-    'title' => 'Secure Prepopulate',
-    'description' => 'Secure Prepopulate settings',
+  $items['admin/config/system/secure-autofill/settings'] = array(
+    'title' => 'Secure Autofill',
+    'description' => 'Secure Autofill settings',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('secure_prepopulate_admin_settings'),
-    'access arguments' => array('administer secure pre-populate'),
+    'access arguments' => array('administer secure autofill'),
     'file' => 'secure_prepopulate.admin.inc',
     'type' => MENU_DEFAULT_LOCAL_TASK,
     'weight' => -1,
   );
-  $items['admin/config/system/secure-prepopulate/token_generator'] = array(
+  $items['admin/config/system/secure-autofill/token_generator'] = array(
     'title' => 'Token Generator',
     'description' => 'Generate query string tokens for testing or use',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('secure_prepopulate_token_generator'),
-    'access arguments' => array('administer secure pre-populate'),
+    'access arguments' => array('administer secure autofill'),
     'file' => 'secure_prepopulate.admin.inc',
     'type' => MENU_LOCAL_TASK,
   );
-  $items['admin/config/system/secure-prepopulate/synonyms'] = array(
-    'title' => 'Token Synonyms',
-    'description' => 'Configure relationships between token properties and form keys.',
+  $items['admin/config/system/secure-autofill/test-generator'] = array(
+    'title' => 'Test Generator',
     'page callback' => 'drupal_get_form',
-    'page arguments' => array('secure_prepopulate_synonyms'),
-    'access arguments' => array('administer secure pre-populate'),
+    'page arguments' => array('secure_prepopulate_test_url_generator_form'),
+    'access arguments' => array('administer secure autofill'),
+    'file' => 'secure_prepopulate.admin.inc',
     'type' => MENU_LOCAL_TASK,
-  );
-  $items['admin/config/system/secure-prepopulate/synonyms/%secure_prepopulate_synonym/edit'] = array(
-    'title' => 'Edit synonym',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('secure_prepopulate_edit_synonym', 5),
-    'access arguments' => array('administer secure pre-populate'),
-    'type' => MENU_CALLBACK,
-  );
-  $items['admin/config/system/secure-prepopulate/synonyms/%secure_prepopulate_synonym/delete'] = array(
-    'title' => 'Edit synonym',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('secure_prepopulate_delete_synonym_form', 5),
-    'access arguments' => array('administer secure pre-populate'),
-    'type' => MENU_CALLBACK,
-  );
-  $items['secure-prepopulate/not-me/%'] = array(
-    'title' => 'Not me',
-    'page callback' => 'secure_prepopulate_clear',
-    'page arguments' => array(2),
-    'type' => MENU_CALLBACK,
-    'access callback' => TRUE,
+    'weight' => 9999,
   );
   return $items;
 }
 
 /**
- * Callback for clearing node specific prepopulate values.
- *
- * @param $nid
- * The nid of the node who's prepopulate data should be cleared.
+ * Implements hook_js_info().
  */
-function secure_prepopulate_clear($nid) {
-  global $user;
-  secure_prepopulate_clear_session($nid);
-  if (user_is_logged_in()) { // Log user out.
-    session_destroy();
-    $null = NULL;
-    user_module_invoke('logout', $null, $user); // Coder: This is ok.
-    $user = drupal_anonymous_user();
-  }
-  drupal_goto('node/' . $nid);
-}
-
-/**
- * Implements hook_permission().
- */
-function secure_prepopulate_permission() {
-  return array(
-    'administer secure pre-populate' => array(
-      'title' => t('Administer Secure Prepopulate'),
-      'description' => t('Administer Secure Prepopulate settings.'),
-    ),
+function secure_prepopulate_js_info() {
+  $callbacks['get_amounts'] = array(
+    'methods' => array('POST'),
+    'token' => FALSE,
   );
+  $callbacks['get_values'] = array(
+    'methods' => array('POST'),
+    'token' => FALSE,
+  );
+  return $callbacks;
 }
 
 /**
- * Implements hook_init().
+ * Implements MODULE_js_callback_CALLBACK().
+ *
+ * Callback for decrypting a dynamic gift string.
  */
-function secure_prepopulate_init() {
+function secure_prepopulate_js_callback_get_amounts($gs, $user_hash = NULL) {
+  $json = array();
 
-  // Check for the presence of the af query string parameter and we're on a node page.
-  if (isset($_GET['af']) && arg(0) == 'node' && is_numeric(arg(1))) {
-    $af = $_GET['af'];
-    $nid = arg(1);
-    // Use the full query string for hash expiration.
-    $qs = !empty($_SERVER['QUERY_STRING']) ? $_SERVER['QUERY_STRING'] : 'q=node/' . $nid . '&af=' . $af;
-    // First, check to see if the query string has already been used.
-    if (!secure_prepopulate_is_expired($qs)) {
-      // Run af param through decryption routine.
-      if ($fields = secure_prepopulate_decrypt_qs($af)) {
-        // check for synonyms and set extra fields if found.
-        $synonyms = secure_prepopulate_load_synonyms();
-        if (count($synonyms)) {
-          $synonym_keys = array_keys($synonyms);
-          $field_keys = array_keys($fields);
-          foreach ($field_keys as $field_key) {
-            if (in_array($field_key, $synonym_keys) && !empty($synonyms[$field_key])) {
-              foreach ($synonyms[$field_key] as $synonym) {
-                $fields[$synonym] = $fields[$field_key];
-              }
-            }
-          }
-        }
-        // TODO: replace with default synonym?
-        if (isset($fields['email']) && !isset($fields['mail'])) {
-          $fields['mail'] = $fields['email'];
-        }
-        if (isset($fields['mail']) && !isset($fields['email'])) {
-          $fields['email'] = $fields['mail'];
-        }
-        $_SESSION['secure_prepopulate_values'][$nid] = $fields; // Coder: This is ok.
-        if (isset($fields['uid'])) {
-          secure_prepopulate_login_user($fields['uid']);
-        }
-        // Expire the query string.
-        secure_prepopulate_expire($qs);
-      }
+  // Ensure that the gift string variable was provided.
+  if (!isset($gs)) {
+    $json['content'] = FALSE;
+    return $json;
+  }
+  elseif (is_null($user_hash) || $user_hash == "null") {
+    // PHP will interpret null js values as a string.
+    // @see https://stackoverflow.com/questions/3042524/posting-null-values-via-ajax
+    // Set user hash here.
+    $user_hash = secure_prepopulate_user_hash(16);
+  }
+
+  if (secure_prepopulate_is_expired($gs, $user_hash)) {
+    // Don't decrypt expired strings.
+    $json['content'] = FALSE;
+    return $json;
+  }
+  else {
+    // Decrypt gs per dynamic gift strings.
+    $raw_qs = secure_prepopulate_decrypt(urldecode($gs));
+    $parsed_qs = secure_prepopulate_parse_qs($raw_qs);
+    // Ensure amounts are valid.
+    $valid = secure_prepopulate_validate_gs($parsed_qs);
+    if ($valid) {
+      $json['content'] = $parsed_qs;
+      // Set user hash.
+      $json['content']['userhash'] = $user_hash;
+    }
+    else {
+      drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
+      watchdog("Secure Autofill", "Gift string is invalid.", NULL, WATCHDOG_ERROR);
+      $json['content'] = FALSE;
     }
   }
+
+  return $json;
 }
 
 /**
- * Implements hook_theme().
- */
-function secure_prepopulate_theme() {
-  return array(
-    'secure_prepopulate_welcome_message' => array(
-      'variables' => array('values' => NULL, 'nid' => NULL),
-      'template' => 'templates/secure-prepopulate-welcome-message',
-      'pattern' => 'secure_prepopulate_welcome_message_[0-9]+',
-    ),
-  );
-}
-
-/**
- * Implemenation of hook_node_view().
+ * Implements MODULE_js_callback_CALLBACK().
  *
- * Adds a welcome_back key to the node for themeing and output.
+ * Callback for decrypting a secure prepopulate string.
  */
-function secure_prepopulate_node_view($node, $view_mode, $langcode) {
+function secure_prepopulate_js_callback_get_values($af, $user_hash = NULL) {
+  $json = array();
 
-  // First check to see if there is any prepopulate values available.
-  if (isset($_SESSION['secure_prepopulate_values']) && is_array($_SESSION['secure_prepopulate_values'])) { // Coder: This is ok.
-    if ($view_mode == 'full' && !empty($node->webform)
-      && array_key_exists($node->nid, $_SESSION['secure_prepopulate_values'])
-      && !empty($_SESSION['secure_prepopulate_values'][$node->nid]['first_name'])  // Just in case the name is missing.
-    ) { // Coder: This is ok.
-      $node->content['welcome_back'] = array(
-        '#markup' => theme(array('secure_prepopulate_welcome_message_' . $node->nid, 'secure_prepopulate_welcome_message'),
-          array('values' => $_SESSION['secure_prepopulate_values'][$node->nid], 'nid' => $node->nid)), // Coder: This is ok.
-        '#weight' => -1,
-      );
+  // Ensure that the gift string variable was provided.
+  if (!isset($af)) {
+    $json['content'] = FALSE;
+    return $json;
+  }
+  elseif (is_null($user_hash) || $user_hash == "null") {
+    // PHP will interpret null js values as a string.
+    // @see https://stackoverflow.com/questions/3042524/posting-null-values-via-ajax
+    // Set user hash here.
+    $user_hash = secure_prepopulate_user_hash(16);
+  }
+
+  if (secure_prepopulate_is_expired($af, $user_hash)) {
+    // Don't decrypt expired strings.
+    $json['content'] = FALSE;
+  }
+  else {
+    // Decrypt af.
+    $raw_qs = secure_prepopulate_decrypt(urldecode($af));
+    $json['content'] = secure_prepopulate_parse_qs($raw_qs);
+    $json['content']['userhash'] = $user_hash;
+    // Expire string if necessary.
+    $never_expire = secure_prepopulate_variable_get('secure_prepopulate_toggle_expiration', 1);
+    if (!$never_expire) {
+      secure_prepopulate_expire($af, $user_hash);
     }
+  }
+
+  return $json;
+}
+
+/**
+ * Implements hook_form_alter().
+ *
+ * Add secure_prepopulate js to donation forms, bypass amount validation.
+ */
+function secure_prepopulate_form_alter(&$form, &$form_state, $form_id) {
+  // This code attaches the secure autofill js and form sub handler to ALL
+  // donation forms.
+  // Drupal isn't aware of the gs and af because it is never bootstrapped.
+  if (strstr($form_id, 'webform_client_form') !== FALSE && fundraiser_is_donation_type($form['#node']->type) && arg(4) != 'edit') {
+    // Attach ask amount handler and cookie library at beginning of array so
+    // our js gets run first.
+    $form['#attached']['library'][] = array('system', 'jquery.cookie');
+    array_unshift($form['#attached']['js'], drupal_get_path('module', 'secure_prepopulate') . '/js/secure-prepopulate.js');
+
+    // Bypass amount field validation so we can inject our values.
+    $amount = _fundraiser_get_form_field($form, 'amount');
+    if (isset($amount)) {
+      $amount['#webform_validated'] = TRUE;
+      $form = _fundraiser_update_form_field($form, 'amount', $amount);
+    }
+    $recurring_amount = _fundraiser_get_form_field($form, 'recurring_amount');
+    if (isset($recurring_amount)) {
+      $recurring_amount['#webform_validated'] = TRUE;
+      $form = _fundraiser_update_form_field($form, 'recurring_amount', $recurring_amount);
+    }
+
+    // Add drupal.setting for secure autofill 'not me' message.
+    $form['#attached']['js'][] = array(
+      'data' => array('secure_prepopulate' => array('secure_prepopulate_not_me' => variable_get('secure_prepopulate_not_me', ''))),
+      'type' => 'setting',
+    );
+
+    // Add drupal.setting for GLOBAL GIFT STRING option.
+    $form['#attached']['js'][] = array(
+      'data' => array('secure_prepopulate' => array('secure_prepopulate_global_gift_strings' => (bool) variable_get('secure_prepopulate_global_gift_strings', 0))),
+      'type' => 'setting',
+    );
+
+    // Add drupal.setting for GLOBAL GIFT STRING option.
+    $expire = round(strtotime(variable_get('secure_prepopulate_dynamic_gift_strings_cookie_lifetime', '1 year')) * 1000);
+    $form['#attached']['js'][] = array(
+      'data' => array(
+        'secure_prepopulate' => array(
+          'secure_prepopulate_dynamic_gift_strings_cookie_lifetime' => $expire,
+        ),
+      ),
+      'type' => 'setting',
+    );
+
+    if (variable_get('secure_prepopulate_global_gift_strings', 0)) {
+      $omit = secure_prepopulate_check_ggs_status($form['#node']);
+    }
+    else {
+      $omit = FALSE;
+    }
+    $form['#attached']['js'][] = array(
+      'data' => array(
+        'secure_prepopulate' => array(
+          'secure_prepopulate_gs_omit' => $omit,
+        ),
+      ),
+      'type' => 'setting',
+    );
+
+    // Add form validate handler to ensure only numeric and 'other' values can be entered into 'amount'.
+    $form['#validate'][] = "secure_prepopulate_donation_validate";
+
+    // Add the submit handler.
+    $form['#submit'][] = 'secure_prepopulate_submit';
+  }
+  elseif (strstr($form_id, 'webform_client_form') !== FALSE && arg(4) != 'edit') {
+    // This code attaches the secure autofill js and form sub handler to ALL
+    // webforms forms. Attach ask amount handler and cookie library at
+    // beginning of array so our js gets run first.
+    $form['#attached']['library'][] = array('system', 'jquery.cookie');
+    array_unshift($form['#attached']['js'], drupal_get_path('module', 'secure_prepopulate') . '/js/secure-prepopulate.js');
+
+    // Add drupal.setting for secure autofill 'not me' message.
+    $form['#attached']['js'][] = array(
+      'data' => array('secure_prepopulate' => array('secure_prepopulate_not_me' => variable_get('secure_prepopulate_not_me', ''))),
+      'type' => 'setting',
+    );
+
+    // Add the submit handler.
+    $form['#submit'][] = 'secure_prepopulate_submit';
   }
 }
 
 /**
  * Implements hook_form_alter().
- */
-function secure_prepopulate_form_alter(&$form, &$form_state, $form_id) {
-  // Empty function needed for hook_implements_alter to work with hook_form_id_alter.
-}
-
-/**
- * Implements hook_webform_client_form_alter().
  *
- * Set the default values for fields targeted by the secure string.
+ * Add secure_prepopulate js to donation forms, bypass amount validation.
  */
-function secure_prepopulate_form_webform_client_form_alter(&$form, $form_state) {
+function secure_prepopulate_form_node_form_alter(&$form, &$form_state) {
+  $tickets = FALSE;
+  if (module_exists('fundraiser_tickets')) {
+    if (fundraiser_tickets_is_ticket_type($form['#node']->type)) {
+      $tickets = TRUE;
+    }
+  }
+  if (!$tickets && fundraiser_is_donation_type($form['#node']->type) && variable_get('secure_prepopulate_global_gift_strings', 0)) {
+    if (isset($form['#node']->nid)) {
+      $gs_status = secure_prepopulate_check_ggs_status($form['#node']);
+    }
+    else {
+      $gs_status = 0;
+    }
+
+    $form['fundraiser_settings']['gs_omit'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Do not display persistent gift strings on this form.'),
+      '#description' => t("Check this box to prevent ask amounts on this form from being overridden by the donor's persistent gift string. Personalized gift strings in the donor's URL string will display, and will set or update the persistent gift string unless the suppression parameter is used."),
+      '#default_value' => $gs_status,
+      '#weight' => 4,
+    );
+  }
+}
+
+
+/**
+ * Validate handler, includes special handling for selected amounts.
+ */
+function secure_prepopulate_donation_validate($form, &$form_state) {
+  // Find selected amount and put it into a cookie for secure autofill's js to populate.
   $node = $form['#node'];
+  $component_hierarchy = _fundraiser_webform_parse_components($node->nid, $node->webform['components']);
+  $amount_field = &_fundraiser_webform_find_field($form_state['complete form'], $component_hierarchy['amount']);
+  $recurring_amount_field = &_fundraiser_webform_find_field($form_state['complete form'], $component_hierarchy['recurring_amount']);
+  $other_amount_field = &_fundraiser_webform_find_field($form_state['complete form'], $component_hierarchy['other_amount']);
+  $recurring_other_amount_field = &_fundraiser_webform_find_field($form_state['complete form'], $component_hierarchy['recurring_other_amount']);
+  $recurs_field = &_fundraiser_webform_find_field($form_state['complete form'], $component_hierarchy['recurs_monthly']);
 
-  // See if the user has any pre-popluate data for this node in their session.
-  $prepopulate_data = isset($_SESSION['secure_prepopulate_values'][$node->nid]) ? $_SESSION['secure_prepopulate_values'][$node->nid] : NULL;
-  $precedence = variable_get('secure_prepopulate_precedence', 'url');
-
-  // Do nothing if there is no pre-populate data.
-  if (
-    empty($prepopulate_data)
-    // Or do nothing if this user is logged in and the $precedence is not set to url.
-    || (
-      user_is_logged_in()
-      && $precedence != 'url'
-    )
-  ) {
-    return;
+  // Sometimes the recurring setting appears as an array, fix that here.
+  if (is_array($recurs_field['#value'])) {
+    $recurs_field['#value'] = end($recurs_field['#value']);
   }
 
-  // Add the submit handler.
-  $form['#submit'][] = 'secure_prepopulate_submit';
-
-  // If we've already submitted the form skip do not set the pre-populate values.
-  if (!empty($form_state['submitted'])) {
-    return;
+  // Check for confusing selection.
+  if ((!empty($recurring_amount_field['#value']) && $recurring_amount_field['#value'] != "other" && !empty($recurring_other_amount_field['#value'])) || !empty($amount_field['#value']) && $amount_field['#value'] != "other" && !empty($other_amount_field['#value'])) {
+    // Take no action here, sustainers will throw a validation error.
+    // Set empty cookie so no action is taken by secure prepop js.
+    setcookie('gs-' . $node->nid . '-selected', '', time() - 3600, '/');
   }
-  $components = $node->webform['components'];
-  // Create an data structure that will tell us exactly where each webform component lives in the FAPI array.
-  $component_hierarchy = _secure_prepopulate_parse_form($node->nid, $components);
-
-  // Try to prepopulate any fields found in the prepopulate_data array.
-  foreach ($prepopulate_data as $form_key => $value) {
-    if (!isset($component_hierarchy[$form_key])) {
-      continue;
-    }
-    $field = & _secure_prepopulate_find_field($form, $component_hierarchy[$form_key]);
-    if ($field) {
-      switch ($field['#type']) {
-        case 'select':
-          $valid = array_keys($field['#options']);
-          if (in_array($value, $valid)) {
-            $field['#default_value'] = $value;
-          }
-          break;
-        case 'radios':
-          if (array_key_exists($value, $field)) {
-            $field[$value]['#default_value'] = $value;
-          }
-          break;
-        case 'checkboxes':
-          if (array_key_exists($value, $field)) {
-            $field[$value]['#default_value'] = $value;
-          }
-          $value = array($value);
-          break;
-        case 'date':
-          $timezone = $field['#webform_component']['extra']['timezone'] != 'user' ? NULL : 'user';
-          $value = webform_date_array($value, 'date');
-          $field['month']['#default_value'] = $value['month'];
-          $field['year']['#default_value'] = $value['year'];
-          $field['day']['#default_value'] = $value['day'];
-          break;
-        default:
-          $field['#default_value'] = $value;
-      }
-    }
+  elseif (($node->recurring_setting === 'always' || $node->recurring_setting === 'never') && !empty($amount_field['#value']) && (is_numeric($amount_field['#value']) || $amount_field['#value'] === "other")) {
+    // If we have a recurring-only or one-time only form, set value to selected amount.
+    $value = $amount_field['#value'];
   }
-
-  // Clear out any other form fields that might be populated by another module.
-  $dynamic_gift_string_field_ids = array('amount', 'other_amount', 'recurring_amount', 'recurring_other_amount', 'payment_method');
-  foreach ($component_hierarchy as $form_key => $value) {
-    if (!in_array($form_key, $dynamic_gift_string_field_ids)
-      && !array_key_exists($form_key, $prepopulate_data)) { // the key is not in the prepopuldate data, so lets clear it out
-      if ($field = & _secure_prepopulate_find_field($form, $component_hierarchy[$form_key])) {
-        // set back to original default value by using the webform component definition
-        if (isset($field['#type'])) {
-          switch ($field['#type']) {
-            case 'hidden':
-              // If it's a hidden field, leave the values intact.
-              continue;
-            case 'date':
-              if (drupal_strlen($field['#webform_component']['value']) > 0) {
-                $timezone = $field['#webform_component']['extra']['timezone'] != 'user' ? NULL : 'user';
-                $default_values = webform_date_array(webform_strtodate('c', $field['#webform_component']['value'], $timezone), 'date');
-              }
-              else {
-                $default_values = array(
-                  'day' => NULL,
-                  'month' => NULL,
-                  'year' => NULL,
-                );
-              }
-              $field['month']['#default_value'] = $default_values['month'];
-              $field['day']['#default_value'] = $default_values['day'];
-              $field['year']['#default_value'] = $default_values['year'];
-              break;
-            default:
-              if (!isset($field['#default_value'])) {
-                break;
-              }
-              if (strpos($field['#webform_component']['value'], '%get[') !== FALSE) {
-                // If the default value is %get[something], set the field to nothing.
-                $field['#default_value'] = NULL;
-              }
-              elseif (is_array($field['#default_value'])) {
-                $field['#default_value'] = array($field['#webform_component']['value']);
-              }
-              else {
-                $field['#default_value'] = $field['#webform_component']['value'];
-              }
-              break;
-          }
-        }
-      }
-    }
+  // Otherwise we must have a user_choice form that is dual ask and recurring, the only time we use recurring amount.
+  elseif ($node->recurring_setting === "user_choice" && $recurs_field['#value'] == "recurs" && $node->recurring_dual_ask_amounts && !empty($recurring_amount_field['#value']) && (is_numeric($recurring_amount_field['#value']) || $recurring_amount_field['#value'] === "other")) {
+    $value = $recurring_amount_field['#value'];
   }
-
-  $autofill_field = &_secure_prepopulate_find_field($form, $component_hierarchy['secure_prepop_autofilled']);
-  if ($autofill_field) {
-    $autofill_field['#value'] = "1";
+  // Otherwise we must have a user_choice form that is not dual ask, which uses amount.
+  elseif ($node->recurring_setting === "user_choice" && (empty($node->recurring_dual_ask_amounts)) && !empty($amount_field['#value']) && (is_numeric($amount_field['#value']) || $amount_field['#value'] === "other")) {
+    $value = $amount_field['#value'];
+  }
+  // Otherwise we must have a user_choice form that's one-time, so use amount in all cases.
+  elseif ($node->recurring_setting === "user_choice" && $recurs_field['#value'] <> "recurs" && !empty($amount_field['#value']) && (is_numeric($amount_field['#value']) || $amount_field['#value'] === "other")) {
+    $value = $amount_field['#value'];
+  }
+  if (isset($value) && (is_numeric($value) || $value == "other")) {
+    // If we have a value, set it here.
+    setcookie('gs-' . $node->nid . '-selected', $value);
   }
 }
 
 /**
- * Submit handler for forms that have been prepopulated.
+ * Encrypt an input string (128 bit AES) using the configured key and initialization vector.
+ *
+ * @param $input
+ *   The string to encrypt.
+ *
+ * @return string
+ *   The encrypted string.
  */
-function secure_prepopulate_submit(&$form, &$form_state) {
-  $node = $form['#node'];
-  secure_prepopulate_clear_session($node->nid);
+function secure_prepopulate_encrypt($input) {
+  // The 128 bit key to use to decrypt the string.
+  $key = secure_prepopulate_variable_get('secure_prepopulate_key', NULL);
+  // The initialization vector to use to decrypt the string.
+  $iv = secure_prepopulate_variable_get('secure_prepopulate_iv', NULL);
+  if (!$key || !$iv) {
+    drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
+    watchdog('Secure Autofill', 'Cannot perform decryption because AES Key and IV have not been configured correctly.', NULL, WATCHDOG_CRITICAL);
+    return FALSE;
+  }
+  $kv = array('key' => $key, 'iv' => $iv);
+  $size = mcrypt_get_block_size(MCRYPT_RIJNDAEL_128, MCRYPT_MODE_CBC);
+  $input = _secure_prepopulate_pkcs5_pad($input, $size);
+  $descriptor = mcrypt_module_open(MCRYPT_RIJNDAEL_128, '', MCRYPT_MODE_CBC, '');
+  mcrypt_generic_init($descriptor, $kv['key'], $kv['iv']);
+  $cipher = mcrypt_generic($descriptor, $input);
+  mcrypt_generic_deinit($descriptor);
+  mcrypt_module_close($descriptor);
+  $cipher = base64_encode($cipher);
+  return $cipher;
+}
+
+
+/**
+ * Decrypt an input string (128 bit AES) using the configured key and initialization vector.
+ *
+ * @param $input
+ *   The string to decrypt.
+ *
+ * @return string
+ *   The decrypt string.
+ */
+function secure_prepopulate_decrypt($cipher) {
+  // The 128 bit key to use to decrypt the string.
+  $key = secure_prepopulate_variable_get('secure_prepopulate_key', NULL);
+  // The initialization vector to use to decrypt the string.
+  $iv = secure_prepopulate_variable_get('secure_prepopulate_iv', NULL);
+  if (!$key || !$iv) {
+    drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
+    watchdog('Secure Autofill', 'Cannot perform decryption because AES Key and IV have not been configured correctly.', NULL, WATCHDOG_CRITICAL);
+    return FALSE;
+  }
+  $kv = array('key' => $key, 'iv' => $iv);
+  $cipher = base64_decode($cipher);
+  $descriptor = mcrypt_module_open(MCRYPT_RIJNDAEL_128, '', MCRYPT_MODE_CBC, '');
+  mcrypt_generic_init($descriptor, $kv['key'], $kv['iv']);
+  $decrypted_data = mdecrypt_generic($descriptor, $cipher);
+  mcrypt_generic_deinit($descriptor);
+  mcrypt_module_close($descriptor);
+  // Account for some PHP AES shortcomings.
+  $decrypted_data = _secure_prepopulate_pkcs5_unpad($decrypted_data);
+  $decrypted_data = rtrim($decrypted_data);
+  return $decrypted_data;
+}
+
+/**
+ * Get the SPP key and vector.
+ *
+ * @return array|bool
+ *   The key and vector in an array, or FALSE
+ */
+function secure_prepopulate_get_key_and_vector() {
+  // The 128 bit key to use to decrypt the string.
+  $key = variable_get('secure_prepopulate_key', NULL);
+  // The initialization vector to use to decrypt the string.
+  $iv = variable_get('secure_prepopulate_iv', NULL);
+  if (!$key || !$iv) {
+    watchdog('Secure Autofill', 'Cannot perform decryption because AES Key and IV have not been configured correctly.', NULL, WATCHDOG_CRITICAL);
+    return FALSE;
+  }
+  return array('key' => $key, 'iv' => $iv);
 }
 
 /**
@@ -353,24 +451,6 @@ function secure_prepopulate_submit(&$form, &$form_state) {
 function secure_prepopulate_decrypt_qs($cipher) {
   $raw_qs = secure_prepopulate_decrypt($cipher);
   return secure_prepopulate_parse_qs($raw_qs);
-}
-
-/**
- * Helper function, Attempts to automatically login a user given their uid.
- *
- * @param $uid
- *   The uid of the user to log in.
- */
-function secure_prepopulate_login_user($uid) { // Coder: This is ok.
-  if (!user_is_logged_in()) {
-    $user = user_load($uid);
-    if ($user) {
-      $form_state['uid'] = $uid;
-      return user_login_submit(array(), $form_state);
-    }
-    return FALSE;
-  }
-  return TRUE;
 }
 
 /**
@@ -397,192 +477,19 @@ function secure_prepopulate_parse_qs($qs) {
   return $result;
 }
 
-
 /**
- * Helper function, Determines if an encrypted query string has already been used.
+ * Helper function, gets variables without bootstrap.
  *
- * @param $qs
- *   The query string to examine.
+ * @param $name
+ *   The var name to get.
+ * @param $default
+ *   The var to return if $name is not found.
  */
-function secure_prepopulate_is_expired($qs) {
-  $qs_hashed = md5($qs);
-  $result = db_query("SELECT COUNT(hash) FROM {secure_prepopulate_expired} WHERE hash = :hash", array(':hash' => $qs_hashed))->fetchField();
-  // if no results it's a new query string
-  if ($result == 0) {
-    return FALSE;
-  }
-  watchdog('Secure Prepopulate', 'Attempted use of encrypted query string @q', array('@q' => $qs_hashed), WATCHDOG_NOTICE);
-  return TRUE;
-}
+function secure_prepopulate_variable_get($name, $default = NULL) {
+  // Use db_query here for performance reasons, see https://www.drupal.org/node/310075.
+  $result = db_query("SELECT value FROM {variable} WHERE name = :name", array(":name" => $name))->fetchField();
 
-/**
- * Helper function, expires query string so it cannot be used more than once.
- *
- * @param $qs
- *   The query string to expire.
- */
-function secure_prepopulate_expire($qs) {
-  // If the "Pre-populated tokens never expire" setting is enabled then do not set an expiration timestamp:
-  if (variable_get('secure_prepopulate_toggle_expiration', 0)) {
-    return;
-  }
-
-  $qs_hashed = md5($qs);
-  $record = new stdClass();
-  $record->hash = $qs_hashed;
-  $record->expire_date = REQUEST_TIME;
-  drupal_write_record('secure_prepopulate_expired', $record);
-}
-
-/**
- * Helper function, Clears the decrypted values from the user's session.
- *
- * @param $nid
- *   The id of the node who's prepopulated data should be cleared.
- */
-function secure_prepopulate_clear_session($nid) {
-  unset($_SESSION['secure_prepopulate_values'][$nid]); // Coder: This is ok.
-}
-
-/**
- * Implements hook_cron().
- */
-function secure_prepopulate_cron() {
-  // Cleanup the secure_prepopulate_expired table.
-  $max_days = variable_get('secure_prepopulate_expired_date_limit', 30);
-  $max_date = REQUEST_TIME - ($max_days * 24 * 60 * 60);
-  db_delete('secure_prepopulate_expired')
-    ->condition('expire_date', $max_date, '<')
-    ->execute();
-}
-
-/**
- * Helper function, creates a nested array of where components exist in the FAPI array for all components in a webform.
- *
- * @param $nid
- *   The nid of the node that contains the webform.
- * @param $components
- *   The webform components array attached to the node.
- */
-function _secure_prepopulate_parse_form($nid, $components) {
-  $component_hierarchy = array();
-  foreach ($components as $cid => $component) {
-    $component_path = 'submitted[' . implode('][', _secure_prepopulate_walk_component_hierarchy($nid, $cid)) . ']';
-    parse_str($component_path, $output); // convert string to a nested array
-    $component_hierarchy[$component['form_key']] = $output;
-  }
-  return $component_hierarchy;
-}
-
-/**
- * Helper function, Builds a path from the webform component to it's topmost parent.
- *
- * @param $nid
- *   The nid of the node that contains the webform.
- * @param $cid
- *   The cid of the webform component being examined.
- * @param $path
- *   The current path to the component within the webform component array.
- *   This path is built up using recursion.
- */
-function _secure_prepopulate_walk_component_hierarchy($nid, $cid, &$path = array()) {
-  $result = db_query("SELECT cid, pid, form_key FROM {webform_component} WHERE nid = :nid and cid = :cid", array(':nid' => $nid, ':cid' => $cid));
-  foreach ($result as $data) {
-    array_unshift($path, $data->form_key);
-    if ($data->pid > 0) {
-      _secure_prepopulate_walk_component_hierarchy($nid, $data->pid, $path);
-    }
-  }
-  return $path;
-}
-
-/**
- * Helper function, Returns a reference to an element of a FAPI array based on a known path.
- *
- * @param $form
- *   The form array that contains the field to find.
- * @param $path
- *   A nested array that represents the path to the field within the FAPI array.
- */
-function &_secure_prepopulate_find_field(&$form, $path) {
-  if (is_array($path)) {
-    foreach (array_keys($path) as $v) {
-      if (is_array($path[$v]) && count($path[$v])) { // if there are more keys
-        return _secure_prepopulate_find_field($form[$v], $path[$v]);
-      }
-      else {
-        return $form[$v];
-      }
-    }
-  }
-}
-
-/**
- * Encrypt an input string (128 bit AES) using the configured key and initialization vector.
- *
- * @param $input
- *   The string to encrypt.
- *
- * @return string
- *   The encrypted string.
- */
-function secure_prepopulate_encrypt($input) {
-  $kv = secure_prepopulate_get_key_and_vector();
-  if (empty($kv)) {
-    return;
-  }
-  $size = mcrypt_get_block_size(MCRYPT_RIJNDAEL_128, MCRYPT_MODE_CBC);
-  $input = pkcs5_pad($input, $size);
-  $descriptor = mcrypt_module_open(MCRYPT_RIJNDAEL_128, '', MCRYPT_MODE_CBC, '');
-  mcrypt_generic_init($descriptor, $kv['key'], $kv['iv']);
-  $cipher = mcrypt_generic($descriptor, $input);
-  mcrypt_generic_deinit($descriptor);
-  mcrypt_module_close($descriptor);
-  $cipher = base64_encode($cipher);
-  return $cipher;
-}
-
-/**
- * Decrypt AES encrypted data using the configured key and
- * initialization vector.
- *
- * @param $cipher
- *   The encrypted data to decrypt.
- */
-function secure_prepopulate_decrypt($cipher) {
-  $kv = secure_prepopulate_get_key_and_vector();
-  if (empty($kv)) {
-    return;
-  }
-  $cipher = base64_decode($cipher);
-  $descriptor = mcrypt_module_open(MCRYPT_RIJNDAEL_128, '', MCRYPT_MODE_CBC, '');
-  mcrypt_generic_init($descriptor, $kv['key'], $kv['iv']);
-  $decrypted_data = mdecrypt_generic($descriptor, $cipher);
-  mcrypt_generic_deinit($descriptor);
-  mcrypt_module_close($descriptor);
-  // Account for some PHP AES shortcomings.
-  $decrypted_data = pkcs5_unpad($decrypted_data);
-  $decrypted_data = rtrim($decrypted_data);
-  return $decrypted_data;
-}
-
-/**
- * Get the SPP key and vector.
- *
- * @return array|bool
- *   The key and vector in an array, or FALSE
- */
-function secure_prepopulate_get_key_and_vector() {
-
-  // The 128 bit key to use to decrypt the string.
-  $key = variable_get('secure_prepopulate_key', NULL);
-  // The initialization vector to use to decrypt the string.
-  $iv = variable_get('secure_prepopulate_iv', NULL);
-  if (!$key || !$iv) {
-    watchdog('Secure Prepopulate', 'Cannot perform decryption because AES Key and IV have not been configured correctly.', NULL, WATCHDOG_CRITICAL);
-    return FALSE;
-  }
-  return array('key' => $key, 'iv' => $iv);
+  return isset($result) ? unserialize($result) : $default;
 }
 
 /**
@@ -593,8 +500,8 @@ function secure_prepopulate_get_key_and_vector() {
  * @param $blocksize
  *   The size of the PKCS5 blocksize to use.
  */
-function pkcs5_pad($text, $blocksize) {
-  $pad = $blocksize - (drupal_strlen($text) % $blocksize);
+function _secure_prepopulate_pkcs5_pad($text, $blocksize) {
+  $pad = $blocksize - (strlen($text) % $blocksize);
   return $text . str_repeat(chr($pad), $pad);
 }
 
@@ -604,14 +511,190 @@ function pkcs5_pad($text, $blocksize) {
  * @param $text
  *   The text to unpad.
  */
-function pkcs5_unpad($text) {
+function _secure_prepopulate_pkcs5_unpad($text) {
+  // Mcrypt adds bad characters at the end of the string. Remove them.
   $pad = ord($text{strlen($text) -1});
-  if ($pad > drupal_strlen($text)) {
+  if ($pad > strlen($text)) {
     return FALSE;
   }
-  return drupal_substr($text, 0, -1 * $pad);
+  return substr($text, 0, -1 * $pad);
 }
 
+/**
+ * Submit handler for forms that have been prepopulated.
+ */
+function secure_prepopulate_submit(&$form, &$form_state) {
+  $node = $form['#node'];
+  secure_prepopulate_clear_cookies($node->nid);
+}
+
+/**
+ * Helper function, Clears the gs/af cookies.
+ *
+ * @param $nid
+ *   The id of the node who's prepopulated data should be cleared.
+ * @param $type
+ *   Which type of cookies to clear, values: 'all' (default), 'af', 'gs'.
+ */
+function secure_prepopulate_clear_cookies($nid, $type = "all") {
+  if ($type == "all" || $type == "af") {
+    // Unset secure prepopulate hash.
+    if (isset($_COOKIE['af-' . $nid])) {
+      unset($_COOKIE['af-' . $nid]);
+      // Empty value and old timestamp.
+      setcookie('af-' . $nid, '', time() - 3600, '/');
+    }
+    // Unset user hash.
+    if (isset($_COOKIE['af-' . $nid . '-hash'])) {
+      unset($_COOKIE['af-' . $nid . '-hash']);
+      setcookie('af-' . $nid . '-hash', '', time() - 3600, '/');
+    }
+  }
+  if (($type == "all" || $type == "gs")) {
+    // Unset gift string hash.
+    if (isset($_COOKIE['gs-' . $nid])) {
+      unset($_COOKIE['gs-' . $nid]);
+      setcookie('gs-' . $nid, '', time() - 3600, '/');
+    }
+    // Unset user hash.
+    if (isset($_COOKIE['gs-' . $nid . '-hash'])) {
+      unset($_COOKIE['gs-' . $nid . '-hash']);
+      setcookie('gs-' . $nid . '-hash', '', time() - 3600, '/');
+    }
+    // Unset default.
+    if (isset($_COOKIE['gs-' . $nid . '-selected'])) {
+      unset($_COOKIE['gs-' . $nid . '-selected']);
+      setcookie('gs-' . $nid . '-selected', '', time() - 3600, '/');
+    }
+  }
+}
+
+/**
+ * Determines if an encrypted query string has already been used.
+ *
+ * @param string $qs
+ *   The query string to examine.
+ * @param string $user_hash
+ *   The unique user hash, used to ensure that users can still have their
+ *   values decrypted for an otherwise expired string.
+ *
+ * @return bool.
+ *   Whether the string is expired.
+ */
+function secure_prepopulate_is_expired($qs, $user_hash) {
+  $result = db_query("SELECT COUNT(hash) FROM {secure_prepopulate_expired} WHERE hash = :hash AND userhash <> :userhash", array(':hash' => $qs, ":userhash" => $user_hash))->fetchField();
+  // If no results it's a new query string or user has the unique
+  // hash that allows them to continue using it.
+  if ($result == 0) {
+    return FALSE;
+  }
+  drupal_bootstrap(DRUPAL_BOOTSTRAP_FULL);
+  watchdog('Secure Autofill', 'Attempted use of encrypted query string @q', array('@q' => $qs), WATCHDOG_NOTICE);
+  return TRUE;
+}
+
+/**
+ * Helper function, expires query string so it cannot be used more than once.
+ *
+ * @param $qs
+ *   The hash to expire.
+ * @param $user_hash
+ *   The unique user hash, used to ensure that users can still have their
+ *   values decrypted for an otherwise expired string.
+ */
+function secure_prepopulate_expire($qs, $user_hash) {
+  // If the "Pre-populated tokens never expire" setting is enabled then do not
+  // set an expiration timestamp:
+  if (secure_prepopulate_variable_get('secure_prepopulate_toggle_expiration', 0)) {
+    return;
+  }
+
+  $result = db_query("SELECT COUNT(hash) FROM {secure_prepopulate_expired} WHERE hash = :hash AND userhash = :userhash", array(':hash' => $qs, ":userhash" => $user_hash))->fetchField();
+  // If no results, create an entry.
+  if ($result == 0) {
+    $record = new stdClass();
+    $record->hash = $qs;
+    $record->expire_date = REQUEST_TIME;
+    $record->userhash = $user_hash;
+    drupal_write_record('secure_prepopulate_expired', $record);
+  }
+}
+
+/**
+ * Converts the dynamic ask amounts into an array of amount suitable for display.
+ *
+ * @param $amounts
+ *   An unformatted array of ask amounts.
+ * @param $show_other
+ *   Flag to indicate whether or not the 'other' amount should be added.
+ */
+function _secure_prepopulate_parse_amounts($amounts, $show_other, $nid) {
+  $amounts = explode('|', $amounts);
+  $formatted_amounts = array();
+  $all_valid = TRUE;
+
+  // format the amounts
+  foreach ($amounts as $amount) {
+    // first, check to see if the value is numeric. if not, we have some bogus data.
+    if (!is_numeric($amount) || $amount == 0) {
+      $all_valid = FALSE;
+    }
+    // if the number has a decimal, retain it. otherwise format without decimals
+    if (is_float($amount + 1)) { // implicit cast hack
+      $formatted_amounts[$amount] = '$' . number_format($amount, 2, '.', ',');
+    }
+    elseif (is_integer($amount + 1)) {
+      $formatted_amounts[$amount] = '$' . number_format($amount, 0, '', ',');
+    }
+  }
+  // re-add 'other' if enabled
+  if ($show_other) {
+    $formatted_amounts['other'] = 'Other';
+  }
+  if ($all_valid) {
+    return $formatted_amounts;
+  }
+  else {
+    watchdog("Secure Autofill", "Amounts failed to validate.", NULL, WATCHDOG_ERROR);
+    return FALSE;
+  }
+}
+
+
+/**
+ * Validates gift string amounts. Based on _dynamic_gift_strings_parse_amounts.
+ */
+function secure_prepopulate_validate_gs($gs) {
+  if (!is_array($gs)) {
+    return FALSE;
+  }
+
+  $valid = TRUE;
+
+  // Validate amounts.
+  if (array_key_exists('amounts', $gs)) {
+    $amounts = explode('|', $gs['amounts']);
+    // Validate the amounts.
+    foreach ($amounts as $amount) {
+      if (!is_numeric($amount) || $amount == 0) {
+        $valid = FALSE;
+      }
+    }
+  }
+
+  // Validate amounts.
+  if (array_key_exists('recurring_amounts', $gs)) {
+    $recurring_amounts = explode('|', $gs['recurring_amounts']);
+    // Validate the amounts.
+    foreach ($recurring_amounts as $amount) {
+      if (!is_numeric($amount) || $amount == 0) {
+        $valid = FALSE;
+      }
+    }
+  }
+
+  return $valid;
+}
 
 /**
  * Implements hook_node_insert().
@@ -624,5 +707,53 @@ function secure_prepopulate_node_insert($node) {
     // Adds some custom fields to new webforms.
     module_load_include('inc', 'secure_prepopulate', 'secure_prepopulate.components');
     secure_prepopulate_insert_components($node);
+  }
+  if (isset($node->gs_omit)) {
+    secure_prepopulate_save_omitted_status($node, $node->gs_omit);
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ *
+ * Save the node-specific global gift string settings.
+ */
+function secure_prepopulate_node_update($node) {
+  if (isset($node->gs_omit)) {
+    secure_prepopulate_save_omitted_status($node, $node->gs_omit);
+  }
+}
+
+function secure_prepopulate_check_ggs_status($node) {
+  $omitted = db_query('select ggs_omit from {secure_prepopulate_ggs} WHERE nid = :nid', array(':nid' => $node->nid))->fetchField();
+   return $omitted;
+}
+
+function secure_prepopulate_save_omitted_status($node, $status) {
+  db_merge('secure_prepopulate_ggs')
+    ->key(array('nid' => $node->nid))
+    ->fields(array(
+      'nid' => $node->nid,
+      'ggs_omit' => $status,
+    ))
+    ->execute();
+}
+
+/**
+ * Helper function to generate user hash.
+ *
+ * @see user_password().
+ */
+function secure_prepopulate_user_hash($length = 16) {
+  return substr(md5(microtime()), 0, $length);
+}
+
+/**
+ * Implements hook_node_clone_alter().
+ */
+function secure_prepopulate_clone_node_alter(&$node, $context) {
+  $omit = secure_prepopulate_check_ggs_status($context['original_node']);
+  if ($omit) {
+    $node->gs_omit = $omit;
   }
 }

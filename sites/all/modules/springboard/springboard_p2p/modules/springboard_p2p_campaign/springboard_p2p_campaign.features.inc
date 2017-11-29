@@ -35,7 +35,7 @@ function springboard_p2p_campaign_image_default_styles() {
   // Exported image style: p2p_top_banner.
   $styles['p2p_top_banner'] = array(
     'name' => 'p2p_top_banner',
-    'label' => 'P2P Top Banner',
+    'label' => 'Peer to Peer Top Banner',
     'effects' => array(
       1 => array(
         'label' => 'Scale',
@@ -83,10 +83,10 @@ function springboard_p2p_campaign_node_info() {
     'p2p_campaign' => array(
       'name' => t('Peer to Peer Campaign'),
       'base' => 'node_content',
-      'description' => t('This is a peer to peer campaign.'),
+      'description' => t('This is a Peer to Peer campaign.'),
       'has_title' => '1',
       'title_label' => t('Name'),
-      'help' => t('Peer to peer campaign submission guidelines.'),
+      'help' => t('Peer to Peer campaign submission guidelines.'),
     ),
   );
   return $items;

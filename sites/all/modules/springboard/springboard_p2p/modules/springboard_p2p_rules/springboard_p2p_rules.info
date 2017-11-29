@@ -1,4 +1,4 @@
-name = Springboard P2P Rules
+name = Springboard Peer to Peer Rules
 description = Provides Rules events and Rules configuration for P2P
 core = 7.x
 package = Springboard P2P

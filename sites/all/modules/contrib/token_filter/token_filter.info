@@ -2,10 +2,3 @@ name = Token Filter
 description = Allows token values to be used as filters
 core = 7.x
 dependencies[] = token
-
-
-; Information added by drush on 2017-05-25
-version = "7c136e4ce38c75a910d242205b71ec2b12f48639-dev"
-project = "token_filter"
-datestamp = "1495705147"
-

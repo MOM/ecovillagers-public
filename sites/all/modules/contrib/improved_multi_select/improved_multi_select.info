@@ -3,10 +3,3 @@ description = Replace the default multi-select boxes with two pannel list and se
 package = Form Elements
 core = 7.x
 configure = admin/config/user-interface/ims
-
-
-; Information added by drush on 2017-05-25
-version = "b82a7dd5c87d552a2b17fd9fc9e6278d3b5b9e98-dev"
-project = "improved_multi_select"
-datestamp = "1495705178"
-

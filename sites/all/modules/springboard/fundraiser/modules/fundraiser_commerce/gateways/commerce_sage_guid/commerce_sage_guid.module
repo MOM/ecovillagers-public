@@ -1,0 +1,86 @@
+<?php
+
+/**
+ * @file
+ * Code for the Commerce Sage GUID module.
+ */
+
+/**
+ * Implements hook_commerce_payment_method_info().
+ */
+function commerce_sage_guid_commerce_payment_method_info() {
+  $payment_methods = array();
+
+  $payment_methods['commerce_sage_guid'] = array(
+    'title' => t('Sage GUID'),
+    'description' => t('Accepts Sage GUIDs as payment.'),
+    'short_title' => t('Sage Payment GUID'),
+    'display_title' => t('GUID'),
+    'cardonfile' => array(
+      'charge callback' => 'commerce_sage_guid_cardonfile_charge',
+      'update callback' => 'commerce_sage_guid_cardonfile_update',
+    ),
+  );
+
+  return $payment_methods;
+}
+
+/**
+ * Payment method callback: settings form.
+ */
+function commerce_sage_guid_settings_form($settings = array()) {
+  // Merge default settings into the stored settings array.
+  $form = array();
+
+  // Generate a list of Sage Payment CC Gateways.
+  $cc_options = array();
+  $methods = new stdClass();
+  $methods->payment_methods = array();
+  rules_invoke_all('commerce_payment_methods', $methods);
+  foreach ($methods->payment_methods as $id => $info) {
+    $method_instance = commerce_payment_method_instance_load($id);
+    list($method_id, $rule_name) = explode('|', $method_instance['instance_id']);
+    if ($method_id == 'commerce_sage_payments_cc') {
+      $rule_config = rules_config_load($rule_name);
+      $cc_options[$method_instance['instance_id']] = $rule_config->label;
+    }
+  }
+
+  $form['sage_payment_cc_gateway'] = array(
+    '#type' => 'select',
+    '#title' => t('Select the Sage Payment CC Gateway that will process these GUIDs.'),
+    '#options' => $cc_options,
+    '#required' => TRUE,
+    '#default_value' => isset($settings['sage_payment_cc_gateway']) ? $settings['sage_payment_cc_gateway'] : '',
+  );
+
+  return $form;
+}
+
+/**
+ * Payment method callback: checkout form.
+ */
+function commerce_sage_guid_submit_form($payment_method = NULL, $pane_values = NULL, $checkout_pane = NULL, $order = NULL) {
+  $form = array();
+
+  // Field for sage GUID.
+  $form['guid'] = array(
+    '#type' => 'textfield',
+    '#title' => t('GUID'),
+    '#fundraiser_commerce_required' => TRUE,
+  );
+
+  return $form;
+}
+
+/**
+ * Helper function to get cardonfile entry for a given GUID.
+ */
+function _commerce_sage_guid_get_cardonfile($guid) {
+  // Get cardonfile ID for this GUID.
+  $cid = db_query("SELECT card_id FROM {commerce_cardonfile} WHERE remote_id = :guid ORDER BY card_id DESC", array(":guid" => $guid))->fetchField();
+  if ($cid) {
+    return commerce_cardonfile_load($cid);
+  }
+  return FALSE;
+}

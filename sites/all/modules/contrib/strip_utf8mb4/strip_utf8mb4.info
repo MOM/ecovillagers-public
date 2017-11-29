@@ -4,10 +4,3 @@ configure = admin/config/content/strip_utf8mb4
 core = 7.x
 
 dependencies[] = entity
-
-; Information added by Drupal.org packaging script on 2015-10-10
-version = "7.x-1.x-dev"
-core = "7.x"
-project = "strip_utf8mb4"
-datestamp = "1444465140"
-

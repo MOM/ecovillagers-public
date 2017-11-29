@@ -1,5 +1,5 @@
 name = Springboard Peer to Peer Fields
-description = Defines the field types needed for Springboard peer to peer.
+description = Defines the field types needed for Springboard Peer to Peer.
 core = 7.x
 package = Springboard P2P
 version = 7.x-4.0-dev

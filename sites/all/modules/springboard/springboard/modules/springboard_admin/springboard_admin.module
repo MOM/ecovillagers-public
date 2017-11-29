@@ -7,6 +7,61 @@
 include_once 'springboard_admin.menu.inc';
 
 /**
+ * Implements hook_module_implements_alter().
+ */
+function springboard_admin_module_implements_alter(&$implementations, $hook) {
+  // Move these hooks to the end to ensure modules have made their changes.
+  $end = [
+    'springboard_admin_admin_menu_items_alter',
+    'springboard_admin_form_page_types_alter',
+  ];
+  if (
+    isset($implementations['springboard_admin'])
+    && in_array($hook, $end)
+  ) {
+    $group = $implementations['springboard_admin'];
+    unset($implementations['springboard_admin']);
+    $implementations['springboard_admin'] = $group;
+  }
+}
+
+/**
+ * Implements hook_views_api().
+ */
+function springboard_admin_views_api() {
+  return array(
+    'api' => 3,
+    'path' => drupal_get_path('module', 'springboard_admin') . '/views',
+  );
+}
+
+/**
+ * Implements hook_springboard_admin_admin_menu_items_alter().
+ *
+ * Moved to the end of the processing line by hook_module_implements_alter().
+ */
+function springboard_admin_springboard_admin_admin_menu_items_alter(&$items) {
+  // Order the fundraiser items.
+  if (!empty($items['admin/springboard/donation-forms/all']['_children'])) {
+    // Sort the fundraiser items alphabetically.
+    uasort($items['admin/springboard/donation-forms/all']['_children'], 'springboard_admin_menu_item_alpha_order_title');
+
+    // Set the donation form item's weight so it will appear first.
+    if (!empty($items['admin/springboard/donation-forms/all']['_children']['admin/springboard/donation-forms/donation_form'])) {
+      $items['admin/springboard/donation-forms/all']['_children']['admin/springboard/donation-forms/donation_form']['weight'] = -1;
+    }
+  }
+
+  // Order the custom form items alphabetically.
+  if (!empty($items['admin/springboard/forms/all']['_children'])) {
+    uasort($items['admin/springboard/forms/all']['_children'], 'springboard_admin_menu_item_alpha_order_title');
+  }
+
+  // Sort the settings items alphabetically.
+  uasort($items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children'], 'springboard_admin_menu_item_alpha_order_title');
+}
+
+/**
  * Implements hook_admin_menu_output_build().
  *
  * Creates a custom top-level menu item and its children for the admin_menu
@@ -155,9 +210,6 @@ function springboard_admin_form_views_exposed_form_alter(&$form, &$form_state, $
     && !empty($form['date_filter']['min'])
     && !empty($form['date_filter']['max'])
   ) {
-    // Alter the date format for views date filters.
-    $form['date_filter']['min']['#date_format'] = 'n/j/Y';
-    $form['date_filter']['max']['#date_format'] = 'n/j/Y';
 
     // Define labels for various views date filters.
     // This can't be done in the ui.
@@ -205,11 +257,17 @@ function springboard_admin_form_springboard_admin_settings_alter(&$form, &$form_
       '#description' => t('Configure settings for the Springboard Admin Menu.'),
       '#weight' => -2,
     );
-    $form['menu']['springboard_drupal_path'] = array(
-      '#type' => 'textfield',
-      '#title' => t('Organization homepage'),
-      '#description' => t("Set the URL to the organization's main website."),
-      '#default_value' => variable_get('springboard_drupal_path', 'http://drupal.org'),
+    
+    // Determine default value based on legacy settings:
+    $default_logo_links = 'Your Website|' . variable_get('springboard_drupal_path', 'http://drupal.org') . "\n" .
+      'Salesforce.com|http://login.salesforce.com';
+    $logo_links = variable_get('springboard_logo_links', $default_logo_links);
+    $form['menu']['springboard_logo_links'] = array(
+      '#type' => 'textarea',
+      '#required' => TRUE,
+      '#title' => t('Springboard Logo Drop-Down Links'),
+      '#description' => t('Enter one "Link Label|URL" per row to appear in the header logo\'s drop-down menu; for example: Jackson River|https://jacksonriver.com'),
+      '#default_value' => $logo_links,
     );
     $form['menu']['springboard_menu_rebuild'] = array(
       '#type' => 'item',
@@ -292,8 +350,8 @@ function springboard_admin_form_springboard_admin_settings_alter(&$form, &$form_
       '#default_value' => variable_get('springboard_asset_library', array('page_wrapper', 'email_wrapper')),
     );
   }
-  $form['#validate'][] = 'springboard_drupal_path_validate';
-  $form['#submit'][] = 'springboard_drupal_path_submit';
+  $form['#validate'][] = '_springboard_admin_logo_links_validate';
+  $form['#submit'][] = '_springboard_admin_logo_links_submit';
 }
 
 /**
@@ -361,18 +419,18 @@ function springboard_admin_menu() {
     'page callback' => 'springboard_admin_asset_page',
   );
   $items['admin/springboard/donation-forms/all'] = array(
-    'title' => 'Donation Forms',
+    'title' => 'Fundraising',
     'type' => MENU_NORMAL_ITEM,
     'access callback' => 'springboard_admin_access_donation_form_pages',
     'page callback' => 'springboard_admin_forms_page',
-    'page arguments' => array('fundraiser')
+    'page arguments' => array('fundraiser'),
   );
   $items['admin/springboard/forms/all'] = array(
-    'title' => 'Forms',
+    'title' => 'Custom Forms',
     'type' => MENU_NORMAL_ITEM,
     'access callback' =>'springboard_admin_access_form_pages',
     'page callback' => 'springboard_admin_forms_page',
-    'page arguments' => array('webform_user')
+    'page arguments' => array('webform'),
   );
   $items['admin/springboard/marketing-analytics'] = array(
     'title' => 'Marketing & Analytics',
@@ -406,8 +464,7 @@ function springboard_admin_menu() {
     'title' => 'Configuration',
     'type' => MENU_NORMAL_ITEM,
     'access arguments' => array('access springboard dashboard'),
-    'page callback' => 'springboard_admin_aggregate_links_page',
-    'page arguments' => array('admin/springboard/settings/config', array('admin/springboard/settings')),
+    'page callback' => 'springboard_admin_aggregate_links_page_settings',
   );
   $items['admin/springboard/tools'] = array(
     'title' => 'Other Tools',
@@ -666,33 +723,53 @@ function springboard_admin_modules_disabled($modules) {
 }
 
 /**
- * Implements hook_node_type_delete().
- *
- * Deletes the springboard admin menu link to create a node of this type.
- */
-function springboard_admin_node_type_delete($info) {
-  springboard_admin_menu_node_delete_link($info);
-}
-
-/**
  * Implements hook_node_type_insert().
- *
- * Adds a link to the springboard admin menu to create a new node of this
- * content type if it is Fundraiser or Webform User enabled.
  */
-function springboard_admin_node_type_insert($info) {
-  $mlid = springboard_admin_menu_node_add_link($info);
+function springboard_admin_node_type_insert($type) {
+  // If the node type is fundraiser or webform recreate the sb admin menu.
+  if (
+    module_exists('fundraiser')
+    && fundraiser_is_donation_type($type->type)
+  ) {
+    $rebuild = TRUE;
+  }
+  elseif (
+    module_exists('webform_user')
+    && _webform_user_is_webform_user_node_type($type->type)
+  ) {
+    $rebuild = TRUE;
+  }
+
+  if (!empty($rebuild)) {
+    springboard_admin_recreate_menu_on_exit();
+  }
 }
 
 /**
- * Implements hook_node_type_update.
- *
- * Deletes the existing node add link (if applicable) and creates a new node
- * add link for this content type if it is Fundraiser or Webform User enabled.
+ * Implements hook_node_type_update().
  */
-function springboard_admin_node_type_update($info) {
-  springboard_admin_menu_node_delete_link($info);
-  $mlid = springboard_admin_menu_node_add_link($info);
+function springboard_admin_node_type_update($type) {
+  springboard_admin_node_type_insert($type);
+}
+
+/**
+ * Implements hook_node_type_delete().
+ */
+function springboard_admin_node_type_delete($type) {
+  springboard_admin_node_type_insert($type);
+}
+
+/**
+ * Implements hook_exit().
+ *
+ * Recreates the menu if a session var has been set. Running in hook_exit()
+ * avoids rebuilding the menu multiple times in the same request.
+ */
+function springboard_admin_exit() {
+  if (!empty($_SESSION['springboard_admin_recreate_menu_on_exit'])) {
+    unset($_SESSION['springboard_admin_recreate_menu_on_exit']);
+    springboard_admin_recreate_menu(FALSE);
+  }
 }
 
 /**
@@ -915,7 +992,7 @@ function springboard_admin_aggregate_links_page($path, $parents = array()) {
       }
     }
     $item = isset($parent['_children'][$path]) ? $parent['_children'][$path] : array();
-  // If there are no parents, then load a top-level menu item.
+    // If there are no parents, then load a top-level menu item.
   }
   else {
     $item = isset($menu[$path]) ? $menu[$path] : array();
@@ -956,6 +1033,77 @@ function springboard_admin_aggregate_links_page($path, $parents = array()) {
 }
 
 /**
+ * Page callback for admin settings page.
+ *
+ * @return string
+ *   HTML output for the page.
+ */
+function springboard_admin_aggregate_links_page_settings() {
+  $output = '';
+
+  drupal_set_title('Settings');
+
+  // Load the springboard admin menu so we know what links to render.
+  $menu = springboard_admin_admin_menu_items();
+  $item = isset($menu['admin/springboard/settings']['_children']['admin/springboard/settings/config']) ? $menu['admin/springboard/settings']['_children']['admin/springboard/settings/config'] : array();
+
+  // Build array of sections, this defines the order of the groups.
+  $link_groups = array(
+    'Springboard Settings' => array(),
+    'Fundraising' => array(),
+    'Peer to Peer' => array(),
+    'Salesforce' => array(),
+    'Analytics' => array(),
+  );
+
+  $w = 0;
+  if (isset($item['_children'])) {
+    foreach ($item['_children'] as $child) {
+      $child_item = menu_get_item($child['link_path']);
+      // Links added to this page without a link group are not displayed.
+      if (isset($child['attributes']['sb_link_group'])) {
+        $group_name = $child['attributes']['sb_link_group'];
+        if ($child_item['access']) {
+          $options = array();
+          if (isset($child['external'])) {
+            $options['external'] = $child['external'];
+          }
+          $link_groups[$group_name][] = array(
+            'title' => $child['link_title'],
+            'href' => $child['link_path'],
+            'options' => $options,
+            'weight' => $w++,
+          );
+        }
+      }
+    }
+  }
+
+  // Render each set of links, grouped based on group name:
+  if (!empty($link_groups)) {
+    $current_group_name = '';
+    foreach ($link_groups as $group_name => $links) {
+      if (empty($links)) {
+        continue;
+      }
+      uasort($links, 'drupal_sort_weight');
+      $output .= theme_links(array(
+        'links' => $links,
+        'attributes' => array(
+          'class' => array('aggregate-links'),
+        ),
+        'heading' => ($current_group_name != $group_name ? array('text' => $group_name, 'level' => 'h2') : array()),
+      ));
+      $current_group_name = $group_name;
+    }
+  }
+  else {
+    $output = t('There was an error rendering this page, please choose a different option from the administrative menu');
+  }
+  return $output;
+}
+
+/**
  * Page callback for the "Donation Forms" and "Forms" admin pages.
  *
  * Renders page content for the "Donation Forms" and "Forms" administrative
@@ -973,22 +1121,26 @@ function springboard_admin_forms_page($springboard_type) {
   $display_types = array();
   $display = ($springboard_type == 'fundraiser') ? 'block_1' : 'block_2';
   $tables = array();
+  $webform_types = variable_get('webform_node_types', array('webform'));
+
   // Get an appropriate set of content types to display nodes for.
   foreach ($node_types as $type) {
     switch ($springboard_type) {
       case 'fundraiser':
-        if (fundraiser_is_donation_type($type->type)) {
+        if (fundraiser_is_donation_type($type->type) || $type->type == 'sustainers_upgrade_form') {
           if (springboard_admin_access_donation_form_pages($type->type)) {
             $display_types[$type->type] = $type;
           }
         }
+
         break;
 
-      case 'webform_user':
-        // Only create the item if the node type uses Webform User but not
+      case 'webform':
+        // Only create the item if the node type uses Webform but not
         // Fundraiser.
-        if ($type && _webform_user_is_webform_user_node_type($type->type)
-          && !fundraiser_is_donation_type($type->type)
+        if (!fundraiser_is_donation_type($type->type)
+          && in_array($type->type, $webform_types)
+          && $type->type != 'sustainers_upgrade_form'
         ) {
           if (springboard_admin_access_form_pages($type->type)) {
             $display_types[$type->type] = $type;
@@ -997,7 +1149,7 @@ function springboard_admin_forms_page($springboard_type) {
       break;
 
       default:
-        if (!_webform_user_is_webform_user_node_type($type->type) && !fundraiser_is_donation_type($type->type)) {
+        if (in_array($type->type, $webform_types)) {
           if (springboard_admin_access_form_pages($type->type)) {
             $display_types[$type->type] = $type;
           }
@@ -1005,29 +1157,39 @@ function springboard_admin_forms_page($springboard_type) {
       break;
     }
   }
-
   // Allow modules to alter the types to be displayed.
   drupal_alter('springboard_admin_form_page_types', $display_types, $springboard_type);
-
   // If there are no node types to display just show this text.
   if (empty($display_types)) {
     return t("You haven't yet created any content types for this kind of webform.");
   }
 
+  // Make type labels plural:
+  foreach ($display_types as $type) {
+    if (isset($type->name) && substr($type->name, -1, 1) != 's') {
+      $type->name = $type->name . 's';
+    }
+  }
+
   // Render the views tables for the appropriate set of content types.
   if(module_exists('springboard_views')) {
-    foreach ($display_types as $type) {
+    foreach ($display_types as $type_machine_name => $type) {
       $view = views_get_view('sbv_forms');
       $view->set_display($display);
       $view->set_arguments(array($type->type));
       $view->pre_execute();
       $view->execute();
-
       $tables[$type->type] = '';
-      if ($view && $view->access($display)) {
+      if ($view && count($view->result) && $view->access($display)) {
         $tables[$type->type] = $view->render();
+      } else {
+        unset($display_types[$type_machine_name]);
       }
     }
+  }
+
+  if (empty($display_types)) {
+    return t("You haven't yet created any content types for this kind of webform.");
   }
 
   return theme('springboard_admin_forms_page', array('types' => $display_types, 'springboard_type' => $springboard_type, 'tables' => $tables));
@@ -1044,8 +1206,36 @@ function springboard_admin_springboard_admin_form_page_types_alter(&$display_typ
       unset($display_types[$type]);
     }
   }
-}
 
+  // Remove types this user is not allowed to create.
+  foreach ($display_types as $type => $info) {
+    if (!node_access('create', $type)) {
+      unset($display_types[$type]);
+    }
+  }
+
+  // Order the fundariser types.
+  if ($springboard_type == 'fundraiser') {
+    if (!empty($display_types['donation_form'])) {
+      // Remove the donation_form item from the array.
+      $donation_item['donation_form'] = $display_types['donation_form'];
+      unset($display_types['donation_form']);
+    }
+
+    // Sort remaining items alphabetically.
+    uasort($display_types, 'springboard_admin_node_type_alpha_order_name');
+
+    if (!empty($donation_item['donation_form'])) {
+      // Add the donation form back to the start of the array.
+      $display_types = $donation_item + $display_types;
+    }
+  }
+  // Order the non-fundraiser types.
+  else {
+    // Sort items alphabetically.
+    uasort($display_types, 'springboard_admin_node_type_alpha_order_name');
+  }
+}
 
 /**
  * Implements hook_springboard_views_springboard_dashboard_panes_alter().
@@ -1129,33 +1319,121 @@ function springboard_admin_node_delete($form) {
 }
 
 /**
- * Submit handler for springboard_admin_settings form. Updates the
- * configurable link to the organization website in the springboard_admin menu.
+ * Submit handler for springboard_admin_settings form which rebuilds the
+ * configurable logo drop-down links in the springboard_admin menu.
  *
  * We do this so that users who are allowed to administer Springboard can change
- * this menu item but not have control over menus in general.
+ * these menu items but not have control over menus in general.
  */
-function springboard_drupal_path_submit(&$form, &$form_state) {
-  if ($form['menu']['springboard_drupal_path']['#default_value'] != $form_state['values']['springboard_drupal_path']) {
-    $update_menu = db_update('menu_links')
-      ->fields(array(
-        'link_path' => $form_state['values']['springboard_drupal_path'],
-      ))
-      ->condition('menu_name', "springboard_admin_menu", '=')
-      ->condition('link_path', $form['menu']['springboard_drupal_path']['#default_value'], '=')
-      ->execute();
-    menu_rebuild();
+function _springboard_admin_logo_links_submit(&$form, &$form_state) {
+  if (!isset($form_state['values']['springboard_logo_links']) || !isset($form['menu']['springboard_logo_links']['#default_value'])) {
+    return;
+  }
+  // If the field's value hasn't changed then do nothing:
+  if ($form['menu']['springboard_logo_links']['#default_value'] == $form_state['values']['springboard_logo_links']) {
+    return;
+  } 
+
+  // Get the logo drop-down menu's parent link's ID:
+  $parent_link_path = 'admin/springboard';
+  $plid = db_query("SELECT mlid FROM {menu_links} WHERE menu_name = 'springboard_admin_menu' AND link_path = :parent_path AND plid = 0;",
+    array(':parent_path' => $parent_link_path))
+    ->FetchField();
+  if (!$plid || !isset($form_state['values']['springboard_logo_links'])) {
+    drupal_set_message('There was a problem updating logo drop-down menu items.', 'error');
+    return;
+  }
+
+  $new_logo_links = _springboard_admin_parse_header_logo_links($form_state['values']['springboard_logo_links']);
+  $old_logo_links = $form['menu']['springboard_logo_links']['#default_value'];
+
+  // Gather info about the current menu:
+  $current_links_data = array();
+  $current_links_query = db_query("SELECT * FROM {menu_links} WHERE menu_name = 'springboard_admin_menu' AND plid = :plid", 
+    array(':plid' => $plid));
+  foreach ($current_links_query as $current_link) {
+    $current_links_data[] = $current_link;
+  }
+  
+  // Rebuilt the logo's drop-down menu:
+  $count = 0;
+  foreach ($new_logo_links as $new_link_title => $new_link_path) {
+    $item = array(
+      'link_path' => $new_link_path,
+      'link_title' => $new_link_title,
+      'mlid' => 0,
+      'plid' => $plid,
+      'menu_name' => 'springboard_admin_menu',
+      'expanded' => 1,
+      'external' => 1,
+      'customized' => 1,
+      'weight' => $count,
+      'options' => array('attributes' => array('target' => '_blank')),
+    );
+    if (isset($current_links_data[$count]) && isset($current_links_data[$count]->mlid)) {
+      $item['mlid'] = $current_links_data[$count]->mlid;
+    }
+    menu_link_save($item);
+    $count++;
+  }
+
+  // If the updated menu has fewer items then delete the old items:
+  foreach ($current_links_data as $index => $current_link_data) {
+    if ($index >= count($new_logo_links)) {
+      if ($current_link_data->plid == $plid) { // Just to be safe.
+        menu_link_delete($current_link_data->mlid);
+      }
+    }
+  } 
+
+  menu_rebuild();
+  drupal_set_message('The logo drop-down menu has been updated.');
+}
+
+/**
+ * Validation handler for springboard_admin_settings form. Checks that the submitted URLs are valid.
+ * Because valid_url() is a bit broad, this does some additional validation.
+ */
+function _springboard_admin_logo_links_validate(&$form, &$form_state) {
+
+  $errors = array();
+  if (isset($form_state['values']['springboard_logo_links'])) {
+    $logo_links = _springboard_admin_parse_header_logo_links($form_state['values']['springboard_logo_links']);
+    foreach ($logo_links as $link_title => $link_path) {
+      if ($link_title == '') {
+        $errors[] = t('Please enter a label for URL "' . $link_path . '".');
+      }
+      elseif (!valid_url($link_path, TRUE) || strpos($link_path, 'http') === FALSE || strpos($link_path, '.') === FALSE) {
+        $errors[] = t('"' . $link_path . '" is not a valid url.');
+      }
+    } 
+    if (!empty($errors)) {
+      $errors[] = t('Please ensure all URLs are valid, starting with "http://" or "https://".');
+      form_error($form['menu']['springboard_logo_links'], implode("<br />", $errors));
+    }
   }
 }
 
 /**
- * Validation handler for springboard_admin_settings form. Checks that the
- * submitted URL is valid.
+ * Helper function to get logo drop-down menu link data from the associated settings field.
+ *
+ * @param $logo_field_value
+ *   Content of the "Springboard Logo Drop-Down Links" textarea field with each
+ *   line containing a "Label|URL" for the header logo's drop-down menu.
  */
-function springboard_drupal_path_validate(&$form, &$form_state) {
-  if (!valid_url($form_state['values']['springboard_drupal_path'], TRUE)) {
-    form_error($form['admin']['springboard_drupal_path'], 'Please submit a valid URL, including "http://"');
+function _springboard_admin_parse_header_logo_links($logo_field_value) {
+  $logo_links = array();
+  if (is_string($logo_field_value)) {
+    $logo_field_value = trim($logo_field_value);
+    $logo_field_rows = explode("\n", $logo_field_value);
+    foreach ($logo_field_rows as $logo_field_row) {
+      $link_data = explode('|', $logo_field_row);
+      $link_path = isset($link_data[1]) ? trim($link_data[1]) : '';
+      $link_title = isset($link_data[0]) ? trim($link_data[0]) : '';
+      $logo_links[$link_title] = $link_path; 
+    }
   }
+  return $logo_links;
 }
 
 /**
@@ -1339,6 +1617,13 @@ function springboard_admin_springboard_admin_alias_patterns() {
       'alias' => array(
         'regex' => '|^springboard/reports/donations(/.*)?$|',
         'replacement' => 'springboard/reports/donations$1',
+      ),
+    ),
+    // Data warehouse donations report:
+    'admin/reports/data-warehouse/donations' => array(
+      'path' => array(
+        'regex' => '|^/admin/reports/data-warehouse/donations(/.*)?$|',
+        'replacement' => 'admin/reports/data-warehouse/donations$1',
       ),
     ),
     // Webform AB content page.
@@ -1553,87 +1838,6 @@ function springboard_admin_menu_find_link($sbadmin_path, $plid = -1) {
 }
 
 /**
- * Helper Function. Creates an "add content" item in the Springboard Admin Menu
- * for new content types if they are Fundraiser or Webform User enabled.
- *
- * @param object $type
- *    A node type object.
- *
- * @return int
- *   The menu link ID of the new menu item or FALSE if a menu item could not be
- *   created.
- */
-function springboard_admin_menu_node_add_link($type) {
-  // Get menu item definitions for the Donations and Forms parent links.
-  $forms_menu_item = springboard_admin_menu_find_link('admin/springboard/forms/all', 0);
-  $donations_menu_item = springboard_admin_menu_find_link('admin/springboard/donation-forms/all', 0);
-  // Set up vars we need.
-  $menu_link = array();
-  $mlid = FALSE;
-  // If node type is either useing Webform User or Fundraiser, and is not already
-  // in the Springboard Admin Menu, create a menu item for it.
-
-  if (!springboard_admin_menu_find_link('node/add/' . preg_replace('/_/', '-', $type->type))) {
-    $parent_link = FALSE;
-    if(module_exists('fundraiser') && fundraiser_is_donation_type($type->type)) {
-      $parent_link =  $donations_menu_item['mlid'];
-    }
-    elseif (module_exists('webform_user') && _webform_user_is_webform_user_node_type($type->type)) {
-      $parent_link = $forms_menu_item['mlid'];
-    }
-    if($parent_link) {
-      $menu_link = array(
-        'link_path' => 'node/add/' . preg_replace('/_/', '-', $type->type),
-        'link_title' => 'Create a ' . $type->name,
-        'menu_name' => 'springboard_admin_menu',
-        'weight' => '1',
-        // If the node type is using Fundraiser, put it under the "Donations" item.
-        // Otherwise, the parent item is "Forms".
-        'plid' => $parent_link,
-      );
-
-      // Save that menu link.
-      $mlid = menu_link_save($menu_link);
-      // If saving the link fails, return a helpful error message.
-      if (!$mlid) {
-        watchdog('springboard_admin', "A Springboard Admin Menu item for node types %t could not be created.", array('%t' => $type->name));
-        drupal_set_message(t('Please rebuild the Springboard Admin Menu by uninstalling and reinstalling the Springboard Admin module.'), 'warning');
-      }
-      // Otherwise, log the creation of the menu item.
-      else {
-        watchdog('springboard_admin', "Springboard Admin Menu items for node types %t were created.", array('%t' => $type->name));
-      }
-    }
-  }
-  return $mlid;
-}
-
-/**
- * Helper function. Deletes a "add content" menu item from the Springboard
- * Admin Menu.
- *
- * @param object $type
- *   A node type object.
- *
- * @return bool
- *   TRUE if the link is successfully deleted, FALSE if the link cannot be
- *   found in the Springboard Admin Menu.
- */
-function springboard_admin_menu_node_delete_link($type) {
-    // Get the definition for the "add content" link for this node type.
-    $link = springboard_admin_menu_find_link('node/add/' . preg_replace('/_/', '-', $type->type));
-    // Delete the link if it exists.
-    if ($link) {
-      menu_link_delete($link['mlid']);
-      return TRUE;
-    }
-    // Otherwise, return FALSE.
-    else {
-      return FALSE;
-    }
-}
-
-/**
  * Helper Function
  * Checks if a user has a role that enforces the Springboard User Experieince
  * as configured in the Springboard Settings.
@@ -1736,6 +1940,7 @@ function _springboard_admin_views() {
     'sbv_sf_queue',
     'sbv_soap_errors',
     'p2p_user_approval',
+    'sb_generic_webform_results',
   );
 
   // Allow modules to add views names to the array.
@@ -1753,13 +1958,72 @@ function _springboard_admin_enabled_form_types() {
 
   // Include webform user and fundraiser enabled forms.
   foreach ($node_types as $type) {
-    if (_webform_user_is_webform_user_node_type($type->type) || fundraiser_is_donation_type($type->type)) {
+    $webform_types = variable_get('webform_node_types', array('webform'));
+    // Make sure this node type contains a webform.
+    if (in_array($type->type, $webform_types)) {
       $sb_types[$type->type] = $type->name;
     }
   }
-
   // Allow modules to remove types from the options list in admin settings.
   drupal_alter('springboard_admin_enabled_form_types', $sb_types);
-
   return $sb_types;
+}
+
+/**
+ * Compare function for ordering menu items by title.
+ */
+function springboard_admin_menu_item_alpha_order_title($a, $b) {
+  return strcasecmp($a['link_title'], $b['link_title']);
+}
+
+/**
+ * Compare function for ordering node types by name.
+ */
+function springboard_admin_node_type_alpha_order_name($a, $b) {
+  return strcasecmp($a->name, $b->name);
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Prevent other admin users from editing User 1's password and email address.
+ */
+function springboard_admin_form_user_profile_form_alter(&$form, &$form_state) {
+  if ($form_state['user']->uid === '1') {
+    global $user;
+    // Allow user/1 to edit own details.
+    if ($user->uid != 1) {
+      drupal_set_message(t('You must login as this user (user/1) to modify the name, email address, and password for this account.'), 'warning');
+      $form['account']['name']['#access'] = FALSE;
+      $form['account']['mail']['#access'] = FALSE;
+      $form['account']['pass']['#access'] = FALSE;
+      $form['account']['current_pass']['#access'] = FALSE;
+      $form['account']['status']['#access'] = FALSE;
+    }
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Prevent other admin users from adding User 1 to mass admin.
+ */
+function springboard_admin_form_user_admin_account_alter(&$form, &$form_state) {
+  global $user;
+  if ($user->uid != 1 && isset($form['accounts']['#options'][1])) {
+    unset($form['accounts']['#options'][1]);
+  }
+}
+
+/**
+ * Implements hook_menu_local_tasks_alter();
+ *
+ * Remove non-clone tabs from clone confirm page.
+ */
+function springboard_admin_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+  if (arg(2) === 'clone' && arg(3) === 'confirm') {
+    foreach ($data['tabs'][0]['output'] as $index => $link) {
+      unset($data['tabs'][0]['output'][$index]);
+    }
+  }
 }

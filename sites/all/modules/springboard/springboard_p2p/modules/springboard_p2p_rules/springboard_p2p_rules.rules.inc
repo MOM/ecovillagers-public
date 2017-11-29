@@ -10,14 +10,14 @@
  */
 function springboard_p2p_rules_rules_event_info() {
   $defaults = array(
-    'group' => t('Springboard P2P'),
+    'group' => t('Springboard Peer to Peer'),
     'module' => 'springboard_p2p_rules',
     'access callback' => 'springboard_p2p_rules_integration_access',
   );
 
   return array(
     'springboard_p2p_user_register_no_campaign' => $defaults + array(
-      'label' => t('After a user registers for P2P (no campaign)'),
+      'label' => t('After a user registers for Peer to Peer (no campaign)'),
       'variables' => array(
         'account' => array(
           'type' => 'user',
@@ -25,13 +25,13 @@ function springboard_p2p_rules_rules_event_info() {
         ),
         'dashboard_url' => array(
           'type' => 'uri',
-          'label' => t('User P2P dashboard URL'),
+          'label' => t('User Peer to Peer dashboard URL'),
           'description' => t("The URL to the user's list of personal campaigns."),
         ),
       ),
     ),
     'springboard_p2p_user_register_private_campaign' => $defaults + array(
-      'label' => t('After a user registers for P2P (private campaign)'),
+      'label' => t('After a user registers for Peer to Peer (private campaign)'),
       'variables' => array(
         'account' => array(
           'type' => 'user',
@@ -39,7 +39,7 @@ function springboard_p2p_rules_rules_event_info() {
         ),
         'dashboard_url' => array(
           'type' => 'uri',
-          'label' => t('User P2P dashboard URL'),
+          'label' => t('User Peer to Peer dashboard URL'),
           'description' => t("The URL to the user's list of personal campaigns."),
         ),
         'campaign' => array(
@@ -51,7 +51,7 @@ function springboard_p2p_rules_rules_event_info() {
       ),
     ),
     'springboard_p2p_user_register_public_campaign' => $defaults + array(
-      'label' => t('After a user registers for P2P (public campaign)'),
+      'label' => t('After a user registers for Peer to Peer (public campaign)'),
       'variables' => array(
         'account' => array(
           'type' => 'user',
@@ -59,7 +59,7 @@ function springboard_p2p_rules_rules_event_info() {
         ),
         'dashboard_url' => array(
           'type' => 'uri',
-          'label' => t('User P2P dashboard URL'),
+          'label' => t('User Peer to Peer dashboard URL'),
           'description' => t("The URL to the user's list of personal campaigns."),
         ),
         'campaign' => array(
@@ -84,7 +84,7 @@ function springboard_p2p_rules_rules_event_info() {
         ),
         'dashboard_url' => array(
           'type' => 'uri',
-          'label' => t('User P2P dashboard URL'),
+          'label' => t('User Peer to Peer dashboard URL'),
           'description' => t("The URL to the user's list of personal campaigns."),
         ),
         'campaign' => array(
@@ -103,7 +103,7 @@ function springboard_p2p_rules_rules_event_info() {
         ),
         'dashboard_url' => array(
           'type' => 'uri',
-          'label' => t('User P2P dashboard URL'),
+          'label' => t('User Peer to Peer dashboard URL'),
           'description' => t("The URL to the user's list of personal campaigns."),
         ),
         'campaign' => array(
@@ -127,7 +127,7 @@ function springboard_p2p_rules_rules_event_info() {
         ),
         'dashboard_url' => array(
           'type' => 'uri',
-          'label' => t('User P2P dashboard URL'),
+          'label' => t('User Peer to Peer dashboard URL'),
           'description' => t("The URL to the user's list of personal campaigns."),
         ),
         'campaign' => array(
@@ -138,7 +138,7 @@ function springboard_p2p_rules_rules_event_info() {
       ),
     ),
     'springboard_p2p_user_requests_password_reset' => $defaults + array(
-      'label' => t('After a user requests a password reset via the P2P UI.'),
+      'label' => t('After a user requests a password reset via the Peer to Peer UI.'),
       'variables' => array(
         'account' => array(
           'type' => 'user',
@@ -147,7 +147,7 @@ function springboard_p2p_rules_rules_event_info() {
         'reset_url' => array(
           'type' => 'uri',
           'label' => t('Password reset URL'),
-          'description' => t("The URL to the P2P password reset page."),
+          'description' => t("The URL to the Peer to Peer password reset page."),
         ),
       ),
     ),
@@ -160,7 +160,7 @@ function springboard_p2p_rules_rules_event_info() {
         ),
         'dashboard_url' => array(
           'type' => 'uri',
-          'label' => t('User P2P dashboard URL'),
+          'label' => t('User Peer to Peer dashboard URL'),
           'description' => t("The URL to the user's list of personal campaigns."),
         ),
         'personal_campaign' => array(

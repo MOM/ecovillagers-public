@@ -15,7 +15,7 @@ function springboard_p2p_category_views_default_views() {
   $view->description = '';
   $view->tag = 'default';
   $view->base_table = 'node';
-  $view->human_name = 'Peer to peer categories';
+  $view->human_name = 'Peer to Peer categories';
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
@@ -35,22 +35,17 @@ function springboard_p2p_category_views_default_views() {
   $handler->display->display_options['pager']['options']['items_per_page'] = '10';
   $handler->display->display_options['style_plugin'] = 'table';
   $handler->display->display_options['style_options']['columns'] = array(
-    'views_bulk_operations' => 'views_bulk_operations',
     'title' => 'title',
     'nid' => 'nid',
     'nid_1' => 'nid_1',
     'status' => 'status',
+    'clone_node' => 'clone_node',
     'edit_node' => 'edit_node',
-    'clone_node' => 'edit_node',
-    'view_node' => 'edit_node',
+    'view_node' => 'view_node',
+    'ctools_dropdown' => 'ctools_dropdown',
   );
   $handler->display->display_options['style_options']['default'] = '-1';
   $handler->display->display_options['style_options']['info'] = array(
-    'views_bulk_operations' => array(
-      'align' => '',
-      'separator' => '',
-      'empty_column' => 0,
-    ),
     'title' => array(
       'sortable' => 1,
       'default_sort_order' => 'asc',
@@ -79,17 +74,22 @@ function springboard_p2p_category_views_default_views() {
       'separator' => '',
       'empty_column' => 0,
     ),
-    'edit_node' => array(
-      'align' => '',
-      'separator' => ' | ',
-      'empty_column' => 0,
-    ),
     'clone_node' => array(
       'align' => '',
       'separator' => '',
       'empty_column' => 0,
     ),
+    'edit_node' => array(
+      'align' => '',
+      'separator' => '',
+      'empty_column' => 0,
+    ),
     'view_node' => array(
+      'align' => '',
+      'separator' => '',
+      'empty_column' => 0,
+    ),
+    'ctools_dropdown' => array(
       'align' => '',
       'separator' => '',
       'empty_column' => 0,
@@ -115,70 +115,6 @@ function springboard_p2p_category_views_default_views() {
   $handler->display->display_options['fields']['views_bulk_operations']['vbo_settings']['force_single'] = 0;
   $handler->display->display_options['fields']['views_bulk_operations']['vbo_settings']['entity_load_capacity'] = '10';
   $handler->display->display_options['fields']['views_bulk_operations']['vbo_operations'] = array(
-    'action::node_assign_owner_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::views_bulk_operations_delete_item' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::views_bulk_operations_script_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_make_sticky_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_make_unsticky_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::views_bulk_operations_modify_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-      'settings' => array(
-        'show_all_tokens' => 1,
-        'display_values' => array(
-          '_all_' => '_all_',
-        ),
-      ),
-    ),
-    'action::views_bulk_operations_argument_selector_action' => array(
-      'selected' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-      'settings' => array(
-        'url' => '',
-      ),
-    ),
-    'action::node_promote_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
     'action::node_publish_action' => array(
       'selected' => 1,
       'postpone_processing' => 0,
@@ -186,43 +122,8 @@ function springboard_p2p_category_views_default_views() {
       'override_label' => 0,
       'label' => '',
     ),
-    'action::node_unpromote_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_save_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::system_send_email_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::_fundraiser_gateway_switch_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
     'action::node_unpublish_action' => array(
       'selected' => 1,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_unpublish_by_keyword_action' => array(
-      'selected' => 0,
       'postpone_processing' => 0,
       'skip_confirmation' => 0,
       'override_label' => 0,
@@ -255,19 +156,37 @@ function springboard_p2p_category_views_default_views() {
   $handler->display->display_options['fields']['status']['table'] = 'node';
   $handler->display->display_options['fields']['status']['field'] = 'status';
   $handler->display->display_options['fields']['status']['not'] = 0;
-  /* Field: Content: Edit link */
-  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
-  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['label'] = 'Action';
   /* Field: Content: Clone link */
   $handler->display->display_options['fields']['clone_node']['id'] = 'clone_node';
   $handler->display->display_options['fields']['clone_node']['table'] = 'node';
   $handler->display->display_options['fields']['clone_node']['field'] = 'clone_node';
+  $handler->display->display_options['fields']['clone_node']['exclude'] = TRUE;
+  /* Field: Content: Edit link */
+  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
+  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['label'] = 'Edit';
+  $handler->display->display_options['fields']['edit_node']['exclude'] = TRUE;
   /* Field: Content: Link */
   $handler->display->display_options['fields']['view_node']['id'] = 'view_node';
   $handler->display->display_options['fields']['view_node']['table'] = 'views_entity_node';
   $handler->display->display_options['fields']['view_node']['field'] = 'view_node';
+  $handler->display->display_options['fields']['view_node']['exclude'] = TRUE;
+  /* Field: Springboard Views: Ctools Dropdown */
+  $handler->display->display_options['fields']['ctools_dropdown']['id'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['table'] = 'springboard_views__global';
+  $handler->display->display_options['fields']['ctools_dropdown']['field'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['label'] = 'Action';
+  $handler->display->display_options['fields']['ctools_dropdown']['fields'] = array(
+    'clone_node' => 'clone_node',
+    'edit_node' => 'edit_node',
+    'view_node' => 'view_node',
+    'views_bulk_operations' => 0,
+    'title' => 0,
+    'nid' => 0,
+    'nid_1' => 0,
+    'status' => 0,
+  );
   /* Sort criterion: Content: Post date */
   $handler->display->display_options['sorts']['created']['id'] = 'created';
   $handler->display->display_options['sorts']['created']['table'] = 'node';
@@ -310,56 +229,6 @@ function springboard_p2p_category_views_default_views() {
       'override_label' => 0,
       'label' => '',
     ),
-    'action::views_bulk_operations_script_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_make_sticky_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_make_unsticky_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::views_bulk_operations_modify_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-      'settings' => array(
-        'show_all_tokens' => 1,
-        'display_values' => array(
-          '_all_' => '_all_',
-        ),
-      ),
-    ),
-    'action::views_bulk_operations_argument_selector_action' => array(
-      'selected' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-      'settings' => array(
-        'url' => '',
-      ),
-    ),
-    'action::node_promote_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
     'action::node_publish_action' => array(
       'selected' => 1,
       'postpone_processing' => 0,
@@ -367,57 +236,8 @@ function springboard_p2p_category_views_default_views() {
       'override_label' => 0,
       'label' => '',
     ),
-    'action::node_unpromote_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_save_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::system_send_email_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::panelizer_set_status_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::_fundraiser_gateway_switch_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
     'action::node_unpublish_action' => array(
       'selected' => 1,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::node_unpublish_by_keyword_action' => array(
-      'selected' => 0,
-      'postpone_processing' => 0,
-      'skip_confirmation' => 0,
-      'override_label' => 0,
-      'label' => '',
-    ),
-    'action::pathauto_node_update_action' => array(
-      'selected' => 0,
       'postpone_processing' => 0,
       'skip_confirmation' => 0,
       'override_label' => 0,
@@ -450,19 +270,37 @@ function springboard_p2p_category_views_default_views() {
   $handler->display->display_options['fields']['status']['table'] = 'node';
   $handler->display->display_options['fields']['status']['field'] = 'status';
   $handler->display->display_options['fields']['status']['not'] = 0;
-  /* Field: Content: Edit link */
-  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
-  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['label'] = 'Action';
   /* Field: Content: Clone link */
   $handler->display->display_options['fields']['clone_node']['id'] = 'clone_node';
   $handler->display->display_options['fields']['clone_node']['table'] = 'node';
   $handler->display->display_options['fields']['clone_node']['field'] = 'clone_node';
+  $handler->display->display_options['fields']['clone_node']['exclude'] = TRUE;
+  /* Field: Content: Edit link */
+  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
+  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['label'] = 'Edit';
+  $handler->display->display_options['fields']['edit_node']['exclude'] = TRUE;
   /* Field: Content: Link */
   $handler->display->display_options['fields']['view_node']['id'] = 'view_node';
   $handler->display->display_options['fields']['view_node']['table'] = 'views_entity_node';
   $handler->display->display_options['fields']['view_node']['field'] = 'view_node';
+  $handler->display->display_options['fields']['view_node']['exclude'] = TRUE;
+  /* Field: Springboard Views: Ctools Dropdown */
+  $handler->display->display_options['fields']['ctools_dropdown']['id'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['table'] = 'springboard_views__global';
+  $handler->display->display_options['fields']['ctools_dropdown']['field'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['label'] = 'Action';
+  $handler->display->display_options['fields']['ctools_dropdown']['fields'] = array(
+    'clone_node' => 'clone_node',
+    'edit_node' => 'edit_node',
+    'view_node' => 'view_node',
+    'views_bulk_operations' => 0,
+    'title' => 0,
+    'nid' => 0,
+    'nid_1' => 0,
+    'status' => 0,
+  );
   $handler->display->display_options['defaults']['filter_groups'] = FALSE;
   $handler->display->display_options['defaults']['filters'] = FALSE;
   /* Filter criterion: Content: Type */
@@ -549,19 +387,36 @@ function springboard_p2p_category_views_default_views() {
   $handler->display->display_options['fields']['status']['table'] = 'node';
   $handler->display->display_options['fields']['status']['field'] = 'status';
   $handler->display->display_options['fields']['status']['not'] = 0;
-  /* Field: Content: Edit link */
-  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
-  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
-  $handler->display->display_options['fields']['edit_node']['label'] = 'Action';
   /* Field: Content: Clone link */
   $handler->display->display_options['fields']['clone_node']['id'] = 'clone_node';
   $handler->display->display_options['fields']['clone_node']['table'] = 'node';
   $handler->display->display_options['fields']['clone_node']['field'] = 'clone_node';
+  $handler->display->display_options['fields']['clone_node']['exclude'] = TRUE;
+  /* Field: Content: Edit link */
+  $handler->display->display_options['fields']['edit_node']['id'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['table'] = 'views_entity_node';
+  $handler->display->display_options['fields']['edit_node']['field'] = 'edit_node';
+  $handler->display->display_options['fields']['edit_node']['label'] = 'Edit';
+  $handler->display->display_options['fields']['edit_node']['exclude'] = TRUE;
   /* Field: Content: Link */
   $handler->display->display_options['fields']['view_node']['id'] = 'view_node';
   $handler->display->display_options['fields']['view_node']['table'] = 'views_entity_node';
   $handler->display->display_options['fields']['view_node']['field'] = 'view_node';
+  $handler->display->display_options['fields']['view_node']['exclude'] = TRUE;
+  /* Field: Springboard Views: Ctools Dropdown */
+  $handler->display->display_options['fields']['ctools_dropdown']['id'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['table'] = 'springboard_views__global';
+  $handler->display->display_options['fields']['ctools_dropdown']['field'] = 'ctools_dropdown';
+  $handler->display->display_options['fields']['ctools_dropdown']['label'] = 'Action';
+  $handler->display->display_options['fields']['ctools_dropdown']['fields'] = array(
+    'clone_node' => 'clone_node',
+    'edit_node' => 'edit_node',
+    'view_node' => 'view_node',
+    'title' => 0,
+    'nid' => 0,
+    'nid_1' => 0,
+    'status' => 0,
+  );
   $handler->display->display_options['defaults']['filter_groups'] = FALSE;
   $handler->display->display_options['defaults']['filters'] = FALSE;
   /* Filter criterion: Content: Type */

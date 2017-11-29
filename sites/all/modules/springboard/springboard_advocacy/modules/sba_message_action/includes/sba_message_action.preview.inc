@@ -257,7 +257,7 @@ function sba_message_action_preview_form_validate($form, &$form_state) {
   // Loop through the messages and validate whether user is required to edit subject or body.
   // Also set a value for future use by the "user_edit_flag" component.
   foreach ($messages as $id) {
-
+    $this_message_changed = FALSE;
     // The message
     $message = $form['messages'][$id]['message'];
 
@@ -280,6 +280,7 @@ function sba_message_action_preview_form_validate($form, &$form_state) {
     elseif ($body_edited != $body_default) {
       // Set change value for use by the "user_edit_flag" component.
       $changed = TRUE;
+      $this_message_changed = TRUE;
     }
 
     // Enforce mandatory editing of the subject if set.
@@ -291,8 +292,13 @@ function sba_message_action_preview_form_validate($form, &$form_state) {
     elseif (!isset($message['subject_show']) && $subject_edited != $subject_default) {
       // Set change value for use by the "user_edit_flag" component.
       $changed = TRUE;
+      $this_message_changed = TRUE;
+    }
+    if ($this_message_changed == TRUE) {
+      $form_state['storage']['changed_messages'][$id] = 1;
     }
   }
+
   // Set value for the user_edited_flag
   $form_state['storage']['changed'] = $changed;
 
@@ -325,7 +331,6 @@ function sba_message_action_preview_form_submit($form, &$form_state) {
 
   $messages = $form_state['values']['messages'];
   $node = $form['#action_node'];
-
   // Re-format the messages into the array structure originally returned
   // by the target resolver and expected by the message queue on the API server.
   $formatted_messages = array();
@@ -337,6 +342,7 @@ function sba_message_action_preview_form_submit($form, &$form_state) {
     $formatted_messages[$key]['message']['id'] = $message['message']['message_id'];
     $formatted_messages[$key]['deliverable'] = $message['message']['target'];
     $formatted_messages[$key]['message']['hold'] = $message['message']['hold'];
+    $formatted_messages[$key]['message']['user_altered_message'] = !empty($form_state['storage']['changed_messages'][$key]);
   }
 
   // We don't actually want to send the "hold" value to the API server,

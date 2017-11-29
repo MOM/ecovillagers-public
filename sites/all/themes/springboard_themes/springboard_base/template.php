@@ -53,22 +53,6 @@ function springboard_base_preprocess_html(&$variables) {
     drupal_add_html_head_link(array('rel' => 'shortcut icon', 'href' => drupal_strip_dangerous_protocols($favicon), 'type' => $type));
   }
 
-  // Construct page title.
-  if (drupal_get_title()) {
-    $head_title = array(
-      'title' => strip_tags(drupal_get_title()),
-      'name' => check_plain(variable_get('site_name', 'Drupal')),
-    );
-  }
-  else {
-    $head_title = array('name' => check_plain(variable_get('site_name', 'Drupal')));
-    if (variable_get('site_slogan', '')) {
-      $head_title['slogan'] = filter_xss_admin(variable_get('site_slogan', ''));
-    }
-  }
-  $variables['head_title_array'] = $head_title;
-  $variables['head_title'] = implode(' | ', $head_title);
-
   // Add an ie 10 and 11 classes for better theming.
   // Note, @cc_on did not seem to work for ie11 even changing doc mode and class to '11'.
   $inline_script = <<<EOL

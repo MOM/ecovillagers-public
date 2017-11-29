@@ -37,11 +37,6 @@ div.item-list ul li input[type="checkbox"] {
     top: 6px;
 }
 
-#edit-field-ffg-description-und-0-format.collapsed.filter-wrapper {
-    height:20px;
-    padding:0;
-}
-
 .form-item-addon.form-item.control-group {
     margin-top:15px;
 }
@@ -62,12 +57,3 @@ div.item-list ul li input[type="checkbox"] {
     padding: 4px;
     margin:0;
 }
-
-#fundraiser-fund-groups-addon-form .fieldset-legend {
-    top:36px;
-}
-
-#fundraiser-fund-groups-addon-form .fieldset-description {
-    margin-bottom:10px;
-}
-

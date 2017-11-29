@@ -49,11 +49,13 @@ h4.panel-title {
   margin: 0;
 }
 
+#user-welcome {
+  padding-right: 4px;
+}
 #user-welcome h2 {
+  font-size: 13px;
   text-align: right;
   color: #fff;
-  font-size: 14px;
-  margin: 5px 0 0 0;
 }
 
 #user-welcome h2 a {
@@ -81,7 +83,21 @@ h4.panel-title {
 #header-wrapper {
   background: #0086d6;
 }
-
+#sb-header-login-links {
+  color: #fff;
+  font-size: 11px;
+  padding-top: 17px;
+  position: absolute;
+  right: 38px;
+  padding-right: 3%;
+}
+#sb-header-login-links .sb-logged-in-as a,
+#sb-header-login-links .sb-logout-link a {
+  color: #fff;
+}
+#sb-header-login-links .sb-logged-in-as a {
+  margin-left: 2px;
+}
 .container#header-inner {
   position: relative;
 }
@@ -281,6 +297,7 @@ li.leaf {
 }
 
 .dropdown-menu {
+  background-color: #f4f3ee;
   margin: 0;
 }
 
@@ -345,10 +362,10 @@ ul.nav li.dropdown:hover > ul.dropdown-menu {
   }
 
 #menu-wrapper .nav-tabs li.springboard > a,
-#menu-wrapper .nav-tabs li.springboard > a.active {
+#menu-wrapper .nav-tabs li.springboard.active-trail > a.active {
   display: inline-block;
   width: 160px;
-  height: 19px;
+  height: 24px;
   background-image: url("../images/sb-white.svg");
   background-size: contain;
   background-repeat: no-repeat;
@@ -377,9 +394,9 @@ ul.nav li.dropdown:hover > ul.dropdown-menu {
   font-family: FontAwesome;
 }
 
-#menu-wrapper .nav-tabs li.springboard > ul.dropdown-menu {
+/* #menu-wrapper .nav-tabs li.springboard > ul.dropdown-menu {
   margin-top: 5px;
-  }
+} */
 
 #menu-wrapper .nav-tabs li.options {
   position: absolute;
@@ -414,7 +431,9 @@ ul.nav li.dropdown:hover > ul.dropdown-menu {
 #menu-wrapper .nav-tabs li.options > ul.dropdown-menu {
   position: absolute;
   left: -124px;
+  visibility: hidden; /* Remove if a gear drop-down is desired. */
 }
+
 
 /* ie8 */
 .ie8 .nav-tabs > li > a:hover,
@@ -847,6 +866,10 @@ a.button.add-button {
   top: 11px;
 }
 
+.springboard-pane a.button.add-button {
+  top: 4px;
+}
+
 .springboard-inner a.button.add-button {
   top: inherit;
 }
@@ -1043,6 +1066,18 @@ ul.tabs.primary li.active a:hover {
 .view-filters.inline-block {
   top: 12px;
   position: relative;
+}
+
+.view-filters #edit-term-node-tid-depth-wrapper {
+  top: 35px;
+  margin-right: 8px;
+}
+
+.view-filters #edit-term-node-tid-depth-wrapper label[for="edit-term-node-tid-depth"] {
+  display:none;
+}
+.view-filters #edit-term-node-tid-depth-wrapper label.option {
+  margin-left: 0;
 }
 
 #edit-date-filter-min-wrapper,
@@ -1458,7 +1493,7 @@ div.selector span {
   background: url('../images/icon-arrow-down.jpg') 96% 53% no-repeat;
 }
 
-.views-widget select,
+.views-widget select:not([multiple="multiple"]),
 .views-widget div.selector,
 .views-widget div.selector span {
   max-width: 240px;
@@ -1823,7 +1858,7 @@ div.vertical-tabs {
 }
 
 .page-admin-springboard-settings .content ul li,
-.springboard-dashboard .content ul li {
+.springboard-dashboard .springboard-sf-status ul li {
   list-style: none;
   position: relative;
   left: 26px;
@@ -1831,7 +1866,7 @@ div.vertical-tabs {
 
 /* fontawesome list style */
 .page-admin-springboard-settings .content ul li:before,
-.springboard-dashboard .content ul li:before {
+.springboard-dashboard .springboard-sf-status ul li:before {
   position: absolute;
   left: -26px;
   color: #ccc;
@@ -1843,7 +1878,7 @@ div.vertical-tabs {
 }
 
 .page-admin-springboard-settings .content ul li i,
-.springboard-dashboard .content ul li i {
+.springboard-dashboard .springboard-sf-status ul li i {
   position: absolute;
   left: -26px;
 }
@@ -2684,9 +2719,13 @@ td.views-field.table-actions a {
   text-align: left;
 }
 
+.views-exposed-widget input[type="submit"] {
+    margin: 4px 10px 0 0;
+}
+
 .views-exposed-widget.views-submit-button:before {
   position: absolute;
-  top: 15px;
+  top: 9px;
   right: 11px;
   margin: 0 6px 0 0;
   color: #fff;;
@@ -2694,6 +2733,14 @@ td.views-field.table-actions a {
   font-size: 13px;
   font-family: FontAwesome;
   pointer-events: none;
+}
+
+form.with-labels .views-exposed-widget input[type="submit"] {
+    margin: 28px 10px 0 0;
+}
+
+form.with-labels .views-exposed-widget.views-submit-button:before {
+    top: 32px;
 }
 
 .views-exposed-widgets {
@@ -2749,11 +2796,6 @@ ul.pager .ajax-progress .throbber {
 #views-exposed-form-sbv-forms-page-1 #edit-field-fundraiser-internal-name-value-wrapper .views-operator,
 #views-exposed-form-sbv-forms-page-2 #edit-field-fundraiser-internal-name-value-wrapper .views-operator {
   float: left;
-}
-
-#views-exposed-form-sbv-forms-page-1 input[type="submit"],
-#views-exposed-form-sbv-forms-page-2 input[type="submit"] {
-  padding: 5px 6px;
 }
 
 div.springboard-pane {
@@ -2842,6 +2884,21 @@ td.ctools-export-ui-operations {
   background-color: #FEFEFE;
 }
 
+td.views-field-ctools-dropdown {
+  position: relative;
+  min-width: 55px;
+}
+
+td.views-field-ctools-dropdown .ctools-button-processed {
+  text-align: left;
+  position: absolute;
+  left: 10px;
+  margin-top: -12px;
+  border-radius: 2px;
+  padding-left: 10px;
+  border: solid 1px #ccc;
+}
+
 .ctools-dropbutton ul li {
   margin-bottom: 0px;
 }
@@ -2895,6 +2952,10 @@ fieldset#edit-refund-options {
 /* if under 1199px media query */
 
 @media (max-width: 1199px) {
+  #sb-header-login-links {
+    padding-right: 40px;
+    right: 4%;
+  }
 
   #footer-wrapper {
     background-size: cover;
@@ -2909,7 +2970,10 @@ fieldset#edit-refund-options {
 /* end under 1199px media query */
 
 @media (max-width: 989px) {
-
+  #sb-header-login-links {
+    padding-right: 24px;
+    right: 3%;
+  }
 
   .vbo-widget {
     position: inherit;
@@ -2991,7 +3055,10 @@ fieldset#edit-refund-options {
 
 /* Match bootstraps 'wide' setting. */
 @media (min-width: 1200px) {
-
+  #sb-header-login-links {
+    padding-right: 20px;
+    right: 2%;
+  }
   #menu-wrapper .nav-tabs  li.springboard {
     margin-right: 40px;
   }
@@ -3017,6 +3084,16 @@ fieldset#edit-refund-options {
 
   #main {
     padding: 20px 0 0 0;
+  }
+
+  #page-title-wrapper .span8 {
+    width: 50%;
+    float: left;
+  }
+
+  #page-title-wrapper .span4 {
+    width: 41%;
+    float: left;
   }
 
   #menu-wrapper .nav-tabs > li {
@@ -3153,14 +3230,30 @@ fieldset#edit-refund-options {
   }
 
 }
-
 /* end 769 - 979px media query */
+
+@media (max-width: 479px) {
+
+  #user-welcome h2 {
+    font-size: 11px;
+  }
+  #page-title-wrapper .span8 {
+    width: 100%;
+    float: none;
+  }
+
+  #page-title-wrapper .span4 {
+    width: 100%;
+    float: none;
+  }
+}
 
 /* #808 - Fix to accommodate long node titles by allowing longer length + making the background extend down if
  * the title must be on multiple lines: */
-#page-title-wrapper .span8 {
-  width: 100%;
-}
+/*#page-title-wrapper .span8 {*/
+  /*width: 100%;*/
+/*}*/
+
 #page-title-wrapper {
   height: 100%;
 }
@@ -3304,4 +3397,3 @@ fieldset#edit-refund-options {
   padding: 0;
   float: right;
 }
-

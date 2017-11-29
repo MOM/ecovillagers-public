@@ -1,0 +1,198 @@
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section {
+  background: #fff;
+  float: left;
+  font-size: 14px;
+  line-height: 26px;
+  margin-bottom: 16px;
+  margin-left: 20px;
+  min-height: 360px;
+  padding: 12px 6px 12px 12px;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section .views-field {
+  clear: both;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section .views-label {
+  display: block;
+  float: left;
+  font-weight: bold;
+  width: 48%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section .field-content {
+  display: inline-block;
+  width: 46%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .section-label .views-label {
+  float: none;
+  font-size: 24px;
+  font-weight: bold;
+  line-height: 30px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .section-label .field-content {
+  display: none;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 {
+  width: 24.44%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 {
+  width: 25%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0,
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 {
+  margin-left: 0;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 {
+  width: 40%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .views-label {
+  width: 25%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .field-content {
+  width: 72%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 {
+  clear: both;
+  float: none;
+  width: 96%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .views-label {
+  width: 20%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .section-label .views-label {
+  width: 100%;
+}
+.view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .field-content {
+  width: 76%;
+}
+
+@media (min-width: 990px) and (max-width: 1199px) {
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section {
+    width: 35%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section .views-field {
+    clear: both;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section .views-label {
+    width: 45%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .section-label .views-label {
+    float: none;
+    font-size: 24px;
+    font-weight: bold;
+    line-height: 30px;
+    margin-bottom: 10px;
+    width: 100%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 {
+    width: 33%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .field-content {
+    width: 50%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 {
+    margin-left: 0;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 {
+    width: 58.8%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .views-label {
+    width: 23%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .field-content {
+    width: 73%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 {
+    clear: both;
+    float: none;
+    min-height: inherit;
+    width: 96%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .field-content {
+    width: 80%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .views-label {
+    width: 18%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .section-label .views-label,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .section-label .views-label {
+    width: 100%;
+  }
+}
+@media (max-width: 989px) {
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 {
+    clear: both; 
+    float: none; 
+    margin-left: 0;
+    min-height: inherit;
+    width: 96%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .section-label .views-label,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .section-label .views-label,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .section-label .views-label,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .section-label .views-label {
+    width: 100%;
+  }
+}
+@media (min-width: 700px) and (max-width: 989px) {
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .views-label {
+    width: 25%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .field-content {
+    width: 70%;
+  }
+}
+@media (min-width: 536px) and (max-width: 699px) {
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .views-label {
+    width: 33%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .field-content {
+    padding-top: 0.5px;
+    width: 60%;
+  }
+}
+@media (max-width: 535px) {
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .section-label .views-label,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .section-label .views-label,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .section-label .views-label,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .section-label .views-label {
+    font-size: 18px;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .views-label ,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .views-label {
+    font-size: 11px;
+    line-height: 24px;
+    padding-top: 1.5px;
+    width: 33%;
+  }
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-0 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-1 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-2 .field-content,
+  .view-springboard-dw-donations-report.dw-donation-detail .dw-detail-section.dw-detail-section-num-3 .field-content {
+    font-size: 11px;
+    line-height: 24px;
+    width: 64%;
+  }
+}

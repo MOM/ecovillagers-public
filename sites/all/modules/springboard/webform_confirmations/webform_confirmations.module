@@ -74,7 +74,7 @@ function webform_confirmations_preprocess_webform_confirmation(&$vars) {
       // If anon, then check the session id associated with the submission.
       // This prevents access problems when Webform User assigns a new UID to a webform
       // submission.
-      if ($user->uid == 0 && $user->hostname == $submission->remote_addr) {
+      if ($user->uid == 0) {
         $_SESSION['webform_confirmations'] = TRUE;
         $sessid = webform_confirmations_get_submission_session($vars['sid']);
 
@@ -91,17 +91,19 @@ function webform_confirmations_preprocess_webform_confirmation(&$vars) {
       }
     }
     if ($access) {
-      // Reprocess the message. Webform properly uses a strip_tag here that will kill all HTML.
-      // So for our purposes, we need to reprocess the set message to get the correct values.
-      $vars['confirmation_message'] = check_markup($vars['node']->webform['confirmation'], $vars['node']->webform['confirmation_format'], '', TRUE);
+      $confirmation_message = $vars['node']->webform['confirmation'];
+
+      // Allow modules to alter the confirmation message.
+      drupal_alter('webform_confirmations_confirmation_message', $confirmation_message, $vars);
+
+      // Run the message through the text formatters.
+      $vars['confirmation_message'] = check_markup($confirmation_message, $vars['node']->webform['confirmation_format'], '', TRUE);
+
       // We get check_markup() from filter.module.
       // Set title if available from configurations.
       if (!empty($vars['node']->confirmation_page_title)) {
         drupal_set_title($vars['node']->confirmation_page_title);
       }
-
-      // Allow modules to alter the confirmation message.
-      drupal_alter('webform_confirmations_confirmation_message', $vars['confirmation_message'], $vars);
 
       // Replace webform tokens for the submission.
       module_load_include('inc', 'webform', 'includes/webform.submissions');
@@ -351,11 +353,15 @@ function webform_confirmations_fundraiser_donation_decline($donation) {
  * Implements hook_node_load().
  */
 function webform_confirmations_node_load($nodes, $types) {
-  $webform_confirmations = _webform_confirmations_get_by_nids(array_keys($nodes));
-  foreach ($webform_confirmations as $webform_confirmation) {
-    $nodes[$webform_confirmation->nid]->webform_confirmations_set = 1;
-    $nodes[$webform_confirmation->nid]->confirmation_page_title =
-      isset($webform_confirmation->confirmation_page_title) ? $webform_confirmation->confirmation_page_title : '';
+  $webform_types = variable_get('webform_node_types', array());
+  $has_types = array_intersect($types, $webform_types);
+  if (!empty($has_types)) {
+    $webform_confirmations = _webform_confirmations_get_by_nids(array_keys($nodes));
+    foreach ($webform_confirmations as $webform_confirmation) {
+      $nodes[$webform_confirmation->nid]->webform_confirmations_set = 1;
+      $nodes[$webform_confirmation->nid]->confirmation_page_title
+        = isset($webform_confirmation->confirmation_page_title) ? $webform_confirmation->confirmation_page_title : '';
+    }
   }
 }
 
@@ -554,6 +560,4 @@ function _webform_confirmation_confirmation_mail_delete_cache($node, $eid, $sid,
       cache_clear_all('wrapper_mail_queue_'. $node->nid . '_' . $setting['eid'] . '_' . $sid, 'cache_webform_confirm');
     }
   }
-   //clear all expired submissions
-   cache_clear_all(NULL, 'cache_webform_confirm');
 }

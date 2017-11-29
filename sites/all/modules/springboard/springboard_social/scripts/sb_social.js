@@ -67,7 +67,7 @@
             var settings = Drupal.settings.sb_social;
             switch (service) {
               case 'twitter':
-                t = socialPopup(this, 'https://twitter.com/intent/tweet?text=' + settings.twitter_message + '&url=' + link);
+                t = socialPopup(this, 'https://twitter.com/intent/tweet?text=' +  encodeURIComponent(settings.twitter_message) + '&url=' + link);
                 e.returnValue = false;
                 e.preventDefault();
                 break;
@@ -77,7 +77,7 @@
                 e.preventDefault();
                 break;
               case 'email':
-                $elem.attr('href', ' mailto:?subject=' + settings.email_subject + '&body=' + settings.email_message + "\n\n" + link);
+                $elem.attr('href', ' mailto:?subject=' + encodeURIComponent(settings.email_subject) + '&body=' + encodeURIComponent(settings.email_message) + "%0D%0A%0D%0A" + link);
                 $(this).removeClass('social-processed');
                 break;
             }

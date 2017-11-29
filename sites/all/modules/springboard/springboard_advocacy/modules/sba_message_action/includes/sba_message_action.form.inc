@@ -379,9 +379,12 @@ function sba_message_action_form_validate(&$form, &$form_state) {
       $changed = TRUE;
     }
     // Set user_edited_flag
-    if ($changed && isset($form['submitted']['sba_user_edit_flag'])) {
-      $sba_user_edit_flag = &_webform_user_find_field($form, $component_hierarchy['sba_user_edit_flag']);
-      form_set_value($sba_user_edit_flag, 1, $form_state);
+    if ($changed) {
+      $form_state['storage']['changed_messages'][$message_id] = 1;
+      if (isset($form['submitted']['sba_user_edit_flag'])) {
+        $sba_user_edit_flag = &_webform_user_find_field($form, $component_hierarchy['sba_user_edit_flag']);
+        form_set_value($sba_user_edit_flag, 1, $form_state);
+      }
     }
   }
   form_load_include($form_state, 'inc', 'springboard_advocacy', 'includes/springboard_advocacy.smarty_streets');

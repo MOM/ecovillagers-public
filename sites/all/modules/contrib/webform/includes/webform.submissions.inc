@@ -107,18 +107,25 @@ function webform_submission_insert($node, $submission) {
     $is_new = TRUE;
   }
 
+  $insert_values = array();
   foreach ($submission->data as $cid => $values) {
     foreach ($values['value'] as $delta => $value) {
-      $data = array(
+      $insert_value[] = array(
         'nid' => $node->webform['nid'],
         'sid' => $submission->sid,
         'cid' => $cid,
         'no' => $delta,
         'data' => is_null($value) ? '' : $value,
       );
-      drupal_write_record('webform_submitted_data', $data);
     }
   }
+
+  // Insert all values with a single query instead of 1x1 in the loop above.
+  $query = db_insert('webform_submitted_data')->fields(array('nid', 'sid', 'cid', 'no', 'data'));
+  foreach ($insert_value as $record) {
+    $query->values($record);
+  }
+  $query->execute();
 
   // Invoke the insert hook after saving all the data.
   if (isset($is_new)) {

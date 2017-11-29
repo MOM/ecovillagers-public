@@ -2903,211 +2903,31 @@ function _webform_fetch_draft_sid($nid, $uid) {
 }
 
 /**
- * Filters all special tokens provided by webform, such as %post and %profile.
+ * This function is deprecated! Use webform_replace_tokens() instead.
  *
- * @param $string
- *   The string to have its tokens replaced.
- * @param $node
- *   If replacing node-level tokens, the node for which tokens will be created.
- * @param $submission
- *   If replacing submission-level tokens, the submission for which tokens will
- *   be created.
- * @param $email
- *   If replacing tokens within the context of an e-mail, the Webform e-mail
- *   settings array.
- * @param $strict
- *   Boolean value indicating if the results should be run through check_plain.
- *   This is used any time the values will be output as HTML, but not in
- *   default values or e-mails.
- * @param $allow_anonymous
- *   Boolean value indicating if all tokens should be replaced for anonymous
- *   users, even if they contain sensitive user information such as %session or
- *   %ip_address. This is disabled by default to prevent user data from being
- *   preserved in the anonymous page cache and should only be used in
- *   non-cached situations, such as e-mails.
+ * @deprecated
  */
-function _webform_filter_values($string, $node = NULL, $submission = NULL, $email = NULL, $strict = TRUE, $allow_anonymous = FALSE) {
-  global $user;
-  $replacements = &drupal_static(__FUNCTION__);
-
-  // Don't do any filtering if the string is empty.
-  if (strlen(trim($string)) == 0) {
-    return $string;
-  }
-
-  // Setup default token replacements.
-  if (!isset($replacements)) {
-    $replacements['unsafe'] = array();
-    $replacements['safe']['%site'] = variable_get('site_name', 'drupal');
-    $replacements['safe']['%date'] = format_date(REQUEST_TIME, 'long');
-  }
-
-  // Node replacements.
-  if (isset($node) && !array_key_exists('%nid', $replacements['safe'])) {
-    $replacements['safe']['%nid'] = $node->nid;
-    $replacements['safe']['%title'] = $node->title;
-  }
-
-  // Determine the display format.
-  $format = isset($email['html']) && $email['html'] ? 'html' : 'text';
-
-  // Submission replacements.
-  if (isset($submission) && (!isset($replacements['email'][$format]) || (isset($replacements['unsafe']['%sid']) && $replacements['unsafe']['%sid'] != $submission->sid))) {
-    module_load_include('inc', 'webform', 'includes/webform.components');
-
-    // Set the submission ID.
-    $replacements['unsafe']['%sid'] = $submission->sid;
-
-    // E-mails may be sent in two formats, keep tokens separate for each one.
-    $replacements['email'][$format] = array();
-
-    // Populate token values for each component.
-    foreach ($node->webform['components'] as $cid => $component) {
-      // Find by form key.
-      $parents = webform_component_parent_keys($node, $component);
-      $form_key = implode('][', $parents);
-      if (isset($submission->data[$cid])) {
-        $value = $submission->data[$cid];
-
-        $display_element = webform_component_invoke($component['type'], 'display', $component, $value['value'], $format);
-
-        // Ensure the component is added as a property.
-        $display_element['#webform_component'] = $component;
-
-        if (empty($display_element['#parents'])) {
-          $display_element['#parents'] = array_merge(array('submitted'), $parents);
-        }
-        if (empty($display_element['#id'])) {
-          $display_element['#id'] = drupal_html_id('edit-' . implode('-', $display_element['#parents']));
-        }
-        $replacements['email'][$format]['%email[' . $form_key . ']'] = render($display_element);
-        $display_element['#theme_wrappers'] = array(); // Remove label and wrappers.
-        $replacements['email'][$format]['%value[' . $form_key . ']'] = render($display_element);
-      }
-      else {
-        // Provide an empty value for components without submitted data.
-        $replacements['email'][$format]['%email[' . $form_key . ']'] = '';
-        $replacements['email'][$format]['%value[' . $form_key . ']'] = '';
-      }
-    }
-    // Reverse the order of tokens so that nested tokens (ie. inside fieldsets)
-    // come before their parents.
-    $replacements['email'][$format] = array_reverse($replacements['email'][$format]);
-
-    // Submission edit URL.
-    $replacements['unsafe']['%submission_url'] = url('node/' . $node->nid . '/submission/' . $submission->sid, array('absolute' => TRUE));
-  }
-
-  // Token for the entire form tree for e-mails.
-  if (isset($submission) && isset($email)) {
-    $replacements['email'][$format]['%email_values'] = webform_submission_render($node, $submission, $email, $format);
-  }
-
-  // Provide a list of candidates for token replacement.
-  $special_tokens = array(
-    'safe' => array(
-      '%get' => $_GET,
-      '%post' => $_POST,
-    ),
-    'unsafe' => array(
-      '%cookie' => isset($_COOKIE) ? $_COOKIE : array(),
-      '%session' => isset($_SESSION) ? $_SESSION : array(),
-      '%request' => $_REQUEST,
-      '%server' => $_SERVER,
-      '%profile' => (array) $user,
-    ),
-  );
-
-  // Replacements of global variable tokens.
-  if (!isset($replacements['specials_set'])) {
-    $replacements['specials_set'] = TRUE;
-
-    // Load profile information if available.
-    if ($user->uid) {
-      $account = user_load($user->uid);
-      $special_tokens['unsafe']['%profile'] = (array) $account;
-    }
-
-    // User replacements.
-    if (!array_key_exists('%uid', $replacements['unsafe'])) {
-      $replacements['unsafe']['%uid'] = !empty($user->uid) ? $user->uid : '';
-      $replacements['unsafe']['%username'] = isset($user->name) ? $user->name : '';
-      $replacements['unsafe']['%useremail'] = isset($user->mail) ? $user->mail : '';
-      $replacements['unsafe']['%ip_address'] = ip_address();
-    }
-
-    // Populate the replacements array with special variables.
-    foreach ($special_tokens as $safe_state => $tokens) {
-      foreach ($tokens as $token => $variable) {
-        // Safety check in case $_POST or some other global has been removed
-        // by a naughty module, in which case $variable may be NULL.
-        if (!is_array($variable)) {
-          continue;
-        }
-
-        foreach ($variable as $key => $value) {
-          // This special case for profile module dates.
-          if ($token == '%profile' && is_array($value) && isset($value['year'])) {
-            $replacement = webform_strtodate(webform_date_format(), $value['month'] . '/' . $value['day'] . '/' . $value['year'], 'UTC');
-          }
-          else {
-            // Checking for complex types (arrays and objects) fails here with
-            // incomplete objects (see http://php.net/is_object), so we check
-            // for simple types instead.
-            $replacement = (is_string($value) || is_bool($value) || is_numeric($value)) ? $value : '';
-          }
-          $replacements[$safe_state][$token . '[' . $key . ']'] = $replacement;
-        }
-      }
-    }
-  }
-
-  // Make a copy of the replacements so we don't affect the static version.
-  $safe_replacements = $replacements['safe'];
-
-  // Restrict replacements for anonymous users. Not all tokens can be used
-  // because they may expose session or other private data to other users when
-  // anonymous page caching is enabled.
-  if ($user->uid || $allow_anonymous) {
-    $safe_replacements += $replacements['unsafe'];
-    if (isset($replacements['email'][$format])) {
-      $safe_replacements += $replacements['email'][$format];
-    }
-  }
-  else {
-    foreach ($replacements['unsafe'] as $key => $value) {
-      $safe_replacements[$key] = '';
-    }
-  }
-
-  $find = array_keys($safe_replacements);
-  $replace = array_values($safe_replacements);
-  $string = str_replace($find, $replace, $string);
-
-  // Clean up any unused tokens.
-  foreach ($special_tokens as $safe_state => $tokens) {
-    foreach (array_keys($tokens) as $token) {
-      $string = preg_replace('/\\' . $token . '\[\w+\]/', '', $string);
-    }
-  }
-
-  return $strict ? _webform_filter_xss($string) : $string;
+function _webform_filter_values($string, $node = NULL, $submission = NULL, $email = NULL, $strict = TRUE) {
+  $output = webform_replace_tokens($string, $node, $submission, $email, $strict);
+  return $strict ? webform_filter_xss($output) : $output;
 }
 
 /**
- * Filters all special tokens provided by webform, and allows basic layout in descriptions.
+ * Deprecated! Use webform_filter_descriptions() instead.
+ *
+ * @deprecated
  */
 function _webform_filter_descriptions($string, $node = NULL, $submission = NULL) {
-  return strlen($string) == 0 ? '' : _webform_filter_xss(_webform_filter_values($string, $node, $submission, NULL, FALSE));
+  return webform_filter_descriptions($string, $node, $submission);
 }
 
 /**
- * Filter labels for display by running through XSS checks.
+ * Deprecated! Use webform_filter_xss() instead!
+ *
+ * @deprecated
  */
 function _webform_filter_xss($string) {
-  static $allowed_tags;
-  $allowed_tags = isset($allowed_tags) ? $allowed_tags : webform_variable_get('webform_allowed_tags');
-  return filter_xss($string, $allowed_tags);
+  return webform_filter_xss($string);
 }
 
 
@@ -3202,6 +3022,9 @@ function webform_variable_get($variable) {
       break;
     case 'webform_node_types_primary':
       $result = variable_get('webform_node_types_primary', array('webform'));
+      break;
+    case 'webform_token_access':
+      $result = variable_get('webform_token_access', 1);
       break;
   }
   return $result;
@@ -3965,4 +3788,225 @@ function webform_mollom_form_info($form_id) {
   }
 
   return $form_info;
+}
+
+/**
+ * Replace tokens with Webform contexts populated.
+ *
+ * @param $string
+ *   The string to have its tokens replaced.
+ * @param $node
+ *   If replacing node-level tokens, the node for which tokens will be created.
+ * @param $submission
+ *   If replacing submission-level tokens, the submission for which tokens will
+ *   be created.
+ * @param $email
+ *   If replacing tokens within the context of an e-mail, the Webform e-mail
+ *   settings array.
+ * @param $sanitize
+ *   Boolean or format name value indicating if the results will be displayed as
+ *   HTML output. If FALSE, the contents returned will be unsanitized. This will
+ *   also result in all Webform submission tokens being returned as plain-text,
+ *   without HTML markup, in preparation for e-mailing or other text-only
+ *   purposes (default values, etc.). If TRUE, the tokens only are sanitized by
+ *   token_replace. Otherwise $sanitize is the machine name of an import filter
+ *   to be used with check_markup().
+ */
+function webform_replace_tokens($string, $node = NULL, $submission = NULL, $email = NULL, $sanitize = FALSE) {
+  // Don't do any filtering if the string is empty.
+  if (!strlen(trim($string))) {
+    return $string;
+  }
+
+  $string = webform_legacy_token_replace($string);
+
+  $token_data = array();
+  if ($node) {
+    $token_data['node'] = $node;
+  }
+  if ($submission) {
+    $token_data['webform-submission'] = $submission;
+  }
+  if ($email) {
+    $token_data['webform-email'] = $email;
+  }
+  $clear = is_bool($sanitize);
+  $string = token_replace($string, $token_data, array('clear' => $clear, 'sanitize' => $sanitize === TRUE));
+  if (!$clear) {
+    $string = webform_replace_tokens_clear(check_markup($string, $sanitize));
+  }
+  return $string;
+}
+
+/**
+ * Removes tokens from string.
+ *
+ * Call this function in cases where you need to remove unreplaced tokens but
+ * can't call webform_replace_tokens() with the option $clear = TRUE.
+ *
+ * In some cases the function token_replace() in webform_replace_tokens() needs
+ * to be called with the option 'clear' => FALSE, to not remove input filters.
+ * For security reasons webform_replace_tokens() is called before
+ * check_markup(), where input filters get replaced. Tokens won't be replaced if
+ * there is no value provided. These tokens i.e. [current-page:query:*] needs to
+ * be removed to not show up in the output.
+ *
+ * Note: This function was previously named webform_clear_tokens, which
+ * conflicted with the webform_clear module, being called as hook_tokens.
+ *
+ * @param string $text
+ *   The text to have its tokens removed.
+ * @see token_replace()
+ */
+function webform_replace_tokens_clear($text) {
+  if (empty($text) || !webform_variable_get('webform_token_access')) {
+    return $text;
+  }
+
+  $text_tokens = token_scan($text);
+  if (empty($text_tokens)) {
+    return $text;
+  }
+
+  $replacements = array();
+  foreach ($text_tokens as $type => $tokens) {
+    $replacements += array_fill_keys($tokens, '');
+  }
+
+  $tokens = array_keys($replacements);
+  $values = array_values($replacements);
+
+  return str_replace($tokens, $values, $text);
+}
+
+/**
+ * Replace tokens within a URL, encoding the parts within the query string.
+ *
+ * @param string $redirect_url
+ *   The redirect URL, with everything other than tokens already URL encoded.
+ * @param $node
+ *   If replacing node-level tokens, the node for which tokens will be created.
+ * @param $submission
+ *   If replacing submission-level tokens, the submission for which tokens will
+ *   be created.
+ * @return array
+ *   An array of path and url() options, suitable for a redirect or drupal_goto.
+ */
+function webform_replace_url_tokens($redirect_url, $node = NULL, $submission = NULL) {
+  // Parse the url into its components.
+  $parsed_redirect_url = drupal_parse_url($redirect_url);
+  // Replace tokens in each component.
+  $parsed_redirect_url['path'] = webform_replace_tokens($parsed_redirect_url['path'], $node, $submission);
+  if (!empty($parsed_redirect_url['query'])) {
+    foreach ($parsed_redirect_url['query'] as $key => $value) {
+      $parsed_redirect_url['query'][$key] = trim(webform_replace_tokens($value, $node, $submission));
+    }
+  }
+  $parsed_redirect_url['fragment'] = webform_replace_tokens($parsed_redirect_url['fragment'], $node, $submission);
+  // Determine whether the path is internal or external. Paths which contain the site's
+  // base url are still considered internal. #webform_external is private to webform.
+  $parsed_redirect_url['#webform_external'] = url_is_external($parsed_redirect_url['path']);
+  foreach (array(NULL, TRUE, FALSE) as $https) {
+    if (stripos($parsed_redirect_url['path'], url('', array('absolute' => TRUE, 'https' => $https))) === 0) {
+      $parsed_redirect_url['#webform_external'] = FALSE;
+    }
+  }
+  // Return an array suitable for a form redirect or drupal_goto.
+  return array($parsed_redirect_url['path'], $parsed_redirect_url);
+}
+
+/**
+ * Replace tokens in descriptions and sanitize according to Webform settings.
+ */
+function webform_filter_descriptions($string, $node = NULL, $submission = NULL) {
+  return strlen($string) == 0 ? '' : webform_filter_xss(webform_replace_tokens($string, $node, $submission));
+}
+
+/**
+ * Filter labels for display by running through XSS checks.
+ */
+function webform_filter_xss($string) {
+  static $allowed_tags;
+  $allowed_tags = isset($allowed_tags) ? $allowed_tags : webform_variable_get('webform_allowed_tags');
+  return filter_xss($string, $allowed_tags);
+}
+
+/**
+ * Replace legacy %-style tokens with their newer counterparts.
+ * Patterns copied from webform_update_7401() in webform.install 7.x-4.x branch.
+ * @param string $string
+ *   The string to have its tokens replaced.
+ * @return string
+ *   The string with any occurences of matching %-style tokens replaced.
+ */
+function webform_legacy_token_replace($string) {
+
+  // Define replacements.
+  $patterns = array(
+    '%username',
+    '%useremail',
+    '%uid',
+    '%date',
+    '%ip_address',
+    '%site',
+    '%nid',
+    '%title',
+    '%email_values',
+    '%submission_url',
+    '%sid',
+    '%server[REQUEST_URI]',
+  );
+  $replacements = array(
+    '[current-user:name]',
+    '[current-user:mail]',
+    '[current-user:uid]',
+    '[submission:date:long]',
+    '[current-user:ip-address]',
+    '[site:name]',
+    '[node:nid]',
+    '[node:title]',
+    '[submission:values]',
+    '[submission:url]',
+    '[submission:sid]',
+    '[current-page:url]',
+  );
+  $string = str_replace($patterns, $replacements, $string);
+
+  $dpatterns = array(
+    '%get' => '/%get\[([^\]]+)\]/m',
+    '%email' => '/%email\[([^% \n\r\t]+)?\]/m',
+    '%value' => '/%value\[([^% \n\r\t]+)?\]/m',
+    '%profile' => '/%profile\[([^\]]+)\]/m',
+  );
+  $dreplacements = array(
+    '%get' => '[current-page:query:$1]',
+    '%email' => '[submission:values:$1]',
+    '%value' => '[submission:values:$1:nolabel]',
+    '%profile' => '[current-user:$1]',
+  );
+
+  // Search the string for occurrences of each type of legacy token.
+  foreach ($dpatterns as $type => $dpattern) {
+    if (strpos($string, $type) !== FALSE) {
+      $matches = [];
+      preg_match_all($dpattern, $string, $matches);
+      if (!empty($matches[0])) {
+        // Loop through each match and update the format.
+        foreach ($matches[0] as $match) {
+          $replace = $match;
+
+          // Fix any chained tokens to use colon.
+          $replace = str_replace('][', ':', $replace);
+
+          // Update the token to the new pattern.
+          $replace = preg_replace($dpatterns, $dreplacements[$type], $replace);
+
+          // Replace the token in the string.
+          $string = str_replace($match, $replace, $string);
+        }
+      }
+    }
+  }
+
+  return $string;
 }

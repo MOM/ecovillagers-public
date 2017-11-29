@@ -1,0 +1,8 @@
+/* Ensure download link is not present on results tabs: */
+body.page-node #sb-webform-results-override-wrapper #sb-queue-csv-download {
+  display: none;
+}
+.view-content #sb-export-wrapper input#sb-export-queue,
+.view-content #sb-export-wrapper input#sb-export-cancel {
+  margin-left: 10px;
+}

@@ -38,14 +38,14 @@ function salesforce_ocd_salesforce_genmap_map_fields_alter(&$fields, $context) {
  * Implements hook_fundraiser_ocd_optout().
  */
 function salesforce_ocd_fundraiser_ocd_optout($account, $donation, $card) {
-  salesforce_ocd_queue_subscription_item($account, $donation, $card, 'UPDATE', TRUE);
+  salesforce_ocd_queue_subscription_item($account, $donation, $card, TRUE);
 }
 
 /**
  * Implements hook_fundraiser_ocd_update_card().
  */
 function salesforce_ocd_fundraiser_ocd_update_card($account, $donation, $card) {
-  salesforce_ocd_queue_subscription_item($account, $donation, $card, 'UPDATE');
+  salesforce_ocd_queue_subscription_item($account, $donation, $card);
 }
 
 /**
@@ -59,13 +59,13 @@ function salesforce_ocd_optin($account, $donation, $card) {
  * Generates and queues a new one-click donate subscription object.
  */
 function salesforce_ocd_optout($account, $donation, $card) {
-  salesforce_ocd_queue_subscription_item($account, $donation, $card, 'UPDATE', TRUE);
+  salesforce_ocd_queue_subscription_item($account, $donation, $card, TRUE);
 }
 
 /**
  * Generates and queues a new one-click donate subscription object.
  */
-function salesforce_ocd_queue_subscription_item($account, $donation, $card_on_file, $operation = 'CREATE', $optout = FALSE) {
+function salesforce_ocd_queue_subscription_item($account, $donation, $card_on_file, $optout = FALSE) {
   if (is_numeric($card_on_file)) {
     $card_on_file = commerce_cardonfile_load($card_on_file);
   }
@@ -75,6 +75,18 @@ function salesforce_ocd_queue_subscription_item($account, $donation, $card_on_fi
   }
 
   $card_id = $card_on_file->card_id;
+
+  $operation = 'CREATE';
+  $criteria = [
+    'drupal_id' => $card_id,
+    'module' => 'salesforce_ocd',
+    'delta' => 'commerce_cardonfile',
+    'object_type' => 'One_Click_Donate_Subscription__c',
+  ];
+  $existing_map = salesforce_sync_load_map($criteria);
+  if (!empty($existing_map)) {
+    $operation = 'UPDATE';
+  }
 
   // Create a one-click donate subscription object and queue it up.
   $sobject = new stdClass();
@@ -112,7 +124,7 @@ function salesforce_ocd_queue_subscription_item($account, $donation, $card_on_fi
     $sobject->fields['Default_Payment_Method__c'] = "0";
 
     // Only queue these up if they've actually been exported.
-    if (salesforce_sync_load_map($item)) {
+    if (!empty($existing_map)) {
       _salesforce_genmap_alter_operation($item);
       $item['delta'] = 'commerce_cardonfile_optout';
       $result = $queue->createItem($item);

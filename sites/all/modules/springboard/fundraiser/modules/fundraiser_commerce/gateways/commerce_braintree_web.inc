@@ -16,6 +16,8 @@ function commerce_braintree_web_fundraiser_commerce_fundraiser_gateway_info() {
       'braintree_applepay' => 'applepay',
     ),
     'allow_recurring' => array('credit', 'paypal', 'applepay'),
+    'offsite_recurring_external' => array('credit', 'paypal', 'applepay'),
+    'auto_extend' => array('credit'),
     'allow_refund' => array('credit', 'paypal', 'applepay'),
     'form callback' => 'commerce_braintree_web_fundraiser_commerce_form',
     // 'cleanup callback' => 'commerce_authnet_fundraiser_commerce_cleanup',
@@ -177,17 +179,8 @@ function commerce_braintree_web_fundraiser_commerce_refund($payment_method, $ref
  * @param array $config
  *   The payment method configuration.
  */
-function commerce_braintree_web_fundraiser_commerce_form($payment_method, $config = NULL) {
-  $billing_update = FALSE;
-  if (empty($config)) {
-    // If the $config variable is empty, we assume this function was called from
-    // the billing update form.
-    $config = array(
-      'id' => 'braintree_hostedfields|commerce_payment_braintree_hostedfields',
-    );
-    $billing_update = TRUE;
-  }
-  $form = braintree_form_elements($payment_method, $config, $billing_update);
+function commerce_braintree_web_fundraiser_commerce_form($payment_method, $config) {
+  $form = braintree_form_elements($payment_method, $config);
   return $form;
 }
 
@@ -243,8 +236,8 @@ function commerce_braintree_web_fundraiser_commerce_charge($method_instance, $do
   }
 
   // Adapted from commerce_authnet_echeck.inc.
-  // If this is recurring PayPal payment.
-  if ($success == TRUE && isset($donation->recurring) && !empty($donation->recurring) && $method_instance['method_id'] == 'braintree_paypal') {
+  // If this is recurring PayPal or Applepay payment.
+  if ($success == TRUE && isset($donation->recurring) && !empty($donation->recurring) && ($method_instance['method_id'] == 'braintree_paypal' || $method_instance['method_id'] == 'braintree_applepay')) {
     // Update expiration date and generate the next donation.
     $card_data = _fundraiser_commerce_donation_cardonfile_card($donation);
     if (!empty($card_data) && $donation->status <> 'failed') {

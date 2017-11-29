@@ -13,6 +13,8 @@ function commerce_psi_credit_fundraiser_commerce_fundraiser_gateway_info() {
     'payment_method' => array('credit'),
     'allow_recurring' => array('credit'),
     'offsite_recurring' => array('credit'),
+    'offsite_recurring_external' => array('credit'),
+    'auto_extend' => array('credit'),
     'form callback' => 'commerce_psi_credit_fundraiser_commerce_submit_form',
     'cleanup callback' => 'commerce_psi_credit_fundraiser_commerce_cleanup',
     'scrub callback' => 'commerce_psi_credit_fundraiser_commerce_scrub',
@@ -38,20 +40,20 @@ function commerce_psi_credit_fundraiser_donation_form_config_check($node) {
 }
 
 function commerce_psi_credit_fundraiser_gateway_status_cron_check($details) {
-  if ($details['method_id'] == 'commerce_psi_credit') { 
+  if ($details['method_id'] == 'commerce_psi_credit') {
     if ($details['settings']['txn_mode'] != COMMERCE_PSI_MODE_LIVE) {
       return $details['settings']['txn_mode'];
     }
     else {
       return 'live';
     }
-  } 
+  }
 }
 
 /**
  * Returns the form fields for this method.
  */
-function commerce_psi_credit_fundraiser_commerce_submit_form($payment_method, $config) {
+function commerce_psi_credit_fundraiser_commerce_submit_form($payment_method) {
   module_load_include('inc', 'fundraiser_commerce', 'includes/fundraiser_commerce.credit_card');
   return _fundraiser_commerce_credit_card_form();
 }
@@ -123,6 +125,9 @@ function commerce_psi_credit_fundraiser_commerce_charge($method_instance, $donat
   $pane_form = array();
 
   $pane_values = _fundraiser_commerce_credit_card_pane_values($donation);
+  if (!empty($donation->data['payment_fields']['credit']['cardonfile'])) {
+    $pane_values['cardonfile'] = $donation->data['payment_fields']['credit']['cardonfile'];
+  }
   $pane_values['frequency'] = $donation->donation['recurs_monthly'] == TRUE ? 'Monthly' : NULL;
 
   // Execute call to PSI, only returns FALSE if the payment failed,

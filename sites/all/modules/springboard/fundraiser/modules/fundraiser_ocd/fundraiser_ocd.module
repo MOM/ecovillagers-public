@@ -62,14 +62,16 @@ function fundraiser_ocd_menu() {
  */
 function fundraiser_ocd_springboard_admin_admin_menu_items_alter(&$items) {
   // Settings > Settings > Sustainer Upsell.
-  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/options/fundraiser/fundraiser_ocd'] = array(
-    'link_path' => 'admin/springboard/options/fundraiser/fundraiser_ocd',
-    'link_title' => 'One Click Donate Settings',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 0,
-    'customized' => 1,
-    'weight' => 0,
-  );
+  if (user_access('administer ocd configuration')) {
+    $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/options/fundraiser/fundraiser_ocd'] = array(
+      'link_path' => 'admin/springboard/options/fundraiser/fundraiser_ocd',
+      'link_title' => 'One Click Donate Settings',
+      'attributes' => array('sb_link_group' => t('Fundraising')),
+      'menu_name' => 'springboard_admin_menu',
+      'expanded' => 0,
+      'customized' => 1,
+    );
+  }
 }
 
 /**
@@ -328,17 +330,6 @@ function fundraiser_ocd_fundraiser_commerce_cardonfile_update_billing_card_alter
 }
 
 /**
- * Implements hook_fundraiser_update_billing_form_alter().
- *
- * Updates the billing update form on cardonfile card edit pages to redirect
- * back to the cards overview page.
- */
-function fundraiser_ocd_fundraiser_update_billing_form_postprocess($form, $form_state) {
-  $form['actions']['submit']['#submit'][] = '_fundraiser_ocd_check_ocd_default';
-  return $form;
-}
-
-/**
  * Submit handler to check if the one-click donate card needs to be updated.
  */
 function _fundraiser_ocd_check_ocd_default($form, $form_state) {
@@ -394,16 +385,19 @@ function _fundraiser_ocd_check_ocd_default($form, $form_state) {
     return;
   }
 
+  // The old card gets its status set to 0.
   db_update('fundraiser_ocd_cardonfile')
     ->fields(array(
       'status' => 0,
     ))
     ->condition('card_id', $old_card->card_id, '=')
     ->execute();
+
+  // The new card has its status set by whether the ocd checkbox was checked.
   db_merge('fundraiser_ocd_cardonfile')
     ->key(array('card_id' => $new_card->card_id))
     ->fields(array(
-      'status' => 1,
+      'status' => (int) !empty($values['payment_fields']['credit']['ocd']),
       'uid' => $donation->uid,
       'optin_date' => $ocd->optin_date,
       'did' => $ocd->did,
@@ -425,7 +419,12 @@ function _fundraiser_ocd_check_ocd_default($form, $form_state) {
  * Updates the billing update form on cardonfile card edit pages to redirect
  * back to the cards overview page.
  */
-function fundraiser_ocd_fundraiser_update_billing_form__fundraiser_commerce_cardonfile__alter(&$form, $form_state) {
+function fundraiser_ocd_form_fundraiser_update_billing_form_alter(&$form, $form_state) {
+  // We only want to alter the update form when its appearing for cardonfile.
+  if ($form['#calling_module'] != 'fundraiser_commerce_cardonfile') {
+    return;
+  }
+
   $card = $form_state['card'];
   // If the gateway isn't configured for cardonfile, skip the one-click donate
   // feature.
@@ -475,7 +474,30 @@ function fundraiser_ocd_fundraiser_update_billing_form__fundraiser_commerce_card
     '#default_value' => !!$enabled,
   );
 
+  // Add the OCD submit and validation handlers.
   $form['actions']['submit']['#submit'][] = '_fundraiser_ocd_set_new_ocd_cof';
+  $form['actions']['submit']['#submit'][] = '_fundraiser_ocd_check_ocd_default';
+  $form['actions']['submit']['#validate'][] = 'fundraiser_ocd_update_billing_form_validate';
+}
+
+/**
+ * Validate handler for billing update form.
+ */
+function fundraiser_ocd_update_billing_form_validate($form, &$form_state) {
+  $values = $form_state['values'];
+  // Determine if OCD is being enabled or disabled.
+  $disabling_ocd = !empty($form['payment_fields']['credit']['ocd']['#default_value']) && empty($values['payment_fields']['credit']['ocd']);
+  $enabling_ocd = empty($form['payment_fields']['credit']['ocd']['#default_value']) && !empty($values['payment_fields']['credit']['ocd']);
+  $no_card = empty($values['payment_fields']['credit']['card_number']);
+
+  // If OCD is being disabled or enabled without new card data clear errors.
+  if (($disabling_ocd || $enabling_ocd) && $no_card) {
+    form_clear_error();
+    drupal_get_messages('error');
+
+    // Be sure any payment update processes are skipped.
+    $form_state['update_payment'] = FALSE;
+  }
 }
 
 /**
@@ -545,6 +567,9 @@ function _fundraiser_ocd_set_new_ocd_cof(&$form, &$form_state) {
     ))->fetchAllKeyed();
     $did = reset($results);
 
+    // Grab the existing default subscription before it gets reset.
+    $previous_default = fundraiser_ocd_get_default_card($user->uid);
+
     if (empty($results)) {
       // Need a node id, query the table for any pre-existing ones the user has
       // opted into.
@@ -600,7 +625,13 @@ function _fundraiser_ocd_set_new_ocd_cof(&$form, &$form_state) {
 
   if (!empty($did)) {
     $donation = fundraiser_donation_get_donation($did);
-    module_invoke_all('fundraiser_ocd_update_card', $user, $donation, $form_state['card']);
+    if (!empty($previous_default)) {
+      $old_card = commerce_cardonfile_load($previous_default);
+      module_invoke_all('fundraiser_ocd_optin_update', $user, $donation, $old_card, $form_state['card']);
+    }
+    else {
+      module_invoke_all('fundraiser_ocd_update_card', $user, $donation, $form_state['card']);
+    }
   }
 }
 

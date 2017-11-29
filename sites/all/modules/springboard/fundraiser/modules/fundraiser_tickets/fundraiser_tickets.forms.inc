@@ -40,8 +40,9 @@ function fundraiser_tickets_order_ticket_types_form($form, &$form_state, $node){
       $form['tickets'][$key]['title'] = array(
         '#markup' => check_plain($product_wrapper->title->value()),
       );
+      $desc = $product_wrapper->fr_tickets_description->value();
       $form['tickets'][$key]['description'] = array(
-        '#markup' => check_plain($product_wrapper->fr_tickets_description->value()),
+        '#markup' => check_markup($desc['value'], $desc['format']),
       );
       $form['tickets'][$key]['quantity'] = array(
         '#markup' => check_plain($product_wrapper->fr_tickets_quantity->value()),

@@ -104,17 +104,17 @@ function commerce_authnet_echeck_settings_form($settings = NULL) {
  */
 function commerce_authnet_echeck_submit_form($payment_method, $pane_values = array(), $checkout_pane = NULL, $order = NULL) {
   $fields = drupal_map_assoc(array('bank_name', 'acct_name'));
-  $fields['type'] = drupal_map_assoc(array(
+  $fields['account_type'] = drupal_map_assoc(array(
     'checking',
     'savings',
   ));
 
   // Merge default values into the default array.
   $default = array(
-    'aba_code' => '',
-    'acct_num' => '',
-    'confirm_acct_num' => '',
-    'type' => '',
+    'routing_number' => '',
+    'account_number' => '',
+    'confirm_account_number' => '',
+    'account_type' => '',
     'bank_name' => '',
     'acct_name' => '',
     'code' => '',
@@ -125,10 +125,10 @@ function commerce_authnet_echeck_submit_form($payment_method, $pane_values = arr
   );
 
   // Always add a field for the eCheck routing number.
-  $form['bank account']['aba_code'] = array(
+  $form['bank account']['routing_number'] = array(
     '#type' => 'textfield',
     '#title' => t('Routing Number'),
-    '#default_value' => $default['aba_code'],
+    '#default_value' => $default['routing_number'],
     '#attributes' => array('autocomplete' => 'off'),
     '#required' => TRUE,
     '#maxlength' => 9,
@@ -136,19 +136,19 @@ function commerce_authnet_echeck_submit_form($payment_method, $pane_values = arr
   );
 
   // Always add a field for the eCheck account number and confirmation.
-  $form['bank account']['acct_num'] = array(
+  $form['bank account']['account_number'] = array(
     '#type' => 'textfield',
     '#title' => t('Account Number'),
-    '#default_value' => $default['acct_num'],
+    '#default_value' => $default['account_number'],
     '#attributes' => array('autocomplete' => 'off'),
     '#required' => TRUE,
     '#maxlength' => 20,
     '#size' => 21,
   );
-  $form['bank account']['confirm_acct_num'] = array(
+  $form['bank account']['confirm_account_number'] = array(
     '#type' => 'textfield',
     '#title' => t('Confirm Account Number'),
-    '#default_value' => $default['confirm_acct_num'],
+    '#default_value' => $default['confirm_account_number'],
     '#attributes' => array('autocomplete' => 'off'),
     '#required' => TRUE,
     '#maxlength' => 20,
@@ -156,17 +156,17 @@ function commerce_authnet_echeck_submit_form($payment_method, $pane_values = arr
   );
 
   // Add an account type selector if specified.
-  if (isset($fields['type'])) {
-    $form['bank account']['type'] = array(
+  if (isset($fields['account_type'])) {
+    $form['bank account']['account_type'] = array(
       '#type' => 'select',
       '#title' => t('Account Type'),
-      '#options' => array_intersect_key(commerce_authnet_echeck_payment_types(), drupal_map_assoc((array) $fields['type'])),
-      '#default_value' => $default['type'],
+      '#options' => array_intersect_key(commerce_authnet_echeck_payment_types(), drupal_map_assoc((array) $fields['account_type'])),
+      '#default_value' => $default['account_type'],
       '#required' => TRUE,
     );
     $form['bank account']['valid_types'] = array(
       '#type' => 'value',
-      '#value' => $fields['type'],
+      '#value' => $fields['account_type'],
     );
   }
   else {
@@ -213,18 +213,18 @@ function commerce_authnet_echeck_submit_form_validate($payment_method, $pane_for
   $prefix = implode('][', $form_parents) . '][';
 
   // Validate the aba (routing) number.
-  if (!commerce_authnet_echeck_payment_validate_aba($pane_values['bank account']['aba_code'])) {
+  if (!commerce_authnet_echeck_payment_validate_aba($pane_values['bank account']['routing_number'])) {
     form_set_error($prefix . 'aba_code', t('You have entered an invalid routing number.'));
   }
 
   // Ensure that the account numbers match.
-  if ($pane_values['bank account']['acct_num'] != $pane_values['bank account']['confirm_acct_num']) {
+  if ($pane_values['bank account']['account_number'] != $pane_values['bank account']['confirm_account_number']) {
     form_set_error($prefix . 'acct_num', t('The account numbers do not match.'));
     form_set_error($prefix . 'confirm_acct_num');
   }
 
   // Validate the account number.
-  if (!commerce_authnet_echeck_payment_validate_account($pane_values['bank account']['acct_num'])) {
+  if (!commerce_authnet_echeck_payment_validate_account($pane_values['bank account']['account_number'])) {
     form_set_error($prefix . 'acct_num', t('You have entered an invalid account number.'));
   }
 }
@@ -243,9 +243,9 @@ function commerce_authnet_echeck_submit_form_submit($payment_method, $pane_form,
   // Build a name-value pair array for this transaction.
   $nvp = array(
     'x_method' => 'ECHECK',
-    'x_bank_aba_code' => $pane_values['bank account']['aba_code'],
-    'x_bank_acct_num' => $pane_values['bank account']['acct_num'],
-    'x_bank_acct_type' => isset($pane_values['bank account']['type']) ? str_replace('', '_', strtoupper($pane_values['bank account']['type'])) : '',
+    'x_bank_aba_code' => $pane_values['bank account']['routing_number'],
+    'x_bank_acct_num' => $pane_values['bank account']['account_number'],
+    'x_bank_acct_type' => isset($pane_values['bank account']['account_type']) ? str_replace('', '_', strtoupper($pane_values['bank account']['account_type'])) : '',
     'x_bank_name' => isset($pane_values['bank account']['bank_name']) ? substr($pane_values['bank account']['bank_name'], 0, 50) : '',
     'x_bank_acct_name' => isset($pane_values['bank account']['bank_name']) ? substr($pane_values['bank account']['acct_name'], 0, 50) : '',
     'x_echeck_type' => 'WEB',
@@ -318,14 +318,14 @@ function commerce_authnet_echeck_submit_form_submit($payment_method, $pane_form,
     !empty($pane_values['bank account']['cardonfile_store']) && $pane_values['bank account']['cardonfile_store']) {
     // Build a payment details array for the credit card.
     $payment_details = array(
-      'accountNumber' => $pane_values['bank account']['acct_num'],
-      'routingNumber' => $pane_values['bank account']['aba_code'],
+      'accountNumber' => $pane_values['bank account']['account_number'],
+      'routingNumber' => $pane_values['bank account']['routing_number'],
       'nameOnAccount' => $pane_values['bank account']['acct_name'],
     );
 
     $card_type = 'bank';
-    if (!empty($pane_values['bank account']['type'])) {
-      $card_type = $pane_values['bank account']['type'];
+    if (!empty($pane_values['bank account']['account_type'])) {
+      $card_type = $pane_values['bank account']['account_type'];
     }
 
     // Submit a CIM request to create the Customer Profile.
@@ -339,11 +339,12 @@ function commerce_authnet_echeck_submit_form_submit($payment_method, $pane_form,
 
         // Load the card on file values for this donation
         $expires = array();
-        // If no expiration date given, use current date + 2 years
-        $expire_time = strtotime("now + 2 years");
 
-        $expires['month'] = date('m', $expire_time);
-        $expires['year'] = date('Y', $expire_time);
+        // If no expiration date is given, use the default sustainer series count.
+        $months = variable_get('commerce_authnet_echeck_sustainer_series_start_count', 24);
+        $exp_timestamp = strtotime('+' . $months . ' months');
+        $expires['month'] = date('m', $exp_timestamp);
+        $expires['year'] = date('Y', $exp_timestamp);
 
         $card_data = commerce_cardonfile_new();
         $card_data->uid = $order->uid;
@@ -352,7 +353,7 @@ function commerce_authnet_echeck_submit_form_submit($payment_method, $pane_form,
         $card_data->remote_id = $remote_id;
         $card_data->card_type = !empty($card_type) ? $card_type : 'card';
         $card_data->card_name = !empty($billing_address['name_line']) ? $billing_address['name_line'] : !empty($payment_details['nameOnAccount']) ? $payment_details['nameOnAccount'] : '';
-        $card_data->card_number = substr($pane_values['bank account']['acct_num'], -3);
+        $card_data->card_number = substr($pane_values['bank account']['account_number'], -3);
         $card_data->card_exp_month = $expires['month'];
         $card_data->card_exp_year = $expires['year'];
         $card_data->status = 1;

@@ -272,6 +272,13 @@ function sba_message_action_node_update($node) {
   if ($node->type == 'sba_message_action') {
     sba_message_action_update_multiflow_component($node);
     springboard_advocacy_node_form_post_save($node);
+    // Is "User-Preferred Salutations" enabled?
+    $node_wrapper = entity_metadata_wrapper('node', $node);
+    if ($node_wrapper->field_sba_message_salutations->value()) {
+      // Yes, so make certain the sba_salutation_alternate component exists.
+      module_load_include('inc', 'sba_message_action', 'includes/sba_message_action.components');
+      sba_message_action_insert_sba_salutation_alternate($node);
+    }
   }
 }
 
@@ -462,6 +469,20 @@ function sba_message_action_form_alter(&$form, &$form_state, $form_id) {
         $form['#submit'][] = 'sba_message_action_single_submit';
       }
 
+      // Are User-Preferred Salutations enabled?
+      if (!empty($node_wrapper->field_sba_message_salutations[0]->value())) {
+        $form['submitted']['sba_salutation_alternate']['#required'] = TRUE;
+        $form['#attached']['js'][] = drupal_get_path('module', 'sba_message_action')
+          . '/js/sba_message_action-salutations.js';
+      } else if (!empty($form['submitted']['sba_salutation_alternate'])) {
+        // If not, hide the Alternate Salutation field but use its options (if it exists--i.e., not a legacy form).
+        $form['submitted']['sbp_salutation']['#options'] = $form['submitted']['sba_salutation_alternate']['#options'];
+        $form['submitted']['sba_salutation_alternate'] = array(
+          '#type' => 'hidden',
+          '#value' => '',
+        );
+      }
+
     }
   }
 }
@@ -612,7 +633,7 @@ function sba_message_action_form_sba_message_action_node_form_alter(&$form, &$fo
     '#type' => 'textfield',
     '#title' => t('Submit Button Text'),
     '#default_value' => $submit_text,
-    '#weight' => 6,
+    '#weight' => 7,
     '#required' => TRUE,
   );
   $form['#group_children']['action_submit_button_text'] = 'group_sba_action_page_elements';
@@ -854,8 +875,8 @@ function sba_message_action_webform_user_profile_fields_alter(&$fields, $node) {
   if ($node->type == 'sba_message_action') {
 
     foreach ($fields as $index => $profile_field) {
-      // Make all fields except address2 mandatory.
-      if ($profile_field['name'] != 'sbp_address_line_2' && $profile_field['name'] != 'sbp_phone') {
+      // Make all fields except address2, phone, and standard salutation mandatory.
+      if (!in_array($profile_field['name'], array('sbp_address_line_2', 'sbp_phone', 'sbp_salutation'))) {
         $fields[$index]['mandatory'] = 1;
       }
       // Setup removal of non-US provinces.
@@ -867,7 +888,7 @@ function sba_message_action_webform_user_profile_fields_alter(&$fields, $node) {
         unset($fields[$index]);
       }
       if ($profile_field['name'] == 'sbp_salutation') {
-        $fields[$index]['weight'] = -6;
+        $fields[$index]['weight'] = -7;
       }
       if ($profile_field['name'] == 'sbp_first_name') {
         $fields[$index]['weight'] = -5;

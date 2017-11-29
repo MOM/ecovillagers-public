@@ -16,7 +16,7 @@ function springboard_p2p_personal_campaign_default_ctools_custom_content() {
   $content->name = 'fundraising_title_pane';
   $content->admin_title = 'Fundraising Search Title';
   $content->admin_description = '';
-  $content->category = 'Springboard P2P';
+  $content->category = 'Springboard Peer to Peer';
   $content->settings = array(
     'admin_title' => '',
     'title' => '',
@@ -32,7 +32,7 @@ function springboard_p2p_personal_campaign_default_ctools_custom_content() {
   $content->name = 'pane_search_link';
   $content->admin_title = 'Search Link Pane';
   $content->admin_description = '';
-  $content->category = 'Springboard P2P';
+  $content->category = 'Springboard Peer to Peer';
   $content->settings = array(
     'admin_title' => '',
     'title' => '',

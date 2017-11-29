@@ -416,11 +416,11 @@ function silverpop_transact_parse_personalization($personalization_string) {
     $personalization = array();
     foreach ($personalization_items as $item) {
       $pos = strpos($item, '|');
-      $personalization[substr($item, 0, $pos)] = htmlspecialchars(substr($item, $pos + 1));
+      $personalization[substr($item, 0, $pos)] = htmlspecialchars(trim(substr($item, $pos + 1)));
     }
   }
   else {
-    $personalization = $personalization_string;
+    $personalization = trim($personalization_string);
   }
   return $personalization;
 }

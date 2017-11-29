@@ -7,10 +7,3 @@ files[] = token_insert.inc
 files[] = token_insert.module
 files[] = token_insert.js
 configure = admin/config/content/formats
-
-
-; Information added by drush on 2017-05-25
-version = "4630189ef4115ca05211507ddb3193d5af814f8b-dev"
-project = "token_insert"
-datestamp = "1495705144"
-

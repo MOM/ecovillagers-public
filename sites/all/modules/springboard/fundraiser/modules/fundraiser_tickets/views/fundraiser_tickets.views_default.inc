@@ -19,7 +19,7 @@ function fundraiser_tickets_views_default_views() {
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
-  
+
   /* Display: Master */
   $handler = $view->new_display('default', 'Master', 'default');
   $handler->display->display_options['use_more_always'] = FALSE;
@@ -67,13 +67,17 @@ function fundraiser_tickets_views_default_views() {
   $handler->display->display_options['filters']['status']['value'] = 1;
   $handler->display->display_options['filters']['status']['group'] = 1;
   $handler->display->display_options['filters']['status']['expose']['operator'] = FALSE;
-  
   /* Filter criterion: Fundraiser donation forms: Show other amount */
   $handler->display->display_options['filters']['show_other_amount']['id'] = 'show_other_amount';
   $handler->display->display_options['filters']['show_other_amount']['table'] = 'fundraiser';
   $handler->display->display_options['filters']['show_other_amount']['field'] = 'show_other_amount';
   $handler->display->display_options['filters']['show_other_amount']['value'] = '1';
-  
+  /* Filter criterion: Node: Expired */
+  $handler->display->display_options['filters']['expired']['id'] = 'expired';
+  $handler->display->display_options['filters']['expired']['table'] = 'node_expire';
+  $handler->display->display_options['filters']['expired']['field'] = 'expired';
+  $handler->display->display_options['filters']['expired']['value'] = '0';
+
   /* Display: Entity Reference */
   $handler = $view->new_display('entityreference', 'Entity Reference', 'entityreference_1');
   $handler->display->display_options['defaults']['title'] = FALSE;
@@ -89,6 +93,7 @@ function fundraiser_tickets_views_default_views() {
   $handler->display->display_options['defaults']['row_plugin'] = FALSE;
   $handler->display->display_options['row_plugin'] = 'entityreference_fields';
   $handler->display->display_options['defaults']['row_options'] = FALSE;
+
   $export['donation_forms'] = $view;
 
   return $export;

@@ -12,6 +12,31 @@ function springboard_views_views_api() {
  * When rendering one of our own views, insert a count into the header.
  */
 function springboard_views_views_pre_render(&$view) {
+  // Apply CSS to reports views:
+  $reports_views = array('sbv_donations', 'sb_generic_webform_results');
+  if (in_array($view->name, $reports_views)) {
+    drupal_add_css(drupal_get_path('module', 'springboard_views') . '/css/springboard_views.css');
+  }
+
+  // Adjust output for the site-wide donations view:
+  if ($view->name == 'sbv_donations') {
+    $payment_methods = commerce_payment_methods();
+    foreach ($view->result as $key => $result) {
+      // Make the gateway field display its human-readable version:
+      if (isset($result->fundraiser_donation_gateway)) {
+        $current_method_info = explode('|', $result->fundraiser_donation_gateway);
+        if (isset($current_method_info[0]) && isset($payment_methods[$current_method_info[0]]['short_title'])) {
+          $result->fundraiser_donation_gateway = $payment_methods[$current_method_info[0]]['short_title'];
+        }
+      }
+      // Adjust the Recur. field output:
+      if (isset($result->commerce_order_fundraiser_donation_order_id)) {
+        $recur_output = isset($result->fundraiser_sustainers_sustainer_key) ? t('Yes') : t('No');
+        $result->fundraiser_sustainers_sustainer_key = $recur_output;
+      }
+    }
+  }
+
   // An array of view names and a pretty name for the status of the items
   $sbv_views = array(
     'sbv_batch' => 'Batched',
@@ -28,55 +53,47 @@ function springboard_views_views_pre_render(&$view) {
   }
 
   if ($view->name == 'sbv_forms') {
-    springboard_views_filter_sbv_forms($view);
+    // If a non-webform-user form lacks an internal name field, provide a
+    // value based on title.
+    $displays = array('block_2', 'block_3', 'page_2');
+    if (in_array($view->current_display, $displays)) {
+      foreach ($view->result as $key => $result) {
+        $has_internal = FALSE;
+        $field_name = NULL;
+        foreach ($result as $field_name => $field_value) {
+          if (strpos($field_name, 'internal_name') !== FALSE
+          && strpos($field_name, 'field_data_field') === FALSE) {
+            if (!empty($field_value)) {
+              $has_internal = TRUE;
+            }
+          }
+        }
+        if (!$has_internal) {
+          if (isset($result->node_type) && !fundraiser_is_donation_type($result->node_type)) {
+            $view->result[$key]->field_field_webform_user_internal_name[0]['rendered']['#markup'] = isset($result->node_title) ? check_plain($result->node_title) : '';
+          }
+        }
+      }
+    }
   }
 }
 
 /**
- * Apply access filters to the sbv_forms view result.
- *
- * The sbv_forms view result has to be filtered by user_access to
- * each content type in the result, removing rows to which the user does not
- * have edit or create access for the *content type* (not the node) displayed.
- * Removing is easy, but that makes the pager count wrong, requiring the
- * following to correct it.
- *
- * @param object $view
- *   The sbv_forms view.
+ * Implements hook_menu_alter().
  */
-function springboard_views_filter_sbv_forms(&$view) {
-  // Re-execute the view without a page limit to get a full count of
-  // user_access filtered results.
-  $counting_view = views_get_view($view->name);
-  $counting_view->set_display($view->current_display);
-  $counting_view->set_items_per_page('');
-  $counting_view->set_arguments($view->args);
-  $counting_view->execute();
-
-  // Iterate through the un-paged result and filter by access.
-  foreach ($counting_view->result as $index => $count_result) {
-    if (!empty($count_result->nid)) {
-      $node = node_load($count_result->nid);
-      if (!node_access('update', $node) && !node_access('create', $count_result->node_type)) {
-        unset($counting_view->result[$index]);
-      }
-    }
-  }
-
-  // Remove the user_access filtered results, this time
-  // from the original pre-rendered view.
-  foreach ($view->result as $index => $result) {
-    if (!empty($result->nid)) {
-      $node = node_load($count_result->nid);
-      if (!node_access('update', $node) && !node_access('create', $result->node_type)) {
-        unset($view->result[$index]);
-      }
-    }
-  }
-
-  // Reset the pager to match the filtered results.
-  $view->query->pager->total_items = count($counting_view->result);
-  $view->query->pager->update_page_info();
+function springboard_views_menu_alter(&$items) {
+  // Override webform's original results tab with Views-based results.
+  $weight = isset($items['node/%webform_menu/webform-results']['weight']) ? $items['node/%webform_menu/webform-results']['weight'] : 1000;
+  $items['node/%node/webform-results'] = array(
+    'title' => 'Results',
+    'page callback' => '_springboard_views_webform_results_page_content',
+    'page arguments' => array(1),
+    'access callback' => 'user_access',
+    'access arguments' => array('access all webform results'),
+    'description' => 'Browse recent webform results.',
+    'type' => MENU_LOCAL_TASK,
+    'weight' => $weight,
+  );
 }
 
 /**
@@ -259,58 +276,52 @@ function springboard_views_springboard_admin_admin_menu_items_alter(&$items) {
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 5,
+    'weight' => -40,
     '_children' => array(),
   );
 
-  // Reports > Contacts.
-  $items['admin/springboard/reports']['_children']['admin/springboard/reports/contacts'] = array(
-    'link_path' => 'admin/springboard/reports/contacts',
-    'link_title' => 'Contacts',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 1,
-  );
-
-  // Reports > Donations.
-  $items['admin/springboard/reports']['_children']['admin/reports/salesforce/donations'] = array(
-    'link_path' => 'admin/reports/salesforce/donations',
-    'link_title' => 'Donations',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 0,
-  );
-
-  // Reports > Contacts.
-  $items['admin/springboard/reports']['_children']['admin/springboard/reports/contacts'] = array(
-    'link_path' => 'admin/springboard/reports/contacts',
-    'link_title' => 'Contacts',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 0,
-  );
-  // Reports > Silverpop Transact.
-  if (module_exists('silverpop_transact')) {
-    $items['admin/springboard/reports']['_children']['admin/springboard/reports/silverpop-transact-log'] = array(
-      'link_path' => 'admin/springboard/reports/silverpop-transact-log',
-      'link_title' => 'Silverpop Transact',
-      'menu_name' => 'springboard_admin_menu',
-      'expanded' => 1,
-      'customized' => 1,
-      'weight' => 4,
-    );
-  }
-  // Reports > Integration Reports.
-  $items['admin/springboard/reports']['_children']['admin/springboard/reports/integration-reports'] = array(
-    'link_path' => 'admin/springboard/reports/integration-reports',
-    'link_title' => 'Integration Reports',
+  // Reports > Recent Donations
+  $items['admin/springboard/reports']['_children']['admin/springboard/reports/donations'] = array(
+    'link_path' => 'admin/springboard/reports/donations',
+    'link_title' => t('Recent Donations'),
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 0,
     'customized' => 1,
-    'weight' => 2,
+    'weight' => -100,
+    '_childen' => array(),
+  );
+
+  // Disable the link to "all-time donations" report, per this: https://app.assembla.com/spaces/springboard/tickets/2169
+  /* if (module_exists('springboard_dw')) {
+    $items['admin/springboard/reports']['_children']['warehouse/reports/donations'] = array(
+      'link_path' => 'warehouse/reports/donations',
+      'link_title' => 'All-Time Donations',
+      'menu_name' => 'springboard_admin_menu',
+      'expanded' => 0,
+      'customized' => 1,
+      'weight' => -90,
+      '_childen' => array(),
+    );
+  } */
+
+  // Reports > Active Springboard Contacts
+  $items['admin/springboard/reports']['_children']['active_springboard_contacts'] = array(
+    'link_path' => 'admin/springboard/reports/contacts',
+    'link_title' => t('Active Springboard Contacts'),
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 0,
+    'customized' => 1,
+    'weight' => -80,
+    '_children' => array(),
+  );
+  // Reports > Data Integration 
+  $items['admin/springboard/reports']['_children']['admin/springboard/reports/integration-reports'] = array(
+    'link_path' => 'admin/springboard/reports/integration-reports',
+    'link_title' => t('Data Integration'),
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 0,
+    'customized' => 1,
+    'weight' => -60,
     '_children' => array(),
   );
   // Reports > Integration Reports > Batch Log.
@@ -331,7 +342,6 @@ function springboard_views_springboard_admin_admin_menu_items_alter(&$items) {
     'customized' => 1,
     'weight' => 1,
   );
-
   // Reports > Integration Reports > Queue.
   $items['admin/springboard/reports']['_children']['admin/springboard/reports/integration-reports']['_children']['admin/springboard/reports/integration-reports/queue'] = array(
     'link_path' => 'admin/springboard/reports/integration-reports/queue',
@@ -442,14 +452,22 @@ function springboard_views_springboard_dashboard_panes() {
     'position' => 'column_right',
     'weight' => 3,
   );
-  // Create Form listing panes grouping the views argument by Fundraiser or webform node types.
+  // Create Form listing panes grouping the views argument by Fundraiser
+  // or webform node types.
   $node_types = node_type_get_types();
   $fundraiser_types = array();
   $webform_types = array();
-  foreach($node_types as $type) {
-    if (fundraiser_is_donation_type($type->type)) {
+  $webform_node_types = variable_get('webform_node_types', array('webform'));
+  $allowed_types = array_filter(variable_get('springboard_admin_allowed_form_types', array_keys(_springboard_admin_enabled_form_types())));
+
+  foreach ($node_types as $type) {
+    if (fundraiser_is_donation_type($type->type) && in_array($type->type, $allowed_types)) {
       $fundraiser_types[] = $type->type;
-    } else if (_webform_user_is_webform_user_node_type($type->type) && !fundraiser_is_donation_type($type->type)) {
+    }
+    elseif (
+      in_array($type->type, $allowed_types)
+      && (!fundraiser_is_donation_type($type->type) && in_array($type->type, $webform_node_types))
+    ) {
       $webform_types[] = $type->type;
     }
   }
@@ -509,59 +527,121 @@ function springboard_views_springboard_dashboard_panes() {
 }
 
 /**
- * Implements hook_views_pre_view().
- *
- * Remove the exposed date popup filter from the file export display to
- * eliminate a conflict between the popup and views_data_export:
+ * Implements hook_form_FORM_ID_alter().
  */
-function springboard_views_views_pre_view(&$view, &$display_id, &$args) {
-  if ($view->name != 'sbv_donations' || $display_id != 'views_data_export_1') {
-    return;
-  }
+function springboard_views_form_views_exposed_form_alter(&$form, &$form_state) {
+  if (isset($form['#id']) && $form['#id'] == 'views-exposed-form-sbv-donations-page') {
+    // Clean up presentation of order status options:
+    foreach ($form['status']['#options'] as $status_key => $status_label) {
+      $form['status']['#options'][$status_key] = preg_replace('/\(.*?\)/s', '', $status_label);
+    }
 
-  // Unset the date filter form both the default and export displays in case
-  // the default date filter is overwritten within the data export's display:
-  unset($view->display['default']->handler->options['filters']['date_filter']);
-  unset($view->display['views_data_export_1']->handler->options['filters']['date_filter']);
+    // Per this ticket, commenting out the dynamically generated value: https://app.assembla.com/spaces/springboard/tickets/2144
+    // Add dynamically generated prefix text to the donations report:
+    /*    $prefix_text = t('Springboard Donations');
+    $oldest_order_time = db_query("SELECT created FROM {commerce_order} WHERE created > 0 ORDER BY created LIMIT 1")
+      ->fetchField();
+    if ($oldest_order_time) {
+      $days = floor((time() - $oldest_order_time) / 60 / 60 / 24);
+      $prefix_text = '<h2>' . t('Springboard Donations - past') . ' ' . $days . ' ' . format_plural($days, 'day', 'days') . '</h2>';
+    }
+    $form['#prefix'] = $prefix_text; */
+    $form['#prefix'] = '<h2>' . t('Search Recent Donations') . '</h2>';
+    $form['#attached']['js'][] = drupal_get_path('module', 'springboard_views') . '/js/springboard_views.js';
+  }
+  // When filtering by expiry status, display the "- Any -" option as "- All -":
+  if (isset($form['expired']['#options']['All'])) {
+    $form['expired']['#options']['All'] = '- ' . t('All') . ' -';
+  }
+  if (isset($form['status']['#options']['All'])) {
+    $form['status']['#options']['All'] = '- ' . t('All') . ' -';
+  }
 }
 
 /**
- * Implements hook_views_query_alter().
- *
- * Apply date_popup-based filtering to the donations report's data export display, as filtering
- * by date can result in date formatting errors depending on the site's current, short date format.
+ * Markup for the overwritten webform result page:
  */
-function springboard_views_views_query_alter(&$view, &$query) {
-  if ($view->name != 'sbv_donations' || $view->current_display != 'views_data_export_1') {
-    return;
-  }
-  $min_date = ''; $max_date = '';
-  if (isset($view->exposed_input['date_filter']['min']['date'])) {
-    $min_date = date('Y-m-d', strtotime($view->exposed_input['date_filter']['min']['date']));
-  }
-  if (isset($view->exposed_input['date_filter']['max']['date'])) {
-    $max_date = date('Y-m-d', strtotime($view->exposed_input['date_filter']['max']['date']));
-  }
+function _springboard_views_webform_results_page_content($node) {
+  $output = '';
+  $form = array();
 
-  if (!isset($min_date) || !isset($max_date) || empty($min_date) || empty($max_date)) {
+  if (!isset($node->type)) {
     return;
   }
 
-  // Add the date filter to the WHERE clause:
-  $query->where[] = array(
-    'conditions' => array(
-      array(
-        'field' =>
-          "DATE_FORMAT(ADDTIME(FROM_UNIXTIME(commerce_order_fundraiser_donation.created), SEC_TO_TIME(-14400)), '%Y-%m-%d') >= :commerce_order_date_filter " .
-          "AND DATE_FORMAT(ADDTIME(FROM_UNIXTIME(commerce_order_fundraiser_donation.created), SEC_TO_TIME(-14400)), '%Y-%m-%d') <= :commerce_order_date_filter1",
-        'value' => array(
-          ':commerce_order_date_filter' => $min_date,
-          ':commerce_order_date_filter1' => $max_date,
-        ),
-        'operator' => 'formula',
-      ),
-    ),
-    'args' => array(),
-    'type' => 'AND',
-  );
+  if (in_array($node->type, array('sba_message_action', 'sba_social_action', 'petition'))) {
+    $header_view_name = 'springboard_dw_action_stats_report';
+    $header_view_display = 'block';
+  }
+  elseif (fundraiser_is_donation_type($node->type)) {
+    $table_title = t('Search Recent Donations');
+    $header_view_name = 'springboard_dw_donation_stats_report';
+    $header_view_display = 'block_1';
+    $table_view_name = 'sbv_donations';
+    $table_view_display = 'page_2';
+  }
+
+  // Display a generic webform results table for other node types:
+  if (!isset($table_view_name)) {
+    $table_title = t('Search Recent Submissions');
+    $table_view_name = 'sb_generic_webform_results';
+    $table_view_display = 'page';
+  }
+
+  // Add the DW-based, lifetime performance stats at the top:
+  if (isset($header_view_name)) {
+    $view = views_get_view($header_view_name);
+    if (isset($view) && $view != FALSE && is_object($view) && $view->disabled != TRUE) {
+      $view->set_display($header_view_display);
+      $view->pre_execute(array($node->nid));
+      $view->execute();
+      $title = isset($view->build_info['title']) ? $view->build_info['title'] : t('Lifetime Performance');
+      $view_content = $view->render();
+      $form['springboard_dw_lifetime_stats_content'] = array(
+        '#type' => 'fieldset',
+        '#title' => $title,
+        '#description' => $view_content,
+        '#attributes' => array('class' => array('sb-webform-results-filters')),
+      );
+    }
+  }
+
+  // Add the table views:
+  $view = views_get_view($table_view_name);
+  if (isset($view) && $view != FALSE && is_object($view) && $view->disabled != TRUE) {
+    $view->set_display($table_view_display);
+    $view->pre_execute(array($node->nid));
+    $view->execute();
+    // Determine how old submissions are:
+    /* $oldest_order_time = db_query("SELECT submitted FROM {webform_submissions} WHERE nid = :nid AND submitted > 0 ORDER BY submitted LIMIT 1",
+      array(':nid' => $node->nid))
+      ->fetchField();
+    $title = t('Filter Recent Submissions');
+    if ($oldest_order_time) {
+      $days = floor((time() - $oldest_order_time) / 60 / 60 / 24);
+      $table_title = t('Filter Recent Submissions') . ' - ' . t('past') . ' ' . format_plural($days, 'day', $days . ' days');
+    } */
+    $view_content = $view->render();
+    $form['sb-results-tab-override-content'] = array(
+      '#type' => 'fieldset',
+      '#title' => $table_title,
+      '#description' => $view_content,
+      '#collapsible' => FALSE,
+      '#attributes' => array('class' => array('sb-webform-results-table')),
+    );
+  }
+  if (!empty($form)) {
+    drupal_add_css(drupal_get_path('module', 'fundraiser_webform') . '/css/webform-results-tab.css', 'file');
+    drupal_add_js(drupal_get_path('module', 'springboard_views') . '/js/springboard_views.js', 'file');
+    $output = drupal_render($form);
+  }
+
+  // Ensure path references point to the node results path, not the default page view path for this view:
+  if (isset($view->display_handler->options['path'])) {
+    $path_pattern = $view->display_handler->options['path'];
+    $unaltered_path = str_replace('%', $node->nid , $path_pattern);
+    $output = str_replace($unaltered_path, 'node/' . $node->nid . '/results', $output);
+  }
+
+  return '<div id="sb-webform-results-override-wrapper">' . $output . '</div>';
 }

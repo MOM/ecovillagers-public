@@ -1,4 +1,14 @@
 (function($) {
+  // Clear payment fields so they won't be populated on back button.
+  var doUnload = function() {
+    $('.fundraiser-payment-fields input[type="text"]').each(function(i, el) {
+      var $el = $(el);
+      $el.val('');
+      $el.rules('remove');
+    });
+  };
+  window.unload = window.onbeforeunload = doUnload;
+
   Drupal.behaviors.springboardForms = {
     attach: function (context, settings) {
       var clearElement = function($selector) {
@@ -14,7 +24,7 @@
           .parents('.error')
             .removeClass('error')
         ;
-      }
+      };
 
       $(document).ready(function() {
         // Turn autocomplete off on CC and CVV form elements.

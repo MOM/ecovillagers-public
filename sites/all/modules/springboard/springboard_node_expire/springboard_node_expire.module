@@ -152,7 +152,6 @@ function springboard_node_expire_form_alter(&$form, &$form_state, $form_id) {
       $form['#attached']['js'][] = drupal_get_path('module', 'springboard_node_expire') . '/js/springboard_node_expire_admin.js';
 
       $form['#after_build'][] = "_springboard_node_expire_form_alter__node_form";
-
       drupal_add_js(array(
         'springboard_node_expire' => array(
           'use_date_popup' => variable_get('node_expire_date_entry_elements', 0) == 1,
@@ -216,11 +215,16 @@ function springboard_node_expire_node_update($node) {
  * Implements hook_node_insert().
  */
 function springboard_node_expire_node_insert($node) {
+
   $ntypes = variable_get('node_expire_ntypes', array());
   if (!isset($ntypes[$node->type])) {
     return;
   }
   if (!$ntype = $ntypes[$node->type]) {
+    return;
+  }
+
+  if (!isset($ntypes[$node->type]['enabled']) || !$ntypes[$node->type]['enabled']) {
     return;
   }
 
@@ -258,7 +262,6 @@ function springboard_node_expire_node_insert($node) {
   }
   $format = is_array($node->expiration_message) && isset($node->expiration_message['format']) ? $node->expiration_message['format'] : SPRINGBOARD_NODE_EXPIRE_DEFAULT_MESSAGE_FORMAT;
   $update_fields['message_format'] = $format;
-
   db_merge('node_expire')
     ->key(array('nid' => $node->nid))
     ->fields($update_fields)
@@ -423,6 +426,39 @@ function springboard_node_expire_node_view($node, $view_mode, $language) {
 
       // Notify other module's that an expiration action has just occurred.
       module_invoke_all('springboard_node_expire_action_after', $node, $data);
+    }
+  }
+}
+
+
+/**
+ * Implements hook_views_pre_build().
+ *
+ * Remove the expired filter if the node type arg does not support it.
+ */
+function springboard_node_expire_views_pre_build(&$view) {
+
+  if (isset($view->filter['expired']) && !empty($view->args) && is_array($view->args)) {
+
+    // Set up the vars we need to test against.
+    $expire_types = variable_get('node_expire_ntypes', array());
+    $node_types = node_type_get_names();
+    $view_expire_types = FALSE;
+
+    // Check to see if any args sent to this view are node type names
+    // and if any of them are expiring node types.
+    foreach ($view->args as $arg) {
+      if (is_string($arg) && isset($node_types[$arg])) {
+        if (!empty($expire_types[$arg]['enabled'])) {
+          $view_expire_types = TRUE;
+        }
+      }
+    }
+
+    // If there is at least one node type which is expire-enabled, we don't
+    // hide the filter.
+    if (!$view_expire_types) {
+      unset($view->filter['expired']);
     }
   }
 }

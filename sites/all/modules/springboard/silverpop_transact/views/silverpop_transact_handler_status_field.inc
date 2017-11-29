@@ -30,7 +30,7 @@ class silverpop_transact_handler_status_field extends views_handler_field {
         break;
 
       case "1":
-        $status_text = 'Success';
+        $status_text = 'Upload Success';
         break;
 
       case "2":

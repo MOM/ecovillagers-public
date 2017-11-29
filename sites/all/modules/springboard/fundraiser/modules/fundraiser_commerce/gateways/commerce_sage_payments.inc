@@ -14,6 +14,8 @@ function commerce_sage_payments_fundraiser_commerce_fundraiser_gateway_info() {
     'payment_method' => array('commerce_sage_payments_cc' => 'credit', 'commerce_sage_payments_eft' => 'bank account'),
     'allow_recurring'     => array('credit', 'bank account'),
     'allow_refund'        => array('credit', 'bank account'),
+    'auto_extend'         => array('credit'),
+    'offsite_recurring_external' => array('credit', 'bank account'),
     'form callback'       => 'commerce_sage_payments_fundraiser_commerce_submit_form',
     'cleanup callback'    => 'commerce_sage_payments_fundraiser_commerce_cleanup',
     'scrub callback'      => 'commerce_sage_payments_fundraiser_commerce_scrub',
@@ -66,14 +68,21 @@ function commerce_sage_payments_fundraiser_commerce_cleanup($submission_fields) 
  */
 function commerce_sage_payments_fundraiser_commerce_expire($submission_fields) {
   if ($submission_fields['payment_method'] == 'bank account') {
-    if (isset($info['gateway_details']['settings']['commerce_sage_settings_sustainer_series_start_count'])) {
-      $exp_month_count = $info['gateway_details']['settings']['commerce_sage_settings_sustainer_series_start_count'];
-      $exp_timestamp = strtotime('+' . $exp_month_count . ' months');
+    // If the cardonfile element is set, load the card and use its expiration
+    // month and year values.
+    if (!empty($submission_fields['cardonfile']) && is_numeric($submission_fields['cardonfile'])) {
+      $card = commerce_cardonfile_load($submission_fields['cardonfile']);
+      if (isset($card->card_exp_month) && isset($card->card_exp_year)) {
+        return array(
+          'month' => $card->card_exp_month,
+          'year' => $card->card_exp_year,
+        );
+      }
+      return $expires;
     }
-    else {
-      // pretend expiration date for sustainers
-      $exp_timestamp = strtotime('+24 months');
-    }
+    // If we don't already have a stored series expiration, use the default variable.
+    $exp_month_count = variable_get('commerce_sage_payments_sustainer_series_count', 24);
+    $exp_timestamp = strtotime('+' . $exp_month_count . ' months');
     return array(
       'month' => date('m', $exp_timestamp),
       'year' => date('Y', $exp_timestamp),
@@ -158,6 +167,35 @@ function commerce_sage_payments_fundraiser_commerce_charge($method_instance, $do
   $success = FALSE;
   if ($result !== FALSE) {
     $success = TRUE;
+  }
+
+  if ($success == TRUE && isset($donation->recurring) && !empty($donation->recurring)) {
+    // Update expiration date and generate the next donation.
+    $cardonfile_fields = _fundraiser_commerce_sage_payments_cardonfile_fields($donation);
+    $card_data = _fundraiser_commerce_cardonfile_match($cardonfile_fields);
+    if (!empty($card_data) && $donation->status <> 'failed') {
+      // If the next recurring series entry doesn't exist, create one.
+      if (_fundraiser_sustainers_count_donations_recurr_remaining($donation->recurring->master_did) < 1) {
+        // Move series ahead by one.
+        $charge_count = db_query('SELECT count(did) FROM {fundraiser_sustainers} WHERE master_did = :master_did', array(':master_did' => $donation->recurring->master_did))->fetchField();
+        $new_expire_time = strtotime("now +" . $charge_count ." months");
+        $card_data->card_exp_month = date('m', $new_expire_time);
+        $card_data->card_exp_year = date('Y', $new_expire_time);
+        $submission_fields = array(
+          'payment_fields' => array(
+            'bank account' => array(
+              'card_expiration_month' => $card_data->card_exp_month,
+              'card_expiration_year' => $card_data->card_exp_year,
+            ),
+          ),
+        );
+        // Update card data
+        commerce_cardonfile_save($card_data);
+        // Create new orders
+        $master_donation = fundraiser_donation_get_donation($donation->recurring->master_did);
+        fundraiser_sustainers_update_billing_info_create_new_donations($master_donation, $donation, $submission_fields);
+      }
+    }
   }
 
   // Perform post processing functions

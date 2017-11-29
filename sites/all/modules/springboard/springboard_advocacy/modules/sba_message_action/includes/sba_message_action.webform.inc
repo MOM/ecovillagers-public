@@ -37,14 +37,14 @@ function sba_message_action_send_message(array $user_message, array $form_state)
     $contact = sba_message_action_build_contact($webform_values, $zip, $geo);
 
     // Build the message array.
-    $message_build = sba_message_action_build_messages($user_message);
+    $message_build = sba_message_action_build_messages($user_message, $form_state);
     // Build the submission array.
     $submission = array(
       'contact' => $contact,
       'form_id' => $values['advocacy_id'],
       'messages' => $message_build,
       'message_edited' => $webform_values['sba_user_edit_flag'],
-    );
+  );
 
     // Check the test mode and multiflow parameters.
     $node = $form_state['complete form']['#node'];
@@ -94,7 +94,7 @@ function sba_message_action_send_message(array $user_message, array $form_state)
  * @return array
  *   Messages formatted for the API call.
  */
-function sba_message_action_build_messages(array $user_message) {
+function sba_message_action_build_messages(array $user_message, $form_state) {
   $all_messages = entity_load('sba_message', array_keys($user_message));
   $messages = array();
   $x = 0;
@@ -116,12 +116,14 @@ function sba_message_action_build_messages(array $user_message) {
       $legislative_terms = sba_message_action_legislative_terms($legislative_parent_terms);
     }
 
+
     $messages[$weight] = array(
       'message_id' => $message_unique_id,
       'subject' => $user_message[$message->sba_message_id]['subject'],
       'body' => $user_message[$message->sba_message_id]['body'],
       'topic' => $legislative_terms,
       'precedence' => !empty($message->data['precedence']) ? 1 : 0,
+      'user_altered_message' => !empty($form_state['storage']['changed_messages']),
     );
   }
   ksort($messages);
@@ -188,7 +190,7 @@ function sba_message_action_build_contact(array $values, $zip, array $geo) {
 
   $line_2 = !empty($values['sbp_address_line_2']) ? $values['sbp_address_line_2'] . "\n " : '';
   $contact = array(
-    'salutation' => $values['sbp_salutation'],
+    'salutation' => empty($values['sba_salutation_alternate']) ? $values['sbp_salutation'] : $values['sba_salutation_alternate'],
     'first_name' => $values['sbp_first_name'],
     'last_name' => $values['sbp_last_name'],
     'address' => $values['sbp_address'],
@@ -312,7 +314,7 @@ function sba_message_action_preprocess_webform_confirmations_delivered(&$vars) {
     // pop-up window. Make sure we're not double encoding.
     $body = nl2br(check_plain(decode_entities($message['body'])));
     $body = addslashes(trim(preg_replace('/\s+/', ' ', $body)));
-    $on_click = "if(typeof messageWrapper !=='undefined'){messageWrapper.close()};messageWrapper=window.open('','messageWrapper','toolbar=no,scrollbars=yes,status=no,menubar=no,resizable=yes,top=0,left=0,width=640,height=480');messageWrapper.document.write(\"" . $body  . "\");messageWrapper.focus();return false;";
+    $on_click = "if(typeof messageWrapper !=='undefined'){messageWrapper.close()};messageWrapper=window.open('','messageWrapper','toolbar=no,scrollbars=yes,status=no,menubar=no,resizable=yes,top=0,left=0,width=640,height=480');messageWrapper.document.write('" . $body  . "');messageWrapper.focus();return false;";
     $link = l($subject, '#', array('attributes' => array('onclick' => $on_click)));
     // Prepare the recipients for display in a bulleted list.
     unset($message['person']['url']);

@@ -75,3 +75,48 @@ function fundraiser_sustainers_upgrade_update_7003() {
   $field_instance['widget']['weight'] = 5;
   field_update_instance($field_instance);
 }
+
+/**
+ * Change Sustainers_Upgrade__c mappings to Sustainer_Upgrade__c.
+ */
+function fundraiser_sustainers_upgrade_update_7004() {
+  db_query("UPDATE {salesforce_genmap_map} SET salesforce_object_type='Sustainer_Upgrade__c' WHERE salesforce_object_type='Sustainers_Upgrade__c'");
+}
+
+/**
+ * Add the node properties map to sustainers upgrade..
+ */
+function fundraiser_sustainers_upgrade_update_7005() {
+  $result = db_query('SELECT mid, field_map FROM {salesforce_genmap_map} WHERE module = :module', array(':module' => 'fundraiser_sustainers_upgrade'));
+
+  foreach ($result as $record) {
+    $map_need_updating = FALSE;
+    $map = unserialize($record->field_map);
+    $has_node_map = !empty($map['salesforce_node_map']);
+
+    if (!$has_node_map || !array_key_exists('internal_name', $map['salesforce_node_map'])) {
+      $map['salesforce_node_map']['internal_name'] = 'Internal_Name__c';
+      $map_need_updating = TRUE;
+    }
+
+    if (!$has_node_map || !array_key_exists('title', $map['salesforce_node_map'])) {
+      $map['salesforce_node_map']['title'] = 'Name';
+      $map_need_updating = TRUE;
+    }
+
+    if (!array_key_exists('fsu_nid', $map['webform_map'])) {
+      $map['webform_map']['fsu_nid'] = 'Form_ID__c';
+      $map_need_updating = TRUE;
+    }
+
+    // Only perform the update if the fields weren't already mapped manually.
+    if ($map_need_updating) {
+      db_update('salesforce_genmap_map')
+        ->fields(array(
+          'field_map' => serialize($map),
+        ))
+        ->condition('mid', $record->mid)
+        ->execute();
+    }
+  }
+}

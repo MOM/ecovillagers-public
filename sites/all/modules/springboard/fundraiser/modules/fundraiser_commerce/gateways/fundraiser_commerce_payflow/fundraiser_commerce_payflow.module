@@ -59,6 +59,11 @@ function _fundraiser_commerce_payflow_standard_gateway_settings($rule_name, $met
     'title' => $rule_config->label,
     'description' => $method_instance['description'],
     'gateway_details' => $method_instance,
+    'include_file' => [
+      'inc',
+      'fundraiser_commerce_payflow',
+      'includes/fundraiser_gateways/' . $method_instance['method_id'],
+    ],
   );
 }
 

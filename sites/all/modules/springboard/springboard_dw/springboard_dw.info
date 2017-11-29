@@ -5,3 +5,12 @@ package = Springboard Data Warehouse
 dependencies[] = libraries
 
 configure = 'admin/config/services/springboard-dw/configure'
+
+files[] = includes/views/springboard_dw.views.inc
+files[] = includes/views/plugins/springboard_dw_donations_views_plugin_query.inc
+files[] = includes/views/plugins/springboard_dw_advocacy_stats_views_plugin_query.inc
+files[] = includes/views/plugins/springboard_dw_donation_stats_views_plugin_query.inc
+files[] = includes/views/handlers/springboard_dw_views_handler_field.inc
+files[] = includes/views/handlers/springboard_dw_views_handler_filter.inc
+files[] = includes/views/handlers/springboard_dw_views_handler_date_field.inc
+files[] = includes/views/handlers/springboard_dw_views_handler_date_filter.inc

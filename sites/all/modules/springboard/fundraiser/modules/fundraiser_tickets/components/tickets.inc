@@ -287,8 +287,9 @@ function theme_fundraiser_tickets_webform_table($variables) {
         'amount' => number_format(commerce_currency_amount_to_decimal($ticket_amount, $currency_code), 2),
         'currency' => $ticket_currency,
       );
+      $desc = $product_wrapper->fr_tickets_description->value();
       $description = array(
-        'data' => $tickets_available ? check_plain($product_wrapper->fr_tickets_description->value()) :
+        'data' => $tickets_available ? check_markup($desc['value'], $desc['format']) :
           check_plain($product_wrapper->fr_tickets_sold_out_message->value()),
         'class' => 'ticket_description',
       );

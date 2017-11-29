@@ -255,32 +255,6 @@ function fundraiser_ocd_fundraiser_donation_form($form, $form_state) {
 }
 
 /**
- * Implements hook_fundraiser_ocd_fundraiser_donation_form_alter().
- */
-function fundraiser_ocd_fundraiser_ocd_fundraiser_donation_form_alter(&$form, &$form_state) {
-  $parameters = drupal_get_query_parameters();
-  if (isset($parameters['amount'])) {
-    $amount = $parameters['amount'] / 100;
-    $donation_field = &$form['submitted']['donation'];
-    if (array_key_exists($amount, $donation_field['amount']['#options'])) {
-      $donation_field['amount']['#default_value'] = $amount;
-    }
-    else {
-      $donation_field['amount']['#default_value'] = 'other';
-      $donation_field['other_amount']['#value'] = $amount;
-    }
-  }
-
-  if (isset($parameters['ms'])) {
-    $form['submitted']['ms']['#default_value'] = $form['submitted']['ms']['#webform_component']['value'] = $parameters['ms'];
-  }
-
-  if (isset($parameters['cid'])) {
-    $form['submitted']['cid']['#default_value'] = $form['submitted']['cid']['#webform_component']['value'] = $parameters['cid'];
-  }
-}
-
-/**
  * Returns a user's one-click donation default payment information if it exists.
  *
  * @param int $uid

@@ -110,7 +110,9 @@ function fundraiser_offline_form_alter(&$form, $form_state, $form_id) {
           }
           if (isset($form['submitted']['cid'])) {
             $form['submitted']['cid']['#type'] = 'textfield';
-            $form['submitted']['cid']['#default_value'] = isset($_GET['cid']) ? $_GET['cid'] : '';
+            if (isset($_GET['cid'])) {
+              $form['submitted']['cid']['#default_value'] = check_plain($_GET['cid']);
+            }
           }
         }
         // Disable validation on mail field. This is a story in two parts.

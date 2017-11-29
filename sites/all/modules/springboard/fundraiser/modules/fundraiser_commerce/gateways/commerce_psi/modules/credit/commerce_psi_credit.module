@@ -12,6 +12,14 @@ function commerce_psi_credit_commerce_payment_method_info() {
     'short_title' => t('PSI Credit'),
     'display_title' => t('Credit card'),
     'description' => t('Payment Solutions Inc. credit card processor.'),
+    'cardonfile' => array(
+      'charge callback' => 'commerce_psi_credit_cardonfile_charge',
+      // Update callback commented out until PSI supports updating payment
+      // methods. See https://app.assembla.com/spaces/springboard/tickets/1594-psi-token--amp--one-click-donate-support/details
+      // for more info.
+      // 'update callback' => 'commerce_psi_credit_cardonfile_update',
+      'delete callback' => 'commerce_psi_credit_cardonfile_delete',
+    ),
   );
 
   return $payment_methods;
@@ -74,7 +82,7 @@ function commerce_psi_credit_submit_form_submit($payment_method, $pane_form, $pa
   module_load_include('inc', 'commerce_payment', 'includes/commerce_payment.credit_card');
   $card_type = commerce_payment_validate_credit_card_type($pane_values['credit_card']['number'], array_keys(commerce_payment_credit_card_types()));
   $all_types = commerce_payment_credit_card_types();
-  // PSI api uses the pretty name for the card type, need to customize a few
+  // PSI api uses the pretty name for the card type, need to customize a few.
   $all_types['amex'] = t('AmericanExpress');
   $all_types['discover'] = t('Discover');
   $pretty_card_type = !empty($all_types[$card_type]) ? $all_types[$card_type] : NULL;
@@ -124,7 +132,21 @@ function commerce_psi_credit_submit_form_submit($payment_method, $pane_form, $pa
   $nvp['MarketSource'] = drupal_substr(_commerce_psi_token_replace($payment_method['settings']['custom_fields']['market_source'], $order), 0, 100);
   $nvp['ClientTransactionId'] = $order->order_id;
 
-  // Allow modules to alter the values sent to PSI
+  $vault = FALSE;
+  $vaulted = FALSE;
+  if (module_exists('commerce_cardonfile') && $payment_method['settings']['cardonfile'] && !empty($pane_values['cardonfile'])) {
+    $nvp['PsiTransactionId'] = $order->order_id;
+    if ($pane_values['cardonfile'] !== 'new') {
+      $card = commerce_cardonfile_load($pane_values['cardonfile']);
+      $remote_id = $nvp['Token'] = $card->remote_id;
+      $vaulted = TRUE;
+    }
+    else {
+      $vault = TRUE;
+    }
+  }
+
+  // Allow modules to alter the values sent to PSI.
   $context = array(
     'payment_method' => $payment_method,
     'type' => 'credit',
@@ -146,17 +168,17 @@ function commerce_psi_credit_submit_form_submit($payment_method, $pane_form, $pa
     watchdog('commerce_psi', 'PSI request: !param', array('!param' => '<pre>' . check_plain(print_r($log_nvp, TRUE)) . '</pre>'), WATCHDOG_DEBUG);
   }
 
-  // Prepare a transaction object
+  // Prepare a transaction object.
   $transaction = commerce_payment_transaction_new('commerce_psi_credit', $order->order_id);
   $transaction->instance_id = $payment_method['instance_id'];
   $transaction->amount = $charge['amount'];
   $transaction->currency_code = $charge['currency_code'];
   $transaction->status = COMMERCE_PAYMENT_STATUS_PENDING;
 
-  // Submit the request to PSI
-  $response = _commerce_psi_request($payment_method, $nvp);
+  // Submit the request to PSI.
+  $response = _commerce_psi_request($payment_method, $nvp, 'credit', $vault, $vaulted);
 
-  // If no response bail out and ask them to try again
+  // If no response bail out and ask them to try again.
   if (empty($response)) {
     $transaction->status = COMMERCE_PAYMENT_STATUS_FAILURE;
     $transaction->message = 'The PSI API did not respond.';
@@ -166,9 +188,14 @@ function commerce_psi_credit_submit_form_submit($payment_method, $pane_form, $pa
   }
 
   $transaction->payload[REQUEST_TIME] = $response;
-  $transaction->remote_id = $response->ClientTransactionId;
+  if ($vault || $vaulted) {
+    $transaction->remote_id = $response->PsiTransactionId;
+  }
+  else {
+    $transaction->remote_id = $response->ClientTransactionId;
+  }
 
-  // Mark as success if we get back a 1 or 4
+  // Mark as success if we get back a 1 or 4.
   if (in_array((int) $response->ResponseCode, array(1, 4))) {
     $success = TRUE;
   }
@@ -176,7 +203,7 @@ function commerce_psi_credit_submit_form_submit($payment_method, $pane_form, $pa
     $success = FALSE;
   }
 
-  $transaction->status  = $success ? COMMERCE_PAYMENT_STATUS_SUCCESS : COMMERCE_PAYMENT_STATUS_FAILURE;
+  $transaction->status = $success ? COMMERCE_PAYMENT_STATUS_SUCCESS : COMMERCE_PAYMENT_STATUS_FAILURE;
   $transaction->remote_status = $response->Approved;
 
   // Build the response message.
@@ -191,6 +218,41 @@ function commerce_psi_credit_submit_form_submit($payment_method, $pane_form, $pa
   if ($success) {
     $transaction->message .= '; Authorization code: !auth_code';
     $transaction->message_variables['!auth_code'] = $response->AuthorizationCode;
+
+    if (!$vaulted && $vault) {
+      $remote_id = (string) $response->Token;
+      // Save the card.
+      $card = commerce_cardonfile_new();
+      $card->uid = $order->uid;
+      $card->payment_method = $payment_method['method_id'];
+      $card->instance_id = $payment_method['instance_id'];
+      $card->remote_id = $remote_id;
+      $card->card_type = $pretty_card_type;
+      $card->card_name = !empty($card_data->card_name) ? $card_data->card_name : '';
+      $card->card_number = substr($pane_values['credit_card']['number'], -4);
+      $card->card_exp_month = $pane_values['credit_card']['exp_month'];
+      $card->card_exp_year = $pane_values['credit_card']['exp_year'];
+      $card->status = 1;
+      commerce_cardonfile_save($card);
+    }
+    elseif ($vaulted) {
+      $cards = commerce_cardonfile_load_multiple(array(), array('remote_id' => $remote_id));
+      $card = reset($cards);
+      $update_cof = FALSE;
+      if ($card->card_exp_month != $pane_values['credit_card']['exp_month']) {
+        $card->card_exp_month = $pane_values['credit_card']['exp_month'];
+        $update_cof = TRUE;
+      }
+      if ($card->card_exp_year != $pane_values['credit_card']['exp_year']) {
+        $card->card_exp_year = $pane_values['credit_card']['exp_year'];
+        $update_cof = TRUE;
+      }
+
+      if ($update_cof) {
+        commerce_cardonfile_save($card);
+        // Call the update callback.
+      }
+    }
   }
 
   // Save the transaction information.
@@ -207,4 +269,49 @@ function commerce_psi_credit_submit_form_submit($payment_method, $pane_form, $pa
     drupal_set_message(check_plain($response->ResponseMessage), 'error');
     return FALSE;
   }
+}
+
+/**
+ * Card on file callback: background charge payment
+ *
+ * @param object $payment_method
+ *  The payment method instance definition array.
+ * @param object $card_data
+ *   The stored credit card data array to be processed
+ * @param object $order
+ *   The order object that is being processed
+ * @param array $charge
+ *   The price array for the charge amount with keys of 'amount' and 'currency'
+ *   If null the total value of the order is used.
+ *
+ * @return
+ *   TRUE if the transaction was successful
+ */
+function commerce_psi_credit_cardonfile_charge($payment_method, $card_data, $order, $charge = NULL) {
+  $order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+  // Format order total for transaction.
+  if (!isset($charge)) {
+    $charge = commerce_line_items_total($wrapper->commerce_line_items);
+  }
+}
+
+/**
+ * Card on file callback: updates the associated customer payment profile.
+ *
+ * Commenting out this function so that editing PSI CC cards will not be
+ * possible, and thus the "edit" link will not be displayed.
+ *
+function commerce_psi_credit_cardonfile_update($form, &$form_state, $payment_method, $card_data) {
+}*/
+
+/**
+ * Card on file callback: deletes the associated customer payment profile.
+ *
+ * AFAIK there is no API method to remove a card, so this is just a stub
+ * function so that commerce_cardonfile will still allow deletion of a PSI card.
+ * Related ticket: https://app.assembla.com/spaces/springboard/tickets/1594-psi-token--amp--one-click-donate-support/details.
+ */
+function commerce_psi_credit_cardonfile_delete($form, &$form_state, $payment_method, $card_data) {
+  return TRUE;
 }

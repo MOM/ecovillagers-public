@@ -29,13 +29,23 @@ class context_reaction_page_wrappers extends context_reaction {
     $form = array(
       '#tree' => TRUE,
       '#title' => t('Page wrappers'),
-
       'page_wrapper' => array(
         '#title' => t('Active page wrapper'),
         '#description' => t('Choose a page wrapper to use when this context is active.'),
         '#type' => 'select',
         '#options' => $options,
         '#default_value' => isset($settings['page_wrapper']) ? $settings['page_wrapper'] : 0,
+      ),
+      'enable_node_wrapper_precedence' => array(
+        '#title' => t('Node page wrapper precedence'),
+        '#description' => t('If this context adds a page wrapper to a page that already has a node-speciifc page wrapper,<br />' .
+          'should that node-specific wrapper be used instead of this context\'s wrapper?'),
+        '#type' => 'select',
+        '#options' => array(
+          0 => t('No, let this context\'s page wrapper take precedence.'),
+          1 => t('Yes, let node-specific page wrappers take precedence.'),
+        ),
+        '#default_value' => isset($settings['enable_node_wrapper_precedence']) ? $settings['enable_node_wrapper_precedence'] : 0,
       ),
     );
     return $form;

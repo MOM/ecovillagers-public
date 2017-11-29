@@ -190,7 +190,6 @@ function email_wrappers_form_email_wrapper_node_form_alter(&$form, &$form_state,
 function _email_wrappers_node_edit_email_fields_validate($form, $form_state) {
   $email_fields = array(
     'email_wrapper_from_email' => t('From Email'),
-    'email_wrapper_reply_email' => t('Reply To Email'),
     'email_wrapper_bcc_email' => t('BCC Emails'),
   );
   foreach ($email_fields as $email_field => $email_field_label) {
@@ -605,11 +604,24 @@ function email_wrappers_mail_alter(&$message) {
           // we intercepted error messages in the resend form alter above
           //because the "$message['send'] = FALSE;" below causes an erroneous
           //error message to be displayed to site administrator.
+          $fail = t('Confirmation not sent to @add due to a server error.', array('@add' => $message['to']));
           if (isset($response['result']) && $response['result']) {
             drupal_set_message(t('Successfully re-sent confirmation to @add', array('@add' => $message['to'])));
           }
+          // If $response['result'] is NULL rather than FALSE, it means some
+          // other module has taken responsibility for sending or cancelling
+          // the mail, rather than a failure.
+          elseif (is_null($response['result']) && $response['send'] == FALSE && module_exists('queue_mail')) {
+            $mail_keys = variable_get('queue_mail_keys', '');
+            if (drupal_match_path($message['id'], $mail_keys)) {
+              drupal_set_message(t('Confirmation has been queued for delivery to @add.', array('@add' => $message['to'])));
+            }
+            else {
+              drupal_set_message($fail, 'error');
+            }
+          }
           else {
-            drupal_set_message(t('Confirmation was not sent to @add due to a server error.', array('@add' => $message['to'])), 'error');
+            drupal_set_message($fail, 'error');
           }
         }
       }
@@ -720,6 +732,7 @@ $html_raw
 
   $multi_body = token_replace($multi_body, $token_set, array('clear' => TRUE));
   if ($eid) {
+    module_load_include('inc', 'webform', 'includes/webform.submissions');
     $multi_body = _webform_filter_values($multi_body, $message['params']['node'], $message['params']['submission'], $message['params']['node']->webform['emails'][$eid], FALSE, TRUE);
   }
   return $multi_body;

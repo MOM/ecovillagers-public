@@ -4,7 +4,5 @@ core = 7.x
 package = Jackson River Springboard - extras
 dependencies[] = secure_prepopulate
 
-version = 7.x-4.4.1-springboard_cookie
-
 files[] = springboard_cookie.install
 files[] = springboard_cookie.module

@@ -71,7 +71,8 @@ function fundraiser_ocd_springboard_hmac_success($payload) {
   }
 
   // Figure out where we're going. Could be the default or a url param override.
-  $goto_nid = _fundraiser_ocd_get_nid($payload);
+  $params = drupal_get_query_parameters();
+  $goto_nid = _fundraiser_ocd_get_nid($payload, $params);
 
   $user = _fundraiser_ocd_springboard_hmac_check_user($goto_nid, $payload);
 
@@ -83,7 +84,9 @@ function fundraiser_ocd_springboard_hmac_success($payload) {
     // Redirect to the default default form, or return if not set.
     $goto_nid = fundraiser_ocd_get_default_form_for_gateway('default');
     if ($goto_nid) {
-      drupal_goto('node/' . $goto_nid);
+      drupal_goto('node/' . $goto_nid, array(
+        'query' => $params,
+      ));
     }
     return;
   }
@@ -91,7 +94,9 @@ function fundraiser_ocd_springboard_hmac_success($payload) {
   // Otherwise save the card ID to a session and redirect to the calculated form
   // ID.
   $_SESSION['springboard_hmac']['ocd']['card_id'] = $payload['card_id'];
-  drupal_goto('node/' . $goto_nid);
+  drupal_goto('node/' . $goto_nid, array(
+    'query' => $params,
+  ));
 }
 
 /**
@@ -115,16 +120,6 @@ function _fundraiser_ocd_springboard_hmac_check_user($goto_nid, $payload) {
       // Execute the log-in.
       user_login_finalize($form_state);
     }
-    else {
-      // User no longer exists.
-      $cookie = springboard_cookie_get_cookie();
-      if (isset($cookie['profile']) && !empty($cookie['profile'])) {
-        $_SESSION['secure_prepopulate_values'][$goto_nid] = $cookie['profile'];
-        // Since the rest of the validation involves card data, which the user
-        // will need to re-enter, just redirect them now.
-        drupal_goto('node/' . $goto_nid);
-      }
-    }
   }
 
   return $user;
@@ -138,28 +133,37 @@ function _fundraiser_ocd_springboard_hmac_check_user($goto_nid, $payload) {
  *
  * @param array $payload
  *   The payload array.
+ * @param array $parameters
+ *   An array of query parameters to use to find the node ID.
  *
  * @return int|void
  *   The fundraiser ID or an invokation of `springboard_hmac_failure`.
  */
-function _fundraiser_ocd_get_nid($payload) {
+function _fundraiser_ocd_get_nid(array $payload, array &$parameters = array()) {
   if (!isset($payload['card_id'])) {
     $payload = _fundraiser_ocd_hmac_mapping($payload);
   }
 
-  $parameters = drupal_get_query_parameters();
+  if (empty($parameters)) {
+    $parameters = drupal_get_query_parameters();
+  }
+
   // Look up the gateway's instance id based on the stored card.
   $card_on_file = commerce_cardonfile_load($payload['card_id']);
   $gateway_id = $card_on_file->instance_id;
 
   // If a form_id was passed, let's try to use it first.
-  if (!empty($parameters['form_id']) && is_numeric($parameters['form_id']) &&
-    fundraiser_ocd_form_has_gateway($parameters['form_id'], $gateway_id)) {
+  if (!empty($parameters['form_id']) && is_numeric($parameters['form_id']) && fundraiser_ocd_form_has_gateway($parameters['form_id'], $gateway_id)) {
     $ocd_enabled = db_query('SELECT COUNT(fundraiser_nid) FROM {fundraiser_ocd} WHERE fundraiser_nid = :fid', array(
       ':fid' => $parameters['form_id'],
     ))->fetchField();
     if ($ocd_enabled > 0) {
-      return $parameters['form_id'];
+      // If the $parameters parameter was passed as a nom-empty array, we want
+      // to unset the form_id parameter so that it won't be included when we
+      // redirect.
+      $form_id = $parameters['form_id'];
+      unset($parameters['form_id']);
+      return $form_id;
     }
   }
 

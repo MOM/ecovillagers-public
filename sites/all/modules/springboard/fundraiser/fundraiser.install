@@ -563,6 +563,13 @@ function fundraiser_update_7010() {
 }
 
 /**
+ * Removes the fundraiser_gateway_messages variable if set.
+ */
+function fundraiser_update_7011() {
+  variable_del('fundraiser_gateway_messages');
+}
+
+/**
  * Batch update records to add card_id field.
  */
 /** Commented out because this update takes too long

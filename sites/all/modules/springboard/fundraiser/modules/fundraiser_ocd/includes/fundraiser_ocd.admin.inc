@@ -22,7 +22,6 @@ function fundraiser_ocd_admin_settings($form, $form_state) {
     'commerce_sage_payments_eft|commerce_payment_commerce_sage_payments_eft',
     'authnet_echeck|commerce_payment_authnet_echeck',
     'commerce_litle_echeck|commerce_payment_commerce_litle_echeck',
-    'commerce_psi_eft|commerce_payment_commerce_psi_eft',
     'commerce_sage_payments_eft|commerce_payment_commerce_sage_payments_eft',
     // @todo Remove once braintree is supported.
     'braintree_hostedfields|commerce_payment_braintree_hostedfields',

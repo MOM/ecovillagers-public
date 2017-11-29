@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * Code for the Springboard P2P personal campaign feature.
+ * Code for the Springboard Peer to Peer personal campaign feature.
  */
 
 include_once 'springboard_p2p_personal_campaign.features.inc';

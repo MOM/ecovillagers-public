@@ -79,7 +79,6 @@ function commerce_paypal_wps_fundraiser_commerce_form($payment_method, $config) 
  */
 function commerce_paypal_wps_fundraiser_commerce_redirect($method_instance, $donation, $order, $settings) {
   $form = drupal_get_form('commerce_paypal_wps_order_form', $order, $method_instance['settings'] + $settings);
-
   // Pass these fields to prepopulate the paypal fields: https://www.paypal.com/cgi-bin/webscr?cmd=_pdn_xclick_prepopulate_outside
   $paypal_fields = array(
     'mail' => 'email',
@@ -108,17 +107,30 @@ function commerce_paypal_wps_fundraiser_commerce_redirect($method_instance, $don
       '#type' => 'hidden',
       '#value' => $donation->gateway['gateway_details']['settings']['bn_code'],
     );
-  } 
+  }
+
+  $query = NULL;
+  if (!empty($donation->submission_data['p2p_pcid'])) {
+    $query = '?p2p_pcid=' . $donation->submission_data['p2p_pcid'];
+  }
+
   // Set the cancel_return as form url.
   $form['cancel_return'] = array(
     '#type' => 'hidden',
-    '#value' => $donation->form_url,
+    '#value' => $donation->form_url . $query,
   );
+
   // Set the 'return' form item for successful PayPal checkout.
+  if(!empty($query)) {
+    $query .= '&sid=' . $donation->sid;
+  }
+  else {
+    $query = '?sid=' . $donation->sid;
+  }
   global $base_url;
   $form['return'] = array(
     '#type' => 'hidden',
-    '#value' => $base_url . '/node/' . $donation->nid . '/done?sid=' . $donation->sid,
+    '#value' => $base_url . '/node/' . $donation->nid . '/done' . $query,
   );
   return $form;
 }

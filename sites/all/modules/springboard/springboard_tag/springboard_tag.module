@@ -37,14 +37,14 @@ function springboard_tag_ctools_plugin_api($module, $api) {
  * Implements hook_springboard_admin_menu_items_alter().
  */
 function springboard_tag_springboard_admin_admin_menu_items_alter(&$items) {
-  // Add a menu item for the admin page.
+  // Marketing > Tags
   $items['admin/springboard/marketing-analytics']['_children']['admin/springboard/springboard-tags'] = array(
     'link_path' => 'admin/springboard/springboard-tags',
-    'link_title' => 'Tags',
+    'link_title' => t('Tags'),
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 10,
+    'weight' => -60,
   );
 }
 
@@ -173,6 +173,13 @@ function _springboard_tag_generate_tag($snippet) {
     $donation = _fundraiser_webform_get_donation_by_sid($_GET['sid']);
     if ($donation) {
       $token_set['donation'] = $donation;
+    }
+    // Load the webform.
+    $nid = arg(1);
+    $sid = $_GET['sid'];
+    $submission = webform_get_submission($nid, $sid);
+    if ($submission) {
+      $token_set['webform-submission'] = $submission;
     }
   }
 

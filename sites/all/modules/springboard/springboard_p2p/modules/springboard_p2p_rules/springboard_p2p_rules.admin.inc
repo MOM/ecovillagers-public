@@ -16,7 +16,7 @@ function springboard_p2p_rules_admin_page() {
   );
 
   // Add the table for enabled P2P rules.
-  $content['enabled']['title']['#markup'] = '<h3>' . t('Enabled P2P rules') . '</h3>';
+  $content['enabled']['title']['#markup'] = '<h3>' . t('Enabled Peer to Peer rules') . '</h3>';
 
   $conditions = array(
     'event' => array(
@@ -34,14 +34,14 @@ function springboard_p2p_rules_admin_page() {
   );
 
   $content['enabled']['rules'] = $ui->overviewTable($conditions, $options);
-  $content['enabled']['rules']['#empty'] = t('There are no active P2P rules.');
+  $content['enabled']['rules']['#empty'] = t('There are no active Peer to Peer rules.');
 
-  // Add the table for disabled Springboard P2P rules.
-  $content['disabled']['title']['#markup'] = '<h3>' . t('Disabled P2P rules') . '</h3>';
+  // Add the table for disabled Springboard Peer to Peer rules.
+  $content['disabled']['title']['#markup'] = '<h3>' . t('Disabled Peer to Peer rules') . '</h3>';
 
   $conditions['active'] = FALSE;
   $content['disabled']['rules'] = $ui->overviewTable($conditions, $options);
-  $content['disabled']['rules']['#empty'] = t('There are no disabled P2P rules.');
+  $content['disabled']['rules']['#empty'] = t('There are no disabled Peer to Peer rules.');
 
   // Store the function name in the content array to make it easy to alter the
   // contents of this page.

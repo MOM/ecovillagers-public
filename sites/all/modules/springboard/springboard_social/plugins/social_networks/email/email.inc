@@ -177,6 +177,7 @@ function sb_social_email_process_settings(&$data, $form_state) {
 }
 
 function sb_social_email_share_js_config($settings, $node = FALSE, $sid = FALSE) {
+
   $settings = array(
     'email_subject' => _sb_social_replace_tokens($settings['data']['email']['subject'], $node, $sid),
     'email_message' => _sb_social_replace_tokens($settings['data']['email']['message'], $node, $sid),
@@ -190,7 +191,7 @@ function sb_social_email_uninstall() {
 }
 
 function sb_social_email_button_extra($settings, $node = FALSE, $submission_id = FALSE) {
-     return 'addthis:title="' . _sb_social_replace_tokens($settings['subject'], $node, $submission_id) . '"';
+  return 'addthis:title="' . _sb_social_replace_tokens($settings['subject'], $node, $submission_id) . '"';
 }
 
 function sb_social_email_custom_button_contents() {

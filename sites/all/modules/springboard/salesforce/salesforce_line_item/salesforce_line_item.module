@@ -53,8 +53,12 @@ function salesforce_line_item_salesforce_mapping_map_fields_alter(&$fields, $con
     $product_type = $fields[$product_type_field['name']];
 
     // Override the field's value with a Springboard relationship token.
-    $fields[$opportunity_field['name']] = sprintf('[Opportunity:donation:%d]', $fields[$opportunity_field['name']]);
-    $fields[$product_field['name']] = sprintf('[%s:%s:%d]', $product_field['name'], $product_type, $fields[$product_field['name']]);
+    if ($opportunity_field != '') {
+      $fields[$opportunity_field['name']] = sprintf('[Opportunity:donation:%d]', $fields[$opportunity_field['name']]);
+    }
+    if ($product_field != '') {
+      $fields[$product_field['name']] = sprintf('[%s:%s:%d]', $product_field['name'], $product_type, $fields[$product_field['name']]);
+    }
   }
   
 }

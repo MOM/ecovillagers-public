@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Provides peer to peer integration support for Salesforce.
+ * Provides Peer to Peer integration support for Salesforce.
  */
 
 /**
@@ -10,7 +10,7 @@
  */
 function salesforce_p2p_salesforce_queue_create_item_alter(&$item) {
 
-  // Add a token for the peer to peer category to the peer to peer campaign
+  // Add a token for the Peer to Peer category to the Peer to Peer campaign
   if ($item['module'] == 'node' && $item['delta'] == 'p2p_campaign') {
     // Load up the campaign node. Use reset to ensure freshly saved values.
     $node = node_load($item['drupal_id'], NULL, TRUE);
@@ -25,7 +25,7 @@ function salesforce_p2p_salesforce_queue_create_item_alter(&$item) {
     $item['sync_rules']['P2P_Category__c'] = 'always';
   }
 
-  // Add a token for peer to peer campaign to the personal campaign.
+  // Add a token for Peer to Peer campaign to the personal campaign.
   if ($item['module'] == 'node' && $item['delta'] == 'p2p_personal_campaign') {
     // Load up personal campaign node. Use reset to ensure freshly saved values.
     $node = node_load($item['drupal_id'], NULL, TRUE);
@@ -34,10 +34,10 @@ function salesforce_p2p_salesforce_queue_create_item_alter(&$item) {
     // Calling raw() will get us the id of the category instead of loading the entire entity.
     $campaign_id = $wrapper->field_p2p_campaign->raw();
 
-    // Relate peer to peer campaign.
+    // Relate Peer to Peer campaign.
     $item['sobject']->fields['P2P_Campaign__c'] = sprintf('[P2P_Campaign__c:p2p_campaign:%d]', $campaign_id);
 
-    // Relate peer to peer campaigner.
+    // Relate Peer to Peer campaigner.
     $item['sobject']->fields['P2P_Campaigner__c'] = sprintf('[Contact:user:%d]', $node->uid);
 
     // Relate to the category.

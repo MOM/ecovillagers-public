@@ -13,6 +13,8 @@ function commerce_authnet_fundraiser_commerce_fundraiser_gateway_info() {
     'payment_method' => array('credit'),
     'allow_recurring' => array('credit'),
     'allow_refund' => array('credit'),
+    'auto_extend' => array('credit'),
+    'offsite_recurring_external' => array('credit'),
     'form callback' => 'commerce_authnet_fundraiser_commerce_form',
     'cleanup callback' => 'commerce_authnet_fundraiser_commerce_cleanup',
     'scrub callback' => 'commerce_authnet_fundraiser_commerce_scrub',
@@ -254,6 +256,15 @@ function commerce_authnet_fundraiser_commerce_update($donation, $card_data = NUL
   }
   // Create a new card on file record
   elseif ($action == 'new') {
+    // If this user has an existing card be sure to get the CIM profile id.
+    $add_to_profile = FALSE;
+    if (!empty($card_data)) {
+      list($cim_customer_profile_id, $cim_payment_profile_id) = explode('|', $card_data->remote_id);
+
+      // Add the card as a new payment profile to this Customer Profile.
+      $add_to_profile = $cim_customer_profile_id;
+    }
+
     // We're using the built in function that requires a payment details array and the order
     $payment_details = array(
       'cardNumber' => $pane_values['credit_card']['number'],
@@ -266,13 +277,25 @@ function commerce_authnet_fundraiser_commerce_update($donation, $card_data = NUL
 
     // Load the order
     $order = commerce_order_load($donation->did);
-    $response = commerce_authnet_cim_create_customer_profile_request($payment_method, $order, $payment_details);
 
-    // If the Customer Profile creation was a success, store the new card on file data locally.
+    // Attempt to add the card to an existing Customer Profile if specified.
+    if ($add_to_profile) {
+      $response = commerce_authnet_cim_create_customer_payment_profile_request($payment_method, $add_to_profile, $order, $payment_details);
+    }
+    else {
+      $response = commerce_authnet_cim_create_customer_profile_request($payment_method, $order, $payment_details);
+    }
+
+    // If the Customer Profile request was a success, store the new card on file data locally.
     if ($response && (string) $response->messages->resultCode == 'Ok') {
       // Build a remote ID that includes the Customer Profile ID and the
       // Payment Profile ID.
-      $remote_id = (string) $response->customerProfileId . '|' . (string) $response->customerPaymentProfileIdList->numericString;
+      if ($add_to_profile) {
+        $remote_id = $add_to_profile . '|' . (string) $response->customerPaymentProfileId;
+      }
+      else {
+        $remote_id = (string) $response->customerProfileId . '|' . (string) $response->customerPaymentProfileIdList->numericString;
+      }
 
       // Get the card type
       $card_type = commerce_payment_validate_credit_card_type($pane_values['credit_card']['number'], array_keys(commerce_payment_credit_card_types()));
@@ -298,6 +321,9 @@ function commerce_authnet_fundraiser_commerce_update($donation, $card_data = NUL
       $donation->data['cardonfile'] = $new_data->card_id;
       watchdog('commerce_authnet', 'CIM Customer Profile @profile_id created and saved to user @uid.', array('@profile_id' => (string) $response->customerProfileId, '@uid' => $order->uid));
       return $new_data;
+    }
+    else {
+      return FALSE;
     }
   }
   return $card_data;

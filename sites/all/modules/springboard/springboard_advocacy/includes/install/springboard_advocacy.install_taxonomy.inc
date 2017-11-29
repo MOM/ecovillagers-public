@@ -109,7 +109,7 @@ function _springboard_advocacy_install_taxonomy_fields($node_type) {
   // Install Organization Issues
   module_load_include('install', 'springboard_taxonomy');
   if(function_exists('_springboard_taxonomy_field_instance')) {
-    foreach (_springboard_taxonomy_field_instance($node_type) as $field_name => $field) {
+    foreach (_springboard_taxonomy_field_instance($node_type, 'organization') as $field_name => $field) {
 
       // If somehow the base organization field was deleted, recreate it.
       if (!field_info_field($field['field_instance']['field_name'])) {

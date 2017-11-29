@@ -11,22 +11,22 @@ class PsiClient {
    */
   public function __construct($account) {
 
-    // Determine the correct WSDL URL
+    // Determine the correct WSDL URL.
     if ($account['txn_mode'] == COMMERCE_PSI_MODE_LIVE) {
-      $this->wsdl = 'https://client.paymentsolutionsinc.net/Services/Payment/PsiWcfService.svc?wsdl';
+      $this->wsdl = variable_get('commerce_psi_mode_live_url', 'https://client.paymentsolutionsinc.net/Services/Payment/PsiWcfService.svc?wsdl');
     }
     elseif ($account['txn_mode'] == COMMERCE_PSI_MODE_STAGING) {
-      $this->wsdl = 'https://client.paymentsolutionsinc.net/Staging/Services/Payment/PsiWcfService.svc?wsdl';
+      $this->wsdl = variable_get('commerce_psi_mode_staging_url', 'https://client.paymentsolutionsinc.net/Staging/Services/Payment/PsiWcfService.svc?wsdl');
     }
     else {
-      $this->wsdl = 'https://psiwebdev.paymentsolutionsincdev.net/Services/Payment/PsiWcfService.svc?wsdl';
+      $this->wsdl = variable_get('commerce_psi_mode_test_url', 'https://psiwebdev.paymentsolutionsincdev.net/Services/Payment/PsiWcfService.svc?wsdl');
     }
 
-    // Create a new soapclient
+    // Create a new soapclient.
     try {
       $this->soapclient = new SoapClient($this->wsdl);
     }
-    catch (Exception $ex) {
+    catch (SoapFault $ex) {
       watchdog('commerce_psi', 'Payment Services wsdl is not available.',
         array(),
         WATCHDOG_ERROR);
@@ -59,20 +59,41 @@ class PsiClient {
   }
 
   /**
-   * Send a credit card request
+   * Send a credit card request.
    *
-   * @param $payment_details Array
-   *   An array of values to pass to the PSI API
+   * @param array $payment_details
+   *   An array of values to pass to the PSI API.
+   * @param bool $vault
+   *   TRUE to store the payment method in the Vault.
+   * @param bool $vaulted
+   *   TRUE if already vaulted and to send a Vaulted payment method.
    *
    * @return Object
    *   The resulting data from the request
    */
-  public function creditRequest($payment_details) {
-
-    $params = $this->credentials() + array('paymentInfo' => $payment_details);
-
+  public function creditRequest($payment_details, $vault = FALSE, $vaulted = FALSE) {
     try {
-      $response = $this->soapclient->SendCreditCardPayment($params);
+      if (!$vaulted) {
+        $params = $this->credentials() + array('paymentInfo' => $payment_details);
+        $response = $this->soapclient->SendCreditCardPayment($params);
+      }
+      else {
+        $params = $this->credentials() + array('vaultPaymentInfo' => $payment_details);
+        $response = $this->soapclient->SendVaultedPayment($params);
+      }
+
+      // Only vault if not vaulted.
+      if ($vault && !$vaulted) {
+        $vault_params = $this->credentials() + array(
+          'transactionToVault' => array(
+            'SourceTransactionId' => $response->SendCreditCardPaymentResult->TransactionId,
+            'PsiTransactionId' => $response->SendCreditCardPaymentResult->ClientTransactionId,
+            'DonorAgreesToSavePaymethod' => $vault,
+            'ProcessDateTime' => $response->SendCreditCardPaymentResult->ProcessedDateTime,
+          ),
+        );
+        $response = $this->soapclient->AddTransactionToVault($vault_params);
+      }
     }
     catch (Exception $ex) {
       watchdog('commerce_psi', 'The PSI Commerce account @title failed to process an order: @error',
@@ -84,7 +105,15 @@ class PsiClient {
     }
 
     if (!empty($response)) {
-      return $response->SendCreditCardPaymentResult;
+      if ($vault) {
+        return $response->AddTransactionToVaultResult;
+      }
+      elseif ($vaulted) {
+        return $response->SendVaultedPaymentResult->Response;
+      }
+      else {
+        return $response->SendCreditCardPaymentResult;
+      }
     }
   }
 

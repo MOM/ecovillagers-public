@@ -5,6 +5,7 @@ package = Springboard Advocacy
 dependencies[] = libraries
 dependencies[] = views
 dependencies[] = springboard
+dependencies[] = springboard_webform
 
 configure = 'admin/config/services/advocacy'
 

@@ -629,8 +629,8 @@ function _fundraiser_date_mode_requeue_sustainers($series_orders) {
   if (module_exists('salesforce_genmap') && is_array($series_orders) && count($series_orders)) {
     foreach ($series_orders as $sustainer) {
       $donation = fundraiser_donation_get_donation($sustainer['did'], TRUE);
-      salesforce_genmap_send_object_to_queue('fundraiser_sustainers', 'update',
-      $donation->node, $donation->did, $donation, 'recurring_donation');
+      salesforce_genmap_send_object_to_queue('salesforce_donation', 'update',
+        $donation->node, $donation->did, $donation, 'donation');
     }
   }
 }

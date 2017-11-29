@@ -31,10 +31,10 @@ function springboard_p2p_category_node_info() {
     'p2p_category' => array(
       'name' => t('Peer to Peer Category'),
       'base' => 'node_content',
-      'description' => t('A peer to peer category.'),
+      'description' => t('A Peer to Peer category.'),
       'has_title' => '1',
       'title_label' => t('Name'),
-      'help' => t('Peer to peer category submission guidelines.'),
+      'help' => t('Peer to Peer category submission guidelines.'),
     ),
   );
   return $items;

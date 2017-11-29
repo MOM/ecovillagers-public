@@ -18,6 +18,7 @@ function springboard_dw_queue_legacy_install() {
     'petition_message',
     'payment',
     'salesforce_sync',
+    'line_item',
   );
   foreach ($types as $type) {
     db_insert('springboard_data_warehouse_queue_legacy')
@@ -35,6 +36,18 @@ function springboard_dw_queue_legacy_install() {
 function springboard_dw_queue_legacy_uninstall() {
   variable_del('springboard_dw_advocacy_authentication_token');
   variable_del('springboard_dw_advocacy_api_endpoint');
+}
+
+/**
+ * Add line_item record to springboard_data_warehouse_queue_legacy table.
+ */
+function springboard_dw_queue_legacy_update_7001() {
+  db_insert('springboard_data_warehouse_queue_legacy')
+    ->fields(array(
+      'type' => 'line_item',
+      'highwater' => 0,
+    ))
+    ->execute();
 }
 
 /**

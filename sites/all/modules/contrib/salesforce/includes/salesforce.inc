@@ -388,14 +388,14 @@ class Salesforce {
    */
   public function objects($conditions = array('updateable' => TRUE), $reset = FALSE) {
     $cache = cache_get('salesforce_objects');
-    // Force the recreation of the cache when it is older than 1 hour.
-    if ($cache && REQUEST_TIME < ($cache->created + variable_get('salesforce_sobject_cache_lifetime', 3600)) && !$reset) {
+    // Force the recreation of the cache when it is older than 6 hours.
+    if ($cache && REQUEST_TIME < ($cache->created + variable_get('salesforce_sobject_cache_lifetime', 21600)) && !$reset) {
       $result = $cache->data;
     }
     else {
       $result = $this->apiCall('sobjects');
       // Allow the cache to clear at any time by not setting an expire time.
-      cache_set('salesforce_objects', $result, 'cache', CACHE_TEMPORARY);
+      cache_set('salesforce_objects', $result, 'cache', CACHE_PERMANENT);
     }
 
     if (!empty($conditions)) {
@@ -447,33 +447,41 @@ class Salesforce {
     if (empty($name)) {
       return array();
     }
-    $cache = cache_get($name, 'cache_salesforce_object');
-    // Force the recreation of the cache when it is older than 5 minutes.
-    if ($cache && REQUEST_TIME < ($cache->created + 300) && !$reset) {
-      return $cache->data;
-    }
-    else {
-      try {
-        $object = $this->apiCall("sobjects/{$name}/describe");
-        // Cache the data
-        cache_set($name, $object, 'cache_salesforce_object');
-        return $object;
+
+    // Use an additional static cause because the object definitions are required multiple times during a single request.
+    static $object_defintions;
+
+    // If the requested object is not in static cache, put it there.
+    if (!isset($object_defintions[$name])) {
+      $cache = cache_get($name, 'cache_salesforce_object');
+      // Force the recreation of the cache when it is older than 6 hours.
+      if ($cache && REQUEST_TIME < ($cache->created + variable_get('salesforce_sobject_cache_lifetime', 21600)) && !$reset) {
+        $object_defintions[$name] = $cache->data;
       }
-      catch (Exception $ex) {
-        watchdog('salesforce', 'An error with the Salesforce API caused the objectDescribe method to fail. !error',
-          array('!error' => $ex->getMessage()),
-          WATCHDOG_ERROR);
-        // If we failed to load new data re-save the previously cached object data
-        if ($cache) {
-          cache_set($name, $cache->data, 'cache_salesforce_object');
-          return $cache->data;
+      else {
+        try {
+          $object = $this->apiCall("sobjects/{$name}/describe");
+          // Cache the data
+          cache_set($name, $object, 'cache_salesforce_object');
+          $object_defintions[$name] = $object;
         }
-        // Nothing cached, return an empty fields array to avoid errors with other modules
-        else {
-          return array('fields' => array());
+        catch (Exception $ex) {
+          watchdog('salesforce', 'An error with the Salesforce API caused the objectDescribe method to fail. !error',
+            array('!error' => $ex->getMessage()),
+            WATCHDOG_ERROR);
+          // If we failed to load new data re-save the previously cached object data
+          if ($cache) {
+            cache_set($name, $cache->data, 'cache_salesforce_object', CACHE_PERMANENT);
+            $object_defintions[$name] = $object;
+          }
+          // Nothing cached, return an empty fields array to avoid errors with other modules
+          else {
+            return array('fields' => array());
+          }
         }
       }
     }
+    return $object_defintions[$name];
   }
 
   /**

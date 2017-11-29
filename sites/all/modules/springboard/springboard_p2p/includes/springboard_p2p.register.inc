@@ -260,7 +260,7 @@ function springboard_p2p_filter_state_options_by_country($country_id) {
 
     // Given available zones, filter the dropdown to match.
     if (!empty($available_zones)) {
-      $new_options = fundraiser_commerce_get_zones_options($available_zones);
+      $new_options = fundraiser_commerce_get_zones_options($available_zones, $country_id);
     }
   }
 

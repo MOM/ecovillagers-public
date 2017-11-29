@@ -30,7 +30,7 @@ function springboard_p2p_default_rules_default_rules_configuration() {
     }
   }');
   $items['rules_p2p_password_reset_mail'] = entity_import('rules_config', '{ "rules_p2p_password_reset_mail" : {
-      "LABEL" : "Send user a P2P password reset mail",
+      "LABEL" : "Send user a Peer to Peer password reset mail",
       "PLUGIN" : "reaction rule",
       "TAGS" : [ "Springboard P2P" ],
       "REQUIRES" : [ "rules", "springboard_p2p_rules" ],
@@ -64,7 +64,7 @@ function springboard_p2p_default_rules_default_rules_configuration() {
     }
   }');
   $items['rules_p2p_user_email_private_campaign_approval_request'] = entity_import('rules_config', '{ "rules_p2p_user_email_private_campaign_approval_request" : {
-      "LABEL" : "Send user email about requesting approval to a private P2P campaign",
+      "LABEL" : "Send user email about requesting approval to a private Peer to Peer campaign",
       "PLUGIN" : "reaction rule",
       "TAGS" : [ "Springboard P2P" ],
       "REQUIRES" : [ "rules", "springboard_p2p_rules" ],
@@ -90,7 +90,7 @@ function springboard_p2p_default_rules_default_rules_configuration() {
         { "mail" : {
             "to" : [ "account:mail" ],
             "subject" : "You have been approved",
-            "message" : "Dear [account:sbp-first-name]:\\r\\n\\r\\nYour account has been approved and you can start building your peer to peer campaign. Click here to create you campaign: [create-personal-campaign-url:value]\\r\\n",
+            "message" : "Dear [account:sbp-first-name]:\\r\\n\\r\\nYour account has been approved and you can start building your Peer to Peer campaign. Click here to create you campaign: [create-personal-campaign-url:value]\\r\\n",
             "language" : [ "" ]
           }
         }
@@ -115,7 +115,7 @@ function springboard_p2p_default_rules_default_rules_configuration() {
     }
   }');
   $items['rules_p2p_user_email_registration'] = entity_import('rules_config', '{ "rules_p2p_user_email_registration" : {
-      "LABEL" : "Send user email about new P2P registration (no campaign)",
+      "LABEL" : "Send user email about new Peer to Peer registration (no campaign)",
       "PLUGIN" : "reaction rule",
       "TAGS" : [ "Springboard P2P" ],
       "REQUIRES" : [ "rules", "springboard_p2p_rules" ],
@@ -132,7 +132,7 @@ function springboard_p2p_default_rules_default_rules_configuration() {
     }
   }');
   $items['rules_p2p_user_email_registration_private_campaign'] = entity_import('rules_config', '{ "rules_p2p_user_email_registration_private_campaign" : {
-      "LABEL" : "Send user email about new P2P registration (private campaign)",
+      "LABEL" : "Send user email about new Peer to Peer registration (private campaign)",
       "PLUGIN" : "reaction rule",
       "TAGS" : [ "Springboard P2P" ],
       "REQUIRES" : [ "rules", "springboard_p2p_rules" ],
@@ -149,7 +149,7 @@ function springboard_p2p_default_rules_default_rules_configuration() {
     }
   }');
   $items['rules_p2p_user_email_registration_public_campaign'] = entity_import('rules_config', '{ "rules_p2p_user_email_registration_public_campaign" : {
-      "LABEL" : "Send user email about new P2P registration (public campaign)",
+      "LABEL" : "Send user email about new Peer to Peer registration (public campaign)",
       "PLUGIN" : "reaction rule",
       "TAGS" : [ "Springboard P2P" ],
       "REQUIRES" : [ "rules", "springboard_p2p_rules" ],

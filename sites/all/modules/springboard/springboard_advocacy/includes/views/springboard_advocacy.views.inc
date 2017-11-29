@@ -466,7 +466,34 @@ function springboard_advocacy_views_data() {
       'handler' => 'views_handler_sort_date',
     ),
   );
-
+  $data['springboard_action_opt_in']['first_name'] = array(
+    'title' => t('Action user first name'),
+    'help' => t('Signer\'s first name.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['springboard_action_opt_in']['last_name'] = array(
+    'title' => t('Action user last name'),
+    'help' => t('Signer\'s last name.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['springboard_action_opt_in']['state'] = array(
+    'title' => t('Action user state abbreviated'),
+    'help' => t('Signer\'s state abbreviated.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['springboard_action_opt_in']['state_full'] = array(
+    'title' => t('Action user state'),
+    'help' => t('Signer\'s state.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
   return $data;
 }
 

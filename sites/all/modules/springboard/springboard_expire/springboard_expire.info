@@ -1,0 +1,6 @@
+name = Springboard Expire
+description = Cache expiration integration for Springboard.
+package = Jackson River Springboard - extras
+core = 7.x
+
+dependencies[] = expire

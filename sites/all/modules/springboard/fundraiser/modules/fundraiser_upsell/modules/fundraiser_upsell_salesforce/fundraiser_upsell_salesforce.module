@@ -124,20 +124,6 @@ function fundraiser_upsell_salesforce_upsell_master_donation_alter(&$donation) {
     $donation,
     'donation'
   );
-
-  // If the donation's payment method uses offsite recurring,
-  // then there is no recurring_donation object in Salesforce.
-  if (!fundraiser_upsell_donation_is_offsite_recurring($donation)) {
-    // Queue the recurring_donation object.
-    salesforce_genmap_send_object_to_queue(
-      'fundraiser_sustainers',
-      'insert',
-      $donation->node,
-      $donation->did,
-      $donation,
-      'recurring_donation'
-    );
-  }
 }
 
 /**

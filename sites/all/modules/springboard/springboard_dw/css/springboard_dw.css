@@ -1,0 +1,274 @@
+#sb-queue-csv-download {
+  visibility: hidden;
+}
+
+@media (max-width: 979px) {
+  body.page-admin-reports-data-warehouse #main {
+    width: 98%;
+  }
+}
+body .view-springboard-dw-donations-report .view-content a#sb-queue-csv-download {
+  background-image: url(data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiA/Pgo8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDEgMSIgcHJlc2VydmVBc3BlY3RSYXRpbz0ibm9uZSI+CiAgPGxpbmVhckdyYWRpZW50IGlkPSJncmFkLXVjZ2ctZ2VuZXJhdGVkIiBncmFkaWVudFVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgeDE9IjAlIiB5MT0iMCUiIHgyPSIwJSIgeTI9IjEwMCUiPgogICAgPHN0b3Agb2Zmc2V0PSIwJSIgc3RvcC1jb2xvcj0iIzMxODJiMiIgc3RvcC1vcGFjaXR5PSIxIi8+CiAgICA8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0b3AtY29sb3I9IiMwMjY1YTAiIHN0b3Atb3BhY2l0eT0iMSIvPgogICAgPHN0b3Agb2Zmc2V0PSIxMDAlIiBzdG9wLWNvbG9yPSIjN2RiOWU4IiBzdG9wLW9wYWNpdHk9IjEiLz4KICA8L2xpbmVhckdyYWRpZW50PgogIDxyZWN0IHg9IjAiIHk9IjAiIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9InVybCgjZ3JhZC11Y2dnLWdlbmVyYXRlZCkiIC8+Cjwvc3ZnPg==); 
+  border: 1px solid #01598e;
+  border-radius: 5px;
+  margin-bottom: 38px;
+  margin-top: -53px;
+  float: right;
+  font-size: 13px;
+  height: 28px;
+  padding: 5px 18px 5px 12px;
+  text-decoration: none;
+  width: 130px;
+  zoom: 0.75;
+}
+body .view-springboard-dw-donations-report .view-content a#sb-queue-csv-download span.img-caption {
+  color: #fff;
+  text-shadow: none;
+}
+body .view-springboard-dw-donations-report .view-content #sbv-export-download-msg {
+  float: right;
+}
+
+.view-springboard-dw-donations-report .views-widget-filter-status,
+.view-springboard-dw-donations-report .views-widget-filter-gateway {
+  max-height: 40px;
+  overflow: hidden;
+}
+.view-springboard-dw-donations-report .views-widget-filter-status select,
+.view-springboard-dw-donations-report .views-widget-filter-gateway select {
+  margin-right: 2px;
+  max-width: 200px;
+}
+.view-springboard-dw-donations-report .view-header p {
+  margin: 1px 0;
+}
+.view-springboard-dw-donations-report table {
+  zoom: 0.85;
+}
+.view-springboard-dw-donations-report table th {
+  font-size: 12px;
+  padding: .75em .75em;
+}
+.view-springboard-dw-donations-report table td {
+  border: none;
+  border-left: 1px dotted #efede6;
+  font-size: 12px;
+  line-height: 1.5em;
+  padding: .85em .45em;
+}
+.view-springboard-dw-donations-report table td.first {
+  border-left: none;
+}
+.view-springboard-dw-donations-report table tr.odd td {
+  background-color: #f7f7f4;
+}
+.view-springboard-dw-donations-report table tr.even td {
+  background-color: #fff;
+}
+.view-springboard-dw-donations-report table tr:hover td {
+  background-color: #e6f1fb;
+}
+#views-exposed-form-springboard-dw-donations-report-page #edit-basic-filters {
+  margin-bottom: 0;
+  height: 48px;
+}
+#views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget {
+  float: left;
+  margin-right: 10px;
+}
+#views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-submit-button,
+#views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-reset-button {
+  padding-top: 0; 
+}
+#views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-submit-button input,
+#views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-reset-button input {
+  margin-top: 1.5px;
+}
+#views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-submit-button:before {
+  content: "";
+}
+#views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-submit-button input {
+  width: 34px;
+}
+#views-exposed-form-springboard-dw-donations-report-page #edit-transaction-date-wrapper {
+  bottom: 10px;
+  position: relative;
+}
+#views-exposed-form-springboard-dw-donations-report-page #edit-transaction-date-wrapper label {
+  margin-left: 10px;
+  position: absolute;
+  top: -16px;
+  left: 8px;
+}
+#views-exposed-form-springboard-dw-donations-report-page #edit-transaction-date-wrapper .container-inline-date label,
+#views-exposed-form-springboard-dw-donations-report-page #edit-transaction-date-wrapper .container-inline-date .description {
+  display: none;
+}
+#views-exposed-form-springboard-dw-donations-report-page #edit-transaction-date-min-wrapper,
+#views-exposed-form-springboard-dw-donations-report-page #edit-transaction-date-max-wrapper {
+  float: left;
+}
+.view-springboard-dw-donations-report #dw-directions-blurb {
+  font-size: 11px;
+  line-height: 12px;
+}
+#views-exposed-form-springboard-dw-donations-report-page #dw-date-range-separator {
+  display: none;
+  padding: 0 4px;
+}
+#views-exposed-form-springboard-dw-donations-report-page .form-item-transaction-date-min-date i,
+#views-exposed-form-springboard-dw-donations-report-page .form-item-transaction-date-max-date i {
+  cursor: pointer;
+  display: none;
+}
+.view-springboard-dw-donations-report .view-header {
+  margin-bottom: 12px;
+}
+.view-springboard-dw-donations-report .view-content {
+  position: relative;
+  top: -16px;
+}
+.page-admin-reports-data-warehouse-donations #ui-datepicker-div,
+.view-springboard-dw-donations-report .view-filters {
+   zoom: 0.90;
+}
+.view-springboard-dw-donations-report #sb-dw-items-per-page {
+  font-size: 11px;
+  position: relative;
+  top: 16px; 
+}
+.view-springboard-dw-donations-report .dw-basic-filters,
+.view-springboard-dw-donations-report .dw-advanced-filters {
+  border-radius: 0;
+}
+.view-springboard-dw-donations-report .dw-basic-filters {
+  border: none;
+  height: 114px;
+  padding-bottom: 2px;
+  margin-bottom: 0;
+}
+.view-springboard-dw-donations-report .dw-advanced-filters {
+  border: none;
+  border-bottom: 2px solid #d5d5d5;
+  padding-bottom: 10px;
+}
+.view-springboard-dw-donations-report .dw-advanced-filters.collapsed {
+  height: 54px;
+}
+
+.view-springboard-dw-donations-report .dw-basic-filters legend {
+  position: relative;
+  top: -2px;
+  margin-bottom: 14px;
+}
+.view-springboard-dw-donations-report .dw-advanced-filters legend {
+  position: relative;
+  top: -2px;
+}
+.view-springboard-dw-donations-report .dw-basic-filters legend .fieldset-legend,
+.view-springboard-dw-donations-report .dw-advanced-filters legend .fieldset-legend {
+  font-size: 26px;
+  margin-bottom: 22px;
+  
+}
+@media (min-width: 1200px) {
+  .view-springboard-dw-donations-report .view-filters {
+     zoom: 1.00;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page .views-widget .control-group .form-text {
+    width: 180px;
+  }
+}
+@media (max-width: 1200px) {
+  body.page-warehouse-reports-donations #main.container {
+    width: inherit;
+    margin-left: 10px;
+    margin-right: 10px;
+  }
+}
+@media (max-width: 890px) {
+  .view-springboard-dw-donations-report .view-filters {
+    zoom: 0.85;
+  }
+  .view-springboard-dw-donations-report table {
+    zoom: 0.75;
+  }
+}
+@media (max-width: 845px) {
+  .view-springboard-dw-donations-report .view-filters {
+    zoom: 0.80;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget {
+    margin-right: 10px;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page #edit-transaction-date-wrapper {
+    margin-right: 1px;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page .views-widget .control-group .form-text {
+    width: 130px;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget views-reset-button {
+    margin-right: 1px;
+  }
+}
+@media (max-width: 769px) {
+  .view-springboard-dw-donations-report .view-filters {
+    zoom: 0.75;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page .views-widget .control-group .form-text {
+    width: 110px;
+  }
+  .view-springboard-dw-donations-report table {
+    zoom: 0.70;
+  }
+}
+@media (max-width: 739px) {
+  .view-springboard-dw-donations-report .view-filters {
+    zoom: 0.70;
+  }
+  .view-springboard-dw-donations-report table {
+    zoom: 0.55;
+  }
+  .view-springboard-dw-donations-report table tr td {
+    line-height: 1.25em;
+    padding: 2px 4px;
+  }
+}
+@media (max-width: 695px) {
+  .view-springboard-dw-donations-report .view-filters {
+    zoom: 0.65;
+  }
+}
+@media (max-width: 595px) {
+  .view-springboard-dw-donations-report .view-filters {
+    zoom: 0.60;
+  }
+}
+@media (max-width: 565px) {
+  .view-springboard-dw-donations-report .view-filters {
+    zoom: 0.55;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-submit-button,
+  #views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-reset-button {
+    z-index: 10;
+  }
+}
+@media (max-width: 524px) {
+  #views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-reset-button {
+    display: none;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page .views-exposed-widget.views-submit-button {
+    float: right;
+  }
+}
+@media (max-width: 437px) {
+  .view-springboard-dw-donations-report .dw-basic-filters,
+  .view-springboard-dw-donations-report .dw-advanced-filters {
+    height: 208px;
+  }
+  #views-exposed-form-springboard-dw-donations-report-page .views-widget .control-group .form-text {
+    padding: 0;
+    width: 100px;
+  }
+}
+

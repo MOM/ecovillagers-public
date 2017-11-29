@@ -340,6 +340,12 @@ function commerce_braintree_web_settings_form($settings = array()) {
     '#default_value' => isset($settings['sandbox']['channel']) ? $settings['sandbox']['channel'] : NULL,
   );
 
+  $form['sandbox']['braintree_static_token'] = array(
+    '#title' => t('Sandbox Tokenization Key'),
+    '#type' => 'textfield',
+    '#default_value' => isset($settings['sandbox']['braintree_static_token']) ? $settings['sandbox']['braintree_static_token'] : NULL,
+  );
+
   $form['production'] = array(
     '#title' => t('Production environment'),
     '#type' => 'fieldset',
@@ -373,6 +379,12 @@ function commerce_braintree_web_settings_form($settings = array()) {
     '#title' => t('Channel/Partner ID'),
     '#type' => 'textfield',
     '#default_value' => isset($settings['production']['channel']) ? $settings['production']['channel'] : NULL,
+  );
+
+  $form['production']['braintree_static_token'] = array(
+    '#title' => t('Production Tokenization Key'),
+    '#type' => 'textfield',
+    '#default_value' => isset($settings['production']['braintree_static_token']) ? $settings['production']['braintree_static_token'] : NULL,
   );
 
   $form['single_settlement_currency'] = array(

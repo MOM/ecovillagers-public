@@ -194,8 +194,6 @@ function springboard_admin_config(&$form, $form_state) {
     }
     // Configure user profiles
     springboard_admin_config_profile($form, $form_state);
-    // Configure secure prepopulate synonyms
-    springboard_admin_configure_prepopulate_synonyms();
     // Configure a default fundraiser type
     springboard_admin_config_donation_form_type($form, $form_state);
     set_time_limit(300);
@@ -1657,33 +1655,6 @@ function springboard_admin_config_salesforce($form, $form_state) {
 }
 
 /**
- * Configure a default set of secure prepopulate synonyms
- * to working with donation forms and webform user forms.
- */
-function springboard_admin_configure_prepopulate_synonyms() {
-  $synonyms = array(
-    'first_name' => 'sbp_first_name',
-    'last_name' => 'sbp_last_name',
-    'address' => 'sbp_address',
-    'address_line_2' => 'sbp_address_line_2',
-    'city' => 'sbp_city',
-    'state' => 'sbp_state',
-    'zip' => 'sbp_zip',
-    'country' => 'sbp_country',
-  );
-
-  if (module_exists('secure_prepopulate')) {
-    foreach ($synonyms as $form_key => $synonym) {
-      $settings = array(
-        'token_key' => $form_key,
-        'synonyms' => $synonym,
-      );
-      secure_prepopulate_save_synonym($settings);
-    }
-  }
-}
-
-/**
  * Configure a default set of User profile fields.
  */
 function springboard_admin_config_profile($form, $form_state) {
@@ -1748,331 +1719,339 @@ function springboard_admin_config_profile($form, $form_state) {
  * including an optional hook to allow other modules to add.
  */
 function _springboard_default_user_profile($mode = 'commerce') {
-  $profile_fields = array();
-  $profile_fields[] = array(
-    'label' => t('First name'),
-    'field_name' => 'sbp_first_name',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Last name'),
-    'field_name' => 'sbp_last_name',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Address'),
-    'field_name' => 'sbp_address',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Address Line 2'),
-    'field_name' => 'sbp_address_line_2',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('City'),
-    'field_name' => 'sbp_city',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-  );
-  if ($mode == 'ubercart' && module_exists('ubercart')) {
-    // Default options loaded from {uc_zones} On the assumption we are using Ubercart here.
-    // Load State/Province options from {uc_zones}, UC default is zone codes for US & Canada.
-    $countries_set = fundraiser_ubercart_get_countries();
-    $zones = '';
-    foreach ($countries_set->zones as $zone) {
-      $zones[$zone->zone_id] = $zone->zone_name;
-    }
-    $profile_fields[] = array(
-      'label' => t('State/Province'),
-      'field_name' => 'sbp_state',
-      'type' => 'list_text',
-      'widget' => array(
-        'type' => 'options_select',
-      ),
-      'settings' => array('allowed_values' => $zones),
-    );
-  }
-  elseif ($mode == 'commerce' && module_exists('fundraiser_commerce')) {
-    // Commerce does not store countries in a database, it relies instead on locale.inc
-    $countries_set = fundraiser_commerce_get_countries();
-    $zones = '';
-    foreach ($countries_set->zones as $zone) {
-      $zones[$zone->zone_id] = $zone->zone_name;
-    }
-    // For Commerce or others for now.
-    $profile_fields[] = array(
-      'label' => t('State/Province'),
-      'field_name' => 'sbp_state',
-      'type' => 'list_text',
-      'widget' => array(
-        'type' => 'options_select',
-      ),
-      'settings' => array('allowed_values' => $zones),
-    );
+  if ($cache = cache_get('springboard_default_user_profile')) {
+    $profile_fields = $cache->data;
   }
   else {
-    // For Commerce or others for now.
+    $profile_fields = array();
     $profile_fields[] = array(
-      'label' => t('State/Province'),
-      'field_name' => 'sbp_state',
+      'label' => t('First name'),
+      'field_name' => 'sbp_first_name',
       'type' => 'text',
       'widget' => array(
         'type' => 'text_textfield',
       ),
     );
-  }
-  $profile_fields[] = array(
-    'label' => t('Postal Code'),
-    'field_name' => 'sbp_zip',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-  );
-  if ($mode == 'ubercart' && module_exists('ubercart')) {
-    // Default options loaded from {uc_zones} On the assumption we are using Ubercart here.
-    // Load State/Province options from {uc_zones}, UC default is zone codes for US & Canada.
-    $countries_set = fundraiser_ubercart_get_countries();
-    $countries = '';
-    foreach ($countries_set->countries as $country) {
-      $countries[$country->country_id] = $country->country_name;
-    }
     $profile_fields[] = array(
-      'label' => t('Country'),
-      'field_name' => 'sbp_country',
-      'type' => 'list_text',
-      'widget' => array(
-        'type' => 'options_select',
-      ),
-      'settings' => array('allowed_values' => $countries),
-    );
-  }
-  elseif ($mode == 'commerce' && module_exists('fundraiser_commerce')) {
-    // Commerce does not store countries in a database, it relies instead on locale.inc
-    $countries_set = fundraiser_commerce_get_countries();
-    $countries = '';
-    foreach ($countries_set->countries as $country) {
-      $countries[$country->country_id] = $country->country_name;
-    }
-    // For Commerce or others for now.
-    $profile_fields[] = array(
-      'label' => t('Country'),
-      'field_name' => 'sbp_country',
-      'type' => 'list_text',
-      'widget' => array(
-        'type' => 'options_select',
-      ),
-      'settings' => array('allowed_values' => $countries),
-    );
-  }
-  else {
-    $profile_fields[] = array(
-      'label' => t('Country'),
-      'field_name' => 'sbp_country',
+      'label' => t('Last name'),
+      'field_name' => 'sbp_last_name',
       'type' => 'text',
       'widget' => array(
         'type' => 'text_textfield',
       ),
     );
+    $profile_fields[] = array(
+      'label' => t('Address'),
+      'field_name' => 'sbp_address',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Address Line 2'),
+      'field_name' => 'sbp_address_line_2',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('City'),
+      'field_name' => 'sbp_city',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    if ($mode == 'ubercart' && module_exists('ubercart')) {
+      // Default options loaded from {uc_zones} On the assumption we are using Ubercart here.
+      // Load State/Province options from {uc_zones}, UC default is zone codes for US & Canada.
+      $countries_set = fundraiser_ubercart_get_countries();
+      $zones = '';
+      foreach ($countries_set->zones as $zone) {
+        $zones[$zone->zone_id] = $zone->zone_name;
+      }
+      $profile_fields[] = array(
+        'label' => t('State/Province'),
+        'field_name' => 'sbp_state',
+        'type' => 'list_text',
+        'widget' => array(
+          'type' => 'options_select',
+        ),
+        'settings' => array('allowed_values' => $zones),
+      );
+    }
+    elseif ($mode == 'commerce' && module_exists('fundraiser_commerce')) {
+      // Commerce does not store countries in a database, it relies instead on locale.inc
+      $countries_set = fundraiser_commerce_get_countries();
+      $zones = '';
+      foreach ($countries_set->zones as $zone) {
+        $zones[$zone->zone_id] = $zone->zone_name;
+      }
+      // For Commerce or others for now.
+      $profile_fields[] = array(
+        'label' => t('State/Province'),
+        'field_name' => 'sbp_state',
+        'type' => 'list_text',
+        'widget' => array(
+          'type' => 'options_select',
+        ),
+        'settings' => array('allowed_values' => $zones),
+      );
+    }
+    else {
+      // For Commerce or others for now.
+      $profile_fields[] = array(
+        'label' => t('State/Province'),
+        'field_name' => 'sbp_state',
+        'type' => 'text',
+        'widget' => array(
+          'type' => 'text_textfield',
+        ),
+      );
+    }
+    $profile_fields[] = array(
+      'label' => t('Postal Code'),
+      'field_name' => 'sbp_zip',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+    );
+    if ($mode == 'ubercart' && module_exists('ubercart')) {
+      // Default options loaded from {uc_zones} On the assumption we are using Ubercart here.
+      // Load State/Province options from {uc_zones}, UC default is zone codes for US & Canada.
+      $countries_set = fundraiser_ubercart_get_countries();
+      $countries = '';
+      foreach ($countries_set->countries as $country) {
+        $countries[$country->country_id] = $country->country_name;
+      }
+      $profile_fields[] = array(
+        'label' => t('Country'),
+        'field_name' => 'sbp_country',
+        'type' => 'list_text',
+        'widget' => array(
+          'type' => 'options_select',
+        ),
+        'settings' => array('allowed_values' => $countries),
+      );
+    }
+    elseif ($mode == 'commerce' && module_exists('fundraiser_commerce')) {
+      // Commerce does not store countries in a database, it relies instead on locale.inc
+      $countries_set = fundraiser_commerce_get_countries();
+      $countries = '';
+      foreach ($countries_set->countries as $country) {
+        $countries[$country->country_id] = $country->country_name;
+      }
+      // For Commerce or others for now.
+      $profile_fields[] = array(
+        'label' => t('Country'),
+        'field_name' => 'sbp_country',
+        'type' => 'list_text',
+        'widget' => array(
+          'type' => 'options_select',
+        ),
+        'settings' => array('allowed_values' => $countries),
+      );
+    }
+    else {
+      $profile_fields[] = array(
+        'label' => t('Country'),
+        'field_name' => 'sbp_country',
+        'type' => 'text',
+        'widget' => array(
+          'type' => 'text_textfield',
+        ),
+      );
+    }
+    $profile_fields[] = array(
+      'label' => t('Campaign ID'),
+      'field_name' => 'sbp_cid',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Market Source'),
+      'field_name' => 'sbp_ms',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Referrer'),
+      'field_name' => 'sbp_referrer',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textarea',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Initial Referrer'),
+      'field_name' => 'sbp_initial_referrer',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textarea',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Search Engine'),
+      'field_name' => 'sbp_search_engine',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Search String'),
+      'field_name' => 'sbp_search_string',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('User Agent'),
+      'field_name' => 'sbp_user_agent',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Salesforce Account Id'),
+      'field_name' => 'sbp_salesforce_account_id',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Salesforce Contact Id'),
+      'field_name' => 'sbp_salesforce_contact_id',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Device Type'),
+      'field_name' => 'sbp_device_type',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Device Name'),
+      'field_name' => 'sbp_device_name',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Device OS'),
+      'field_name' => 'sbp_device_os',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    $profile_fields[] = array(
+      'label' => t('Device Browser'),
+      'field_name' => 'sbp_device_browser',
+      'type' => 'text',
+      'widget' => array(
+        'type' => 'text_textfield',
+      ),
+      'display' => array(
+        'default' => array(
+          'label' => 'hidden',
+          'type' => 'hidden',
+        ),
+      ),
+    );
+    drupal_alter('springboard_default_user_profile', $profile_fields, $mode);
+    cache_set('springboard_default_user_profile', $profile_fields, 'cache');
   }
-  $profile_fields[] = array(
-    'label' => t('Campaign ID'),
-    'field_name' => 'sbp_cid',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Market Source'),
-    'field_name' => 'sbp_ms',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Referrer'),
-    'field_name' => 'sbp_referrer',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textarea',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Initial Referrer'),
-    'field_name' => 'sbp_initial_referrer',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textarea',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Search Engine'),
-    'field_name' => 'sbp_search_engine',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Search String'),
-    'field_name' => 'sbp_search_string',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('User Agent'),
-    'field_name' => 'sbp_user_agent',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Salesforce Account Id'),
-    'field_name' => 'sbp_salesforce_account_id',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Salesforce Contact Id'),
-    'field_name' => 'sbp_salesforce_contact_id',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Device Type'),
-    'field_name' => 'sbp_device_type',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Device Name'),
-    'field_name' => 'sbp_device_name',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Device OS'),
-    'field_name' => 'sbp_device_os',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  $profile_fields[] = array(
-    'label' => t('Device Browser'),
-    'field_name' => 'sbp_device_browser',
-    'type' => 'text',
-    'widget' => array(
-      'type' => 'text_textfield',
-    ),
-    'display' => array(
-      'default' => array(
-        'label' => 'hidden',
-        'type' => 'hidden',
-      ),
-    ),
-  );
-  drupal_alter('springboard_default_user_profile', $profile_fields, $mode);
+
+
   return $profile_fields;
 }
 

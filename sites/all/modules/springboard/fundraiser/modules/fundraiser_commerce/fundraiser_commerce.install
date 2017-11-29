@@ -87,6 +87,25 @@ function fundraiser_commerce_schema() {
 }
 
 /**
+ * Implements hook_schema_alter().
+ */
+function fundraiser_commerce_schema_alter(&$schema) {
+  // Add an index on {commerce_payment_transaction} remote_id.
+  if (isset($schema['commerce_payment_transaction'])) {
+    $schema['commerce_payment_transaction']['indexes'] = array(
+      'remote_id' => array('remote_id'),
+    );
+  }
+}
+
+/**
+ * Implements hook_install().
+ */
+function fundraiser_commerce_install() {
+  fundraiser_commerce_add_remote_id_index();
+}
+
+/**
  * Implements hook_uninstall().
  */
 function fundraiser_commerce_uninstall() {
@@ -186,3 +205,24 @@ function fundraiser_commerce_update_7004() {
   }
 }
 
+/**
+ * Add an index on {commerce_payment_transaction} remote_id.
+ */
+function fundraiser_commerce_update_7005() {
+  fundraiser_commerce_add_remote_id_index();
+}
+
+/**
+ * Adds index to {commerce_payment_transaction} remote_id if not present.
+ */
+function fundraiser_commerce_add_remote_id_index() {
+  if (db_table_exists('commerce_payment_transaction')) {
+    if (db_field_exists('commerce_payment_transaction', 'remote_id')) {
+      if (!db_index_exists('commerce_payment_transaction', 'remote_id')) {
+        db_add_index('commerce_payment_transaction', 'remote_id', array('remote_id'));
+        return TRUE;
+      }
+    }
+  }
+  return FALSE;
+}

@@ -215,7 +215,7 @@ function springboard_p2p_landing_field_default_field_instances() {
     'bundle' => 'p2p_campaign_landing',
     'default_value' => NULL,
     'deleted' => 0,
-    'description' => 'Choose nodes to reference from Peer to peer campaigns. (Typing bring up suggestions.)',
+    'description' => 'Choose nodes to reference from Peer to Peer campaigns. (Typing bring up suggestions.)',
     'display' => array(
       'default' => array(
         'label' => 'above',
@@ -298,7 +298,7 @@ function springboard_p2p_landing_field_default_field_instances() {
     'bundle' => 'p2p_campaign_landing',
     'default_value' => NULL,
     'deleted' => 0,
-    'description' => 'Choose nodes to reference from Peer to peer campaigns for the slideshow. (Typing bring up suggestions.)',
+    'description' => 'Choose nodes to reference from Peer to Peer campaigns for the slideshow. (Typing bring up suggestions.)',
     'display' => array(
       'default' => array(
         'label' => 'above',
@@ -340,8 +340,8 @@ function springboard_p2p_landing_field_default_field_instances() {
   // Included for use with string extractors like potx.
   t('Choose a Featured Type');
   t('Choose a block to reference. (Typing bring up suggestions.)');
-  t('Choose nodes to reference from Peer to peer campaigns for the slideshow. (Typing bring up suggestions.)');
-  t('Choose nodes to reference from Peer to peer campaigns. (Typing bring up suggestions.)');
+  t('Choose nodes to reference from Peer to Peer campaigns for the slideshow. (Typing bring up suggestions.)');
+  t('Choose nodes to reference from Peer to Peer campaigns. (Typing bring up suggestions.)');
   t('Featured Choose Blocks');
   t('Featured Personal Campaigns');
   t('Featured Title');

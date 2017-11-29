@@ -26,6 +26,7 @@ function _sba_message_action_set_vars() {
     'webform_user' => 1,
     'webform_user_default_fields' => array(
       'sbp_salutation' => 'sbp_salutation',
+      //'sbp_salutation_standard' => 'sbp_salutation_standard',
       'sbp_first_name' => 'sbp_first_name',
       'sbp_last_name' => 'sbp_last_name',
       'mail' => 'mail',

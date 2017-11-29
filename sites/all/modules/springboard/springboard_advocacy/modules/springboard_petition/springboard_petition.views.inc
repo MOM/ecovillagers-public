@@ -112,7 +112,7 @@ function springboard_petition_views_data() {
       'handler' => 'views_handler_sort',
     ),
   );
-    $data['springboard_petition_opt_in']['created'] = array(
+  $data['springboard_petition_opt_in']['created'] = array(
     'title' => t('Signature opt-in submission creation time'),
     'help' => t('Webform Submission timestamp.'),
     'field' => array(
@@ -124,6 +124,27 @@ function springboard_petition_views_data() {
     ),
     'sort' => array(
       'handler' => 'views_handler_sort_date',
+    ),
+  );
+  $data['springboard_petition_opt_in']['first_name'] = array(
+    'title' => t('Petition user first name'),
+    'help' => t('Signer\'s first name.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['springboard_petition_opt_in']['last_name'] = array(
+    'title' => t('Petition user last name'),
+    'help' => t('Signer\'s last name.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
+    ),
+  );
+  $data['springboard_petition_opt_in']['state'] = array(
+    'title' => t('Petition user state'),
+    'help' => t('Signer\'s state.'),
+    'field' => array(
+      'handler' => 'views_handler_field',
     ),
   );
 
@@ -144,7 +165,7 @@ function springboard_petition_views_default_views() {
   $view->core = 7;
   $view->api_version = '3.0';
   $view->disabled = FALSE; /* Edit this to true to make a default view disabled initially */
-
+  
   /* Display: Master */
   $handler = $view->new_display('default', 'Master', 'default');
   $handler->display->display_options['title'] = 'Recent Petition Signatures';
@@ -189,25 +210,19 @@ function springboard_petition_views_default_views() {
       'empty_column' => 0,
     ),
   );
-  /* Relationship: Springboard Petitions: Signature opt-in user */
-  $handler->display->display_options['relationships']['uid']['id'] = 'uid';
-  $handler->display->display_options['relationships']['uid']['table'] = 'springboard_petition_opt_in';
-  $handler->display->display_options['relationships']['uid']['field'] = 'uid';
-  /* Field: User: First name */
-  $handler->display->display_options['fields']['sbp_first_name']['id'] = 'sbp_first_name';
-  $handler->display->display_options['fields']['sbp_first_name']['table'] = 'field_data_sbp_first_name';
-  $handler->display->display_options['fields']['sbp_first_name']['field'] = 'sbp_first_name';
-  $handler->display->display_options['fields']['sbp_first_name']['relationship'] = 'uid';
-  $handler->display->display_options['fields']['sbp_first_name']['exclude'] = TRUE;
-  /* Field: User: Last name */
-  $handler->display->display_options['fields']['sbp_last_name']['id'] = 'sbp_last_name';
-  $handler->display->display_options['fields']['sbp_last_name']['table'] = 'field_data_sbp_last_name';
-  $handler->display->display_options['fields']['sbp_last_name']['field'] = 'sbp_last_name';
-  $handler->display->display_options['fields']['sbp_last_name']['relationship'] = 'uid';
-  $handler->display->display_options['fields']['sbp_last_name']['label'] = '';
-  $handler->display->display_options['fields']['sbp_last_name']['alter']['alter_text'] = TRUE;
-  $handler->display->display_options['fields']['sbp_last_name']['alter']['text'] = '[sbp_first_name] [sbp_last_name]';
-  $handler->display->display_options['fields']['sbp_last_name']['element_label_colon'] = FALSE;
+  /* Field: Springboard Petitions: Petition user first name */
+  $handler->display->display_options['fields']['first_name']['id'] = 'first_name';
+  $handler->display->display_options['fields']['first_name']['table'] = 'springboard_petition_opt_in';
+  $handler->display->display_options['fields']['first_name']['field'] = 'first_name';
+  $handler->display->display_options['fields']['first_name']['exclude'] = TRUE;
+  /* Field: Springboard Petitions: Petition user last name */
+  $handler->display->display_options['fields']['last_name']['id'] = 'last_name';
+  $handler->display->display_options['fields']['last_name']['table'] = 'springboard_petition_opt_in';
+  $handler->display->display_options['fields']['last_name']['field'] = 'last_name';
+  $handler->display->display_options['fields']['last_name']['label'] = '';
+  $handler->display->display_options['fields']['last_name']['alter']['alter_text'] = TRUE;
+  $handler->display->display_options['fields']['last_name']['alter']['text'] = '[first_name] [last_name]';
+  $handler->display->display_options['fields']['last_name']['element_label_colon'] = FALSE;
   /* Field: Springboard Petitions: Signature opt-in submission creation time */
   $handler->display->display_options['fields']['created']['id'] = 'created';
   $handler->display->display_options['fields']['created']['table'] = 'springboard_petition_opt_in';
@@ -235,7 +250,7 @@ function springboard_petition_views_default_views() {
   $handler->display->display_options['filters']['opt_in']['table'] = 'springboard_petition_opt_in';
   $handler->display->display_options['filters']['opt_in']['field'] = 'opt_in';
   $handler->display->display_options['filters']['opt_in']['value'] = '1';
-
+  
   /* Display: Block */
   $handler = $view->new_display('block', 'Block', 'block');
 

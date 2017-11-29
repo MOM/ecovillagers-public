@@ -111,9 +111,9 @@ function springboard_health_menu_local_tasks_alter(&$data, $router_item, $root_p
  * Allow selection of default database and default tables to monitor
  */
 function springboard_health_admin_settings() {
-  
+
   $form = array();
-  
+
   $default = array(
     'salesforce_log_batch' => 'salesforce_log_batch',
     'salesforce_log_item' => 'salesforce_log_item',

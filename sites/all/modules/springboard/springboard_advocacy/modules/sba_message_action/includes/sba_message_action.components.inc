@@ -31,7 +31,7 @@ function sba_message_action_insert_components($node) {
     'extra' => array(
       'options_source' => 'united_states',
       // May have to remove some.
-      'aslist' => 'Y',
+      'aslist' => '1',
       'multiple' => 0,
     ),
   );
@@ -137,6 +137,55 @@ function sba_message_action_insert_components($node) {
       }
     }
   }
+
+  // Add the "Alternate Salutation" component too.
+  if (!isset($node->map)) {  // But not if we're cloning a legacy form.
+    sba_message_action_insert_sba_salutation_alternate($node);
+  }
+}
+
+/**
+ * Insert "Alternate Salutation" components on node insert and sometimes on update.
+ *
+ * Called from sba_message_action_insert_components() and sba_message_action_node_update();
+ *
+ * @param $node
+ */
+function sba_message_action_insert_sba_salutation_alternate($node) {
+  // No need to add it if it already exists.
+  $component_hierarchy = webform_user_parse_components($node->nid, $node->webform['components']);
+  if (empty($component_hierarchy['sba_salutation_alternate'])) {
+    $weight = -6;
+    // Base weight on the "Salutation" field if present.
+    if (!empty($component_hierarchy['sbp_salutation'])) {
+      foreach ($node->webform['components'] as $component) {
+        if ($component['form_key'] == 'sbp_salutation') {
+          $weight = $component['weight'];
+          // We're better off scooting Salutation up, because it's usually the first form element.
+          $component['weight']--;
+          webform_component_update($component);
+          break;
+        }
+      }
+    }
+    $field = array(
+      'nid' => $node->nid,
+      'form_key' => 'sba_salutation_alternate',
+      'pid' => 0,
+      'name' => t('Alternate Salutation'),
+      'type' => 'select',
+      'mandatory' => 0,
+      'weight' => $weight,
+      'email' => 1,
+      'extra' => array(
+        'items' => "Mr|Mr\nMs|Ms\nMiss|Miss\nMrs|Mrs\nDr|Dr",
+        'description' => t("Most elected officials’ constituent email systems accept a very limited set of salutations. Please select the one you would most prefer."),
+        'aslist' => '1',
+        'multiple' => 0,
+      ),
+    );
+    webform_component_insert($field);
+  }
 }
 
 /**
@@ -211,6 +260,7 @@ function sba_message_action_component_overview_lock(&$form) {
 function sba_message_action_locked_fields() {
   $locked_fields = array(
     'sbp_salutation',
+    'sba_salutation_alternate',
     'sbp_first_name',
     'sbp_last_name',
     'mail',
@@ -244,10 +294,28 @@ function sba_message_action_form_webform_component_delete_form_alter(&$form, &$f
  * Implements hook_form_webform_component_edit_form_alter().
  *
  * Disable form-key editing and un-mandatory of certain profile fields.
+ *
+ *  and post notice
+ * when editing sbp_salutation.
  */
 function sba_message_action_form_webform_component_edit_form_alter(&$form, &$form_state, $form_id) {
   $node = node_load($form['nid']['#value']);
   if ($node->type == 'sba_message_action') {
     sba_message_action_component_edit_lock($form);
+
+    // Disable options editing on sba_salutation_alternate component.
+    if ($form['form_key']['#default_value'] == 'sba_salutation_alternate') {
+      $form['extra']['items']['#disabled'] = TRUE;
+    }
+    // Provide a notice on sbp_salutation if its items won't be rendered.
+    if ($form['form_key']['#default_value'] == 'sbp_salutation') {
+      $node_wrapper = entity_metadata_wrapper('node', $node);
+      if (!$node_wrapper->field_sba_message_salutations->value()) {
+        $component_hierarchy = webform_user_parse_components($node->nid, $node->webform['components']);
+        if (!empty($component_hierarchy['sba_salutation_alternate'])) {
+          drupal_set_message(t("Note that because User-Preferred Salutations are currently disabled on this Message Action, the Options below will not be shown to site visitors. A limited set will be given of the salutations accepted by most elected officials’ constituent email systems."), 'warning');
+        }
+      }
+    }
   }
 }

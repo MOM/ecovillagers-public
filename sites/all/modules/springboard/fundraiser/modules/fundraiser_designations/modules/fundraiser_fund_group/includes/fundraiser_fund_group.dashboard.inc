@@ -55,7 +55,7 @@ function fundraiser_fund_group_dashboard($node, $arg = NULL) {
   );
 
   // Display/hide create link.
-  if ((user_access('edit own fundraiser_fund_group_action content') && $user->uid == $node->uid) || user_access('edit any fundraiser_fund_group_action content')) {
+  if (fundraiser_fund_group_access('create') || fundraiser_fund_group_access('edit')) {
     $sections['fundraiser_fund_group_node']['create_link'] = array('title' => t('Create a new group'), 'href' => 'node/' . arg(1) . '/designations/add/fundraiser_fund_group_default');
   }
 

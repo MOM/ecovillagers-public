@@ -883,13 +883,6 @@ function fundraiser_designations_form_webform_client_form_alter(&$form, &$form_s
 
       // Check addon status.
       _fundraiser_designations_addon_status($form, $component_hierarchy);
-
-      // Add the dynamic gift strings submit hook.
-      if (module_exists('dynamic_gift_strings')) {
-        if (isset($_SESSION['dynamic_gift_string_values'][$form['#node']->nid]) && is_array($_SESSION['dynamic_gift_string_values'][$form['#node']->nid])) {
-          $form['#submit'][] = 'dynamic_gift_strings_submit';
-        }
-      }
     }
 
     // Remove some fields on the webform result edit form.
@@ -1051,41 +1044,117 @@ function fundraiser_designations_client_form_validate($form, &$form_state) {
     form_set_error('amount', t('Your cart is empty.'));
   }
 
+  $recurs = FALSE;
   if (!empty($component_hierarchy['recurs_monthly'])) {
     $recurs_component = $component_hierarchy['recurs_monthly'];
     $recurs = _fundraiser_designations_find_field_form_state($form_state['values'], $recurs_component);
   }
+
+  // Validate the minimum amount.
+  fundraiser_designations_validate_client_form_minimum($form, $total, $node, $recurs);
+
+  // Validate that the cart values are legit for this particular form.
+  $container = $component_hierarchy['fd_cart_container'];
+  $cart = _fundraiser_designations_find_field_form_state($form_state['values'], $container);
+  if (!empty($cart['fd_cart']['cart_body']['fund_catcher'])) {
+    $fund_field = $cart['fd_cart']['cart_body']['fund_catcher'];
+    fundraiser_designations_validate_client_form_fund_catcher($form, $fund_field, $node, $recurs);
+  }
+}
+
+
+/**
+ * Validate the values in the fund catcher to prevent client-side modifications.
+ *
+ * @param array $form
+ *   The client form.
+ * @param array $fund_field
+ *   The fundcatcher component.
+ * @param object $node
+ *   The webform node.
+ * @param mixed $recurs
+ *   The recurring value for the submission.
+ */
+function fundraiser_designations_validate_client_form_fund_catcher($form, $fund_field, $node, $recurs) {
+  $funds = json_decode(str_replace('&quot;', '"', $fund_field));
+  $has_fund = FALSE;
+  foreach ($funds as $fund) {
+
+    // Don't allow negative amounts.
+    if ($fund->fundAmount < 0) {
+      form_set_error('', t("Negative fund amounts are not allowed in the cart."));
+      watchdog('fundraiser_designations', 'A negative amount was found in an attempted cart submission. node: %nid. | @fund', array(
+        '%nid' => $node->nid,
+        '@fund' => check_plain(print_r($fund, TRUE)),
+      ));
+    }
+
+    // Check the validity of the add on donation.
+    if (!empty($fund->addonId)) {
+      if (empty($node->fd_addon)) {
+        form_set_error('', t("An invalid item was found in the cart."));
+        watchdog('fundraiser_designations', 'An invalid add on was found in an attempted cart submission. node: %nid. | @fund', array(
+          '%nid' => $node->nid,
+          '@fund' => check_plain(print_r($fund, TRUE)),
+        ));
+      }
+      elseif ($fund->addonId != $node->fd_addon['pid']) {
+        form_set_error('', t("An invalid item was found in the cart."));
+        watchdog('fundraiser_designations', 'An invalid add on was found in an attempted cart submission. node: %nid. | @fund', array(
+          '%nid' => $node->nid,
+          '@fund' => check_plain(print_r($fund, TRUE)),
+        ));
+      }
+    }
+
+    // Make sure cart is not empty.
+    if (!empty($fund->fundId)) {
+      $has_fund = TRUE;
+
+      // Verify the fund_id is a designation product.
+      $existing = db_query("SELECT product_id FROM commerce_product WHERE type = 'fundraiser_designation' AND product_id = :product_id", array(':product_id' => $fund->fundId))->fetchField();
+      if (empty($existing)) {
+        form_set_error('', t("An invalid item was found in the cart. Empty your cart and try again."));
+        watchdog('fundraiser_designations', 'An invalid fund id was found in an attempted cart submission. node: %nid. | @fund', array(
+          '%nid' => $node->nid,
+          '@fund' => check_plain(print_r($fund, TRUE)),
+        ));
+      }
+    }
+  }
+
+  if (!$has_fund) {
+    form_set_error('amount', t("You haven't selected a fund."));
+  }
+}
+
+/**
+ * Validate the minumum amount.
+ *
+ * @param $form
+ * @param $total
+ * @param $node
+ * @param bool $recurs
+ */
+function fundraiser_designations_validate_client_form_minimum($form, $total, $node, $recurs = FALSE) {
   if ((!empty($recurs['recurs']) && !empty($node->recurring_dual_ask_amounts)) || $recurs == 'recurs') {
     $minimum = isset($node->recurring_minimum_donation_amount) ? $node->recurring_minimum_donation_amount : NULL;
   }
   else {
     $minimum = isset($node->minimum_donation_amount) ? $node->minimum_donation_amount : NULL;
   }
-
   if (!empty($minimum)) {
     $this_amount = empty($total) ? 0 : floatval($total);
     if ($this_amount < floatval($minimum)) {
       form_set_error('amount', t('Donation amount is less than minimum required donation amount.'));
     }
   }
-  // Make sure there is not just an add-on conation in the cart.
-  $container = $component_hierarchy['fd_cart_container'];
-  $cart = _fundraiser_designations_find_field_form_state($form_state['values'], $container);
-  if (!empty($cart['fd_cart']['cart_body']['fund_catcher'])) {
-    $fund_field = $cart['fd_cart']['cart_body']['fund_catcher'];
-    $funds = json_decode(str_replace('&quot;', '"', $fund_field));
-    $has_fund = FALSE;
-    foreach ($funds as $fund) {
-      if (!empty($fund->fundId)) {
-        $has_fund = TRUE;
-      }
-    }
-    if (!$has_fund) {
-      form_set_error('amount', t("You haven't selected a fund."));
-    }
-  }
 }
 
+
+/**
+ * Submit the client form.
+ */
 function fundraiser_designations_client_form_submit($form, &$form_state) {
   $cookie = 'designations_' . $form['#node']->nid;
   if (isset($_COOKIE[$cookie])) {
@@ -1244,19 +1313,19 @@ function fundraiser_designations_springboard_admin_admin_menu_items_alter(&$item
   $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/settings/config/designations'] = array(
     'link_path' => 'admin/springboard/settings/config/designations',
     'link_title' => t('Fundraiser Designations'),
+    'attributes' => array('sb_link_group' => t('Fundraising')),
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 20,
   );
 
   $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/taxonomy/fd_designation_categories'] = array(
     'link_path' => 'admin/springboard/taxonomy/fd_designation_categories',
     'link_title' => t('Fundraiser Designation Categories'),
+    'attributes' => array('sb_link_group' => t('Fundraising')),
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 21,
   );
 }
 /**
@@ -1402,15 +1471,13 @@ function fundraiser_designations_clone_fund_groups($node) {
 function fundraiser_designations_clone_addons($node) {
   // Clone the add-on.
   $record = array();
-  $addons = db_query('SELECT * FROM {fundraiser_fund_group_addon} WHERE nid = :nid', array(':nid' => $node->clone_from_original_nid));
-  if ($addons) {
-    foreach ($addons as $addon) {
-      $record['nid'] = $node->nid;
-      $record['pid'] = $addon->pid;
-      $record['status'] = $addon->status;
-      $record['status'] = $addon->cart_text;
-      $record['price_set'] = unserialize($addon->price_set);
-    }
+  $addon = db_query('SELECT * FROM {fundraiser_fund_group_addon} WHERE nid = :nid', array(':nid' => $node->clone_from_original_nid))->fetchObject();
+  if (!empty($addon)) {
+    $record['nid'] = $node->nid;
+    $record['pid'] = $addon->pid;
+    $record['status'] = $addon->status;
+    $record['cart_text'] = $addon->cart_text;
+    $record['price_set'] = unserialize($addon->price_set);
     drupal_write_record('fundraiser_fund_group_addon', $record);
   }
 }
@@ -1471,6 +1538,26 @@ function _fundraiser_designations_find_field_form_state($form_state_values, $tre
     }
     else {
       return $form_state_values[$v];
+    }
+  }
+}
+
+/**
+ * Implements hook_salesforce_mapping_confirm_entity_for_queue
+ *
+ * Stop designation line items from syncing till the order has charged
+ */
+function fundraiser_designations_salesforce_mapping_confirm_entity_for_queue($entity, $entity_type, $op) {
+  // Only bother with commerce entities
+  if ($entity_type != 'commerce_line_item') {
+    return;
+  }
+
+  $line_item = $entity;
+  if ($line_item->type == 'designation' && !empty($line_item->order_id)) {
+    $order = commerce_order_load($line_item->order_id);
+    if (empty($order->data['commerce_payment_order_paid_in_full_invoked'])) {
+      return FALSE;
     }
   }
 }

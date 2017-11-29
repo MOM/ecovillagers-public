@@ -1,9 +1,14 @@
-name = Secure Pre-populate
-description = Uses an encrypted url string to pre-populate form fields.
+name = Secure Autofill
+description = Uses an encrypted url string to pre-populate form fields without bootstrapping Drupal.
 core = 7.x
 package = Webform Extra
 dependencies[] = webform
+dependencies[] = js
 version = 7.x-4.x-dev
-configure = 'admin/config/system/secure-prepopulate'
+configure = 'admin/config/system/secure-autofill'
 
 files[] = tests/secure_prepopulate.unit.test
+files[] = tests/form_submit.test
+files[] = tests/dynamic_gift_strings.test
+files[] = tests/gift_string.test
+

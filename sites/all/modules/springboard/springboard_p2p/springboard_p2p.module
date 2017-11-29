@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * Code for the Springboard peer to peer feature.
+ * Code for the Springboard Peer to Peer feature.
  */
 
 include_once 'springboard_p2p.features.inc';
@@ -135,34 +135,78 @@ function springboard_p2p_menu() {
  * Implements hook_springboard_admin_admin_menu_items_alter().
  */
 function springboard_p2p_springboard_admin_admin_menu_items_alter(&$items) {
-  // Top Level: P2P.
+  // Top Level: Peer to Peer
   $items['admin/springboard/p2p'] = array(
     'link_path' => 'admin/springboard/p2p',
-    'link_title' => t('P2P'),
+    'link_title' => t('Peer to Peer'),
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 6,
+    'weight' => -70,
     '_children' => array(),
   );
-  // P2P > Dashboard.
-  $items['admin/springboard/p2p']['_children']['dashboard'] = array(
+  // Peer to Peer > Dashboard
+  $items['admin/springboard/p2p']['_children']['admin/springboard/p2p'] = array(
     'link_path' => 'admin/springboard/p2p',
-    'link_title' => 'Dashboard',
+    'link_title' => 'Peer to Peer Dashboard',
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 0,
+    'weight' => -100,
   );
-
-  // P2P > Settings.
-  $items['admin/springboard/p2p']['_children']['settings'] = array(
-    'link_path' => 'admin/springboard/p2p/settings',
-    'link_title' => 'Settings',
+  // Peer to Peer > Campaigns
+  $items['admin/springboard/p2p']['_children']['admin/springboard/p2p/campaign'] = array(
+    'link_path' => 'admin/springboard/p2p/campaign',
+    'link_title' => 'Campaigns',
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 0,
+    'weight' => -90,
+  );
+  // Peer to Peer > Personal Campaigns
+  $items['admin/springboard/p2p']['_children']['admin/springboard/p2p/personal-campaign'] = array(
+    'link_path' => 'admin/springboard/p2p/personal-campaigns',
+    'link_title' => 'Personal Campaigns',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => -80,
+  );
+  // Peer to Peer > Users Awaiting Approval
+  $items['admin/springboard/p2p']['_children']['admin/springboard/p2p/approval/user'] = array(
+    'link_path' => 'admin/springboard/p2p/approval/user',
+    'link_title' => 'Users Awaiting Approval',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => -70,
+  );
+  // Peer to Peer > Peer to Peer Donation Forms
+  $items['admin/springboard/p2p']['_children']['admin/springboard/donation-forms/p2p_donation_form'] = array(
+    'link_path' => 'admin/springboard/donation-forms/p2p_donation_form',
+    'link_title' => 'Peer to Peer Donation Forms',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => -60,
+  );
+  // Peer to Peer > Landing Pages
+  $items['admin/springboard/p2p']['_children']['admin/springboard/p2p/landing-pages'] = array(
+    'link_path' => 'admin/springboard/p2p/landing-pages',
+    'link_title' => 'Landing Pages',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => -50,
+  );
+  // Peer to Peer > Categories
+  $items['admin/springboard/p2p']['_children']['admin/springboard/p2p/category'] = array(
+    'link_path' => 'admin/springboard/p2p/category',
+    'link_title' => 'Categories',
+    'menu_name' => 'springboard_admin_menu',
+    'expanded' => 1,
+    'customized' => 1,
+    'weight' => -40,
   );
 }
 
@@ -1680,7 +1724,7 @@ function springboard_p2p_validate_email_as_username($mail) {
   if (strpos($mail, '  ') !== FALSE) {
     return t('The e-mail address cannot contain multiple spaces in a row.');
   }
-  if (preg_match('/[^\x{80}-\x{F7} a-z0-9@_.\'-+]/i', $mail)) {
+  if (preg_match('/[^\x{80}-\x{F7} a-z0-9@_.\'-]/i', $mail)) {
     return t('The e-mail address contains an illegal character.');
   }
   // Non-printable ISO-8859-1 + NBSP.
@@ -1719,7 +1763,7 @@ function springboard_p2p_fundraiser_donation_post_create($donation) {
   // Check to see if donation is being made to a personal campaign.
   // An empty sid (value of zero) indicates this is a recurring donation.
   if (!empty($donation->sid) && isset($_GET['p2p_pcid']) && is_numeric($_GET['p2p_pcid'])) {
-    // Add the peer to peer personal campaign id to the donation
+    // Add the Peer to Peer personal campaign id to the donation
     // object so that it can be utilized downstream.
     $donation->p2p_pcid = $_GET['p2p_pcid'];
   }
@@ -2054,13 +2098,13 @@ function _springboard_p2p_personal_after_build($form, &$form_state) {
 }
 
 /**
- * Implements hook_webform_submission_update().
+ * Implements hook_webform_user_assign_submission().
  *
  * Update the personal campaign action record if one exists.
  * This happens when webform_user adds a uid to the submission after creating
  * a new user.
  */
-function springboard_p2p_webform_submission_update($node, $submission) {
+function springboard_p2p_webform_user_assign_submission($node, $submission) {
   if (isset($submission->uid)) {
     $replacements = array(
       ':uid' => $submission->uid,
@@ -2949,4 +2993,21 @@ function springboard_p2p_add_state_and_country_ajax_value_validate(&$element, &$
   // Set the static allowed values to bypass list_allowed_values().
   $allowed_values[$field['field_id']] = array($element['#value'] => $element['#value']);
   drupal_static('list_allowed_values', $allowed_values);
+}
+
+
+/**
+ * Implements hook_form_form_id_alter().
+ */
+function springboard_p2p_form_springboard_p2p_existing_user_login_form_alter(&$form, &$form_state) {
+  if (module_exists('email_registration')) {
+    $form['name']['#title'] = variable_get('email_registration_login_with_username', TRUE)
+      ? t('E-mail or username')
+      : t('E-mail');
+    $form['name']['#description'] = variable_get('email_registration_login_with_username', TRUE)
+      ? t('Enter your e-mail address or username.')
+      : t('Enter your e-mail address.');
+    $form['name']['#element_validate'][] = 'email_registration_user_login_validate';
+    $form['pass']['#description'] = t('Enter the password that accompanies your e-mail.');
+  }
 }

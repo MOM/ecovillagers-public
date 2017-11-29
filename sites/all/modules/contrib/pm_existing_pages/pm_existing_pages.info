@@ -3,9 +3,3 @@ description = Provides the ability to override existing pages through Page manag
 core = 7.x
 dependencies[] = page_manager
 package = Chaos tool suite
-
-; Information added by drush on 2017-05-25
-version = "e0451cc00e9661aaa70feeef35cf79aaf39710f7-dev"
-project = "pm_existing_pages"
-datestamp = "1495705170"
-

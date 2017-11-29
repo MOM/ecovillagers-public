@@ -199,11 +199,59 @@ function springboard_petition_petition_submit($form, $form_state) {
     if (isset($submission_fields['sbp_rps_optin'])) {
       $opt_in = count($submission_fields['sbp_rps_optin']) ? TRUE : FALSE;
       if ($opt_in && !empty($account['uid'])) {
-        springboard_petition_log_opt_in($form['#node']->nid, $account['uid'], $opt_in, $sid);
+        $data = springboard_petition_submission_signer_data($submission_fields);
+        springboard_petition_log_opt_in($form['#node']->nid, $account['uid'], $data, $opt_in, $sid);
       }
     }
     springboard_advocacy_success($form['#node'], $account, $submission_fields, $sid);
   }
+}
+
+/**
+ * Helper function, extract user data from form submission for saving
+ * to opt-in table.
+ * @param array $submission
+ *   The webform submission array.
+ * @return array $data
+ *   An array populated with values to write to the opt-in table.
+ */
+function springboard_petition_submission_signer_data($submission) {
+  $signer_fields = array(
+    'sbp_first_name',
+    'sbp_last_name',
+    'mail',
+    'sbp_city',
+    'sbp_state',
+    'sbp_zip',
+  );
+  $data = array();
+  foreach ($signer_fields as $form_key) {
+    $data[$form_key] = isset($submission[$form_key]) && !empty($submission[$form_key]) ? $submission[$form_key] : NULL;
+  }
+  $state_full = NULL;
+  if (isset($data['sbp_state'])) {
+    $state_full = _springboard_petition_opt_in_full_state($data['sbp_state']);
+  }
+  $data['state_full'] = $state_full;
+  return $data;
+}
+
+
+/**
+ * Helper function to get full state name from an abbreviation.
+ * @param string $state_abbrev
+ *   The abbreviated state.
+ * @return string
+ *   The full state name.
+ */
+function _springboard_petition_opt_in_full_state($state_abbrev) {
+  $states = &drupal_static(__FUNCTION__);
+  if (!isset($states)) {
+    $field = field_info_field('sbp_state');
+    $allowed_values = list_allowed_values($field);
+    $states = $allowed_values;
+  }
+  return isset($states[$state_abbrev]) ? $states[$state_abbrev] : NULL;
 }
 
 /**
@@ -366,7 +414,7 @@ function _springboard_petition_is_recent_signers_enabled($nid) {
  * @param int $sid
  *   Submission ID.
  */
-function springboard_petition_log_opt_in($nid, $uid, $opt_in, $sid) {
+function springboard_petition_log_opt_in($nid, $uid, $data, $opt_in, $sid) {
   db_delete('springboard_petition_opt_in')
     ->condition('sid', $sid, '=')
     ->execute();
@@ -377,8 +425,17 @@ function springboard_petition_log_opt_in($nid, $uid, $opt_in, $sid) {
     'uid' => $uid,
     'opt_in' => $opt_in ? 1 : 0,
     'created' => time(),
+    'first_name' => $data['sbp_first_name'],
+    'last_name' => $data['sbp_last_name'],
+    'mail' => $data['mail'],
+    'city' => $data['sbp_city'],
+    'state' => $data['sbp_state'],
+    'state_full' => $data['state_full'],
+    'zip' => $data['sbp_zip'],
   );
   drupal_write_record('springboard_petition_opt_in', $record);
+
+  module_invoke_all('springboard_petition_opt_in', $nid, $uid, $sid);
 }
 
 /**

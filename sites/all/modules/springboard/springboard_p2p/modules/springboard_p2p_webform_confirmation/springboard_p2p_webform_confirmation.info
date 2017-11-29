@@ -1,7 +1,7 @@
-name = Springboard P2P Webform Confirmation
-description = P2P webform confirmation
+name = Springboard Peer to Peer Webform Confirmation
+description = Peer to Peer webform confirmation
 core = 7.x
-package = Springboard P2P
+package = Springboard Peer to Peer
 version = 7.x-4.0-dev
 project = springboard_p2p_webform_confirmation
 dependencies[] = ctools

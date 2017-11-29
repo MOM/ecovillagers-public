@@ -1,0 +1,276 @@
+<?php
+
+/**
+ * @file
+ * Provides integration with the RMS application.
+ */
+
+// Use the autoloaded Guzzle client and client exception handlers.
+use GuzzleHttp\Client as guzzle_client;
+use GuzzleHttp\Exception\ClientException as guzzle_client_exception;
+
+/**
+ * RMS Javascript file URL.
+ */
+define('MARKET_SOURCE_REMOTE_SCRIPT_URL', 'assets.gospringboard.io/v1/rmst.js');
+
+/**
+ * Production instance URL.
+ */
+define('MARKET_SOURCE_REMOTE_PROD_URL', 'https://rms.gospringboard.io');
+
+/**
+ * Staging instance URL.
+ */
+define('MARKET_SOURCE_REMOTE_STAGING_URL', 'https://rms-staging.gospringboard.io');
+
+/**
+ * Implements hook_init().
+ */
+function market_source_remote_init() {
+  // Jquery plugin to aid IE in using ajax cross domain requests.
+  drupal_add_js('https://cdnjs.cloudflare.com/ajax/libs/jquery-ajaxtransport-xdomainrequest/1.0.3/jquery.xdomainrequest.min.js',
+    [
+      'type' => 'external',
+      'group' => JS_LIBRARY
+    ]
+  );
+
+  // Add settings to the js variables.
+  drupal_add_js([
+    'market_source_remote' => [
+      'app_id' => variable_get('market_source_remote_app_id', NULL),
+      'app_url' => variable_get('market_source_remote_app_url', MARKET_SOURCE_REMOTE_STAGING_URL),
+    ]
+  ], 'setting');
+}
+
+/**
+ * Add fields to the market source form for RMS settings.
+ */
+function market_source_remote_form_market_source_admin_settings_form_alter(&$form, &$form_state) {
+  // Ensure the submit button appears at the bottom.
+  $form['submit']['#weight'] = 100;
+
+  // Get the app id or generate a new one.
+  $app_id = variable_get('market_source_remote_app_id', NULL);
+
+  // Create a new app id and alert the user.
+  if (empty($form_state['submitted']) && empty($app_id)) {
+    $app_id = market_source_remote_generate_app_id();
+    $app_id_new = TRUE;
+    drupal_set_message('A new Remote Market Source app id has been generated, save this form to set this on the RMS application');
+  }
+
+  // If the domains is not currently set, use the current domain.
+  $domains = variable_get('market_source_remote_domains', NULL);
+  if (empty($domains)) {
+    $domains = trim($_SERVER['HTTP_HOST']);
+  }
+
+  $form['market_source_remote'] = [
+    '#type' => 'fieldset',
+    '#title' => t('Remote Market Source settings'),
+    '#description' => t('Settings to integrate with the RMS application.'),
+    '#collapsible' => TRUE,
+    // Expand the fieldset if the app id value hasn't been set.
+    '#collapsed' => empty($app_id_new),
+  ];
+
+  $form['market_source_remote']['market_source_remote_app_id'] = [
+    '#title' => t('App Id'),
+    '#type' => 'textfield',
+    '#description' => t('This is the ID to use for this site. Do not change this unless you understand the implications.'),
+    '#default_value' => $app_id,
+    '#required' => TRUE,
+  ];
+
+  // If this is not a new id add the confirmation checkbox.
+  if (empty($app_id_new)) {
+    $form['market_source_remote']['market_source_remote_app_id']['#states'] = [
+      'enabled' => [
+        ":input[name='market_source_remote_app_id_update_confirm']" => array('checked' => TRUE),
+      ],
+    ];
+
+    $form['market_source_remote']['market_source_remote_app_id_update_confirm'] = [
+      '#title' => t('I need to change the App ID.'),
+      '#type' => 'checkbox',
+      '#description' => t("Check to confirm you'd like to change the App ID."),
+      '#default_value' => FALSE,
+    ];
+  }
+
+  $instance = variable_get('market_source_remote_app_instance', 'staging');
+  $form['market_source_remote']['market_source_remote_app_instance'] = [
+    '#title' => t('App Instance'),
+    '#type' => 'radios',
+    '#description' => t('The instance for the RMS app this site should connect to.'),
+    '#default_value' => $instance,
+    '#options' => [
+      'prod' => 'Production',
+      'staging' => 'Staging',
+    ],
+    '#required' => TRUE,
+  ];
+
+  $form['market_source_remote']['market_source_remote_domains'] = [
+    '#title' => t('Allowed Domains'),
+    '#type' => 'textfield',
+    '#description' => t('The domain names through which the MS data will be shared. Separate them by comma and do not include http(s)://.'),
+    '#default_value' => $domains,
+    '#required' => TRUE,
+  ];
+
+  $form['market_source_remote']['embed_code'] = [
+    '#title' => t('Embed Code'),
+    '#type' => 'textarea',
+    '#value' => market_source_remote_embed_code($app_id),
+  ];
+
+  $form['#validate'][] = 'market_source_remote_admin_settings_form_validate';
+  $form['#submit'][] = 'market_source_remote_admin_settings_form_submit';
+}
+
+/**
+ * Validation handler for our form fields.
+ */
+function market_source_remote_admin_settings_form_validate(&$form, &$form_state) {
+  // Verify the current domain is in the allowed domains list.
+  $current_domain = trim($_SERVER['HTTP_HOST']);
+  $domains = explode(',', $form_state['values']['market_source_remote_domains']);
+  if (array_search($current_domain, $domains) === FALSE) {
+    form_error(
+      $form['market_source_remote']['market_source_remote_domains'],
+      t(
+        '@domain is not in the list of allowed domains for the configured RMS app.',
+        ['@domain' => $current_domain]
+       )
+    );
+  }
+
+  // If the app id value has been changed pass along the previous value.
+  if (
+    !empty($form['market_source_remote']['market_source_remote_app_id']['#default_value'])
+    && $form_state['values']['market_source_remote_app_id'] != $form['market_source_remote']['market_source_remote_app_id']['#default_value']
+  ) {
+    $form_state['values']['market_source_remote_app_id_prev'] = $form['market_source_remote']['market_source_remote_app_id']['#default_value'];
+  }
+}
+
+/**
+ * Submit handler send the new configuration to the remote app.
+ */
+function market_source_remote_admin_settings_form_submit(&$form, &$form_state) {
+  $instance = $form_state['values']['market_source_remote_app_instance'];
+  variable_set('market_source_remote_app_instance', $instance);
+  variable_set('market_source_remote_app_id', $form_state['values']['market_source_remote_app_id']);
+  variable_set('market_source_remote_domains', $form_state['values']['market_source_remote_domains']);
+
+  // Set the app url from the configured instance.
+  $app_domains = [
+    'prod' => MARKET_SOURCE_REMOTE_PROD_URL,
+    'staging' => MARKET_SOURCE_REMOTE_STAGING_URL,
+  ];
+  variable_set('market_source_remote_app_url', $app_domains[$instance]);
+
+  // Rearrange tne custom fields array to match default fields array structure.
+  $custom_fields = [];
+  foreach (variable_get('market_source_custom_fields', array()) as $delta => $settings) {
+    $custom_fields[$settings['key']] = [
+      'persistence' => $settings['persistence'],
+      'default' => $settings['default'],
+    ];
+  }
+
+  // Create an array from the domains setting.
+  $domains = explode(',', variable_get('market_source_remote_domains', NULL));
+  foreach ($domains as $key => $domain) {
+    $domains[$key] = trim($domain);
+  }
+
+  $config = [
+    'app_id' => variable_get('market_source_remote_app_id', NULL),
+    'default_fields' => variable_get('market_source_default_fields', NULL),
+    'custom_fields' => $custom_fields,
+    'cookie_domain' => variable_get('market_source_cookie_domain', ''),
+    'domains' => $domains,
+  ];
+
+  // Pass along the previous app id value for cleanup.
+  if (isset($form_state['values']['market_source_remote_app_id_prev'])) {
+    $config['app_id_prev'] = $form_state['values']['market_source_remote_app_id_prev'];
+  }
+
+  market_source_remote_send_config($config);
+}
+
+/**
+ * Generate a new app id.
+ *
+ * @return string
+ *   A string to use as the app id.
+ */
+function market_source_remote_generate_app_id() {
+  return user_password(12);
+}
+
+/**
+ * Send the config to the remote market source app.
+ *
+ * @param array $config
+ *   An array of MS configurations to be sent to the RMS app.
+ */
+function market_source_remote_send_config(array $config) {
+  $url = variable_get('market_source_remote_app_url', NULL);
+  if (empty($url)) {
+    watchdog('market_source_remote', 'The app url has not been configured.');
+    return;
+  }
+
+  // Include the Composer autoload file.
+  include_once DRUPAL_ROOT . "/sites/all/libraries/springboard_composer/vendor/autoload.php";
+
+  // Load Guzzle client.
+  $guzzle = new guzzle_client(['http_errors' => FALSE, 'verify' => FALSE]);
+
+  try {
+    // Attempt Guzzle client request.
+    $guzzle->post($url . '/msConfig', ['json' => $config]);
+
+    watchdog('market_source_remote', 'Remote settings updated.');
+  }
+  catch (guzzle_client_exception $e) {
+    // Log the full API call failure details.
+    watchdog(
+      'market_source_remote',
+      'Failure saving to application: @e',
+       array('@e' => print_r($e, TRUE)),
+       WATCHDOG_ERROR
+    );
+  }
+}
+
+/**
+ * Create example embed code.
+ *
+ * @param string $app_id
+ *   The id of the rms application.
+ *
+ * @return string
+ *   Example embed code.
+ */
+function market_source_remote_embed_code($app_id) {
+  $app_url = variable_get('market_source_remote_app_url', MARKET_SOURCE_REMOTE_STAGING_URL);
+  $domain = parse_url($app_url, PHP_URL_HOST);
+
+  return "<script>
+  (function(d, s, id){
+    var js, fjs = d.getElementsByTagName(s)[0];
+    if (d.getElementById(id)){ return; }
+    js = d.createElement(s); js.id = id;
+    js.src = '//" . MARKET_SOURCE_REMOTE_SCRIPT_URL . "?brand_url=$domain&app_id=$app_id';
+    fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'springboard-jssdk'));
+</script>";
+}

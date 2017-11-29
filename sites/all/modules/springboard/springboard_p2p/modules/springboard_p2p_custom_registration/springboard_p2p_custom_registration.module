@@ -15,7 +15,7 @@ function springboard_p2p_custom_registration_form_alter(&$form, $form_state, $fo
     if ($node && !empty($node->is_webform_user)) {
       $campaign = (isset($_GET['p2p_cid']) && is_numeric($_GET['p2p_cid'])) ? $_GET['p2p_cid'] : FALSE;
 
-      // Stash the peer to peer campaign id for later use in the submission and validation handlers.
+      // Stash the Peer to Peer campaign id for later use in the submission and validation handlers.
       $form['get_p2p_campaign'] = array(
         '#type' => 'value',
         '#value' => $campaign,

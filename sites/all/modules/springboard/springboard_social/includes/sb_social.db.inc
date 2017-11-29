@@ -192,20 +192,22 @@ function sb_social_settings_load($sid, $cache = TRUE) {
   // This can get called by hook_block_view() in addition to hook_init() so we
   // should cache.
   $settings = &drupal_static(__FUNCTION__);
-
   if (!isset($settings[$sid]) || !$cache) {
-    $results = db_query('SELECT * FROM {sb_social_settings} WHERE sid = :sid', array(':sid' => $sid));
 
-    $settings[$sid] = $results->fetchAssoc();
-    if ($settings[$sid] && !empty($settings[$sid]['data'])) {
-      $settings[$sid]['data'] = unserialize($settings[$sid]['data']);
-    }
-    if ($settings[$sid]['type'] == 'path') {
-      $settings[$sid]['path'] = sb_social_get_path($settings[$sid]['id']);
+    if (!empty($sid)) {
+      $results = db_query('SELECT * FROM {sb_social_settings} WHERE sid = :sid', array(':sid' => $sid));
+
+      $settings[$sid] = $results->fetchAssoc();
+      if ($settings[$sid] && !empty($settings[$sid]['data'])) {
+        $settings[$sid]['data'] = unserialize($settings[$sid]['data']);
+      }
+      if ($settings[$sid]['type'] == 'path') {
+        $settings[$sid]['path'] = sb_social_get_path($settings[$sid]['id']);
+      }
     }
 
     // Supply global defaults if no settings are available.
-    if (empty($settings[$sid])) {
+    if (empty($sid) || empty($settings[$sid])) {
       // Check for node view page.
       $node = menu_get_object();
       // Confirmation page.

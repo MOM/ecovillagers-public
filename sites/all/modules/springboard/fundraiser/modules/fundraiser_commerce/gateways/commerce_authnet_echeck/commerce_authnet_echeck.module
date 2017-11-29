@@ -241,25 +241,30 @@ function commerce_authnet_echeck_cardonfile_delete($form, &$form_state, $payment
  * Implements hook_fundraiser_sustainers_series_end_date_alter().
  */
 function commerce_authnet_echeck_fundraiser_sustainers_series_end_date_alter(&$end_date, $context) {
-  // Bank account recurring transactions can share a cardonfile entry.
-  // Because bank accounts don't have expiration dates, using the cardonfile date isn't a reliable way to increment a series.
-  $master_donation = $context['master_donation'];
-  // $source_donation = $context['source_donation'];
-  if ($master_donation->gateway['gateway_details']['method_id'] == 'authnet_echeck') {
-    // Get the count of series entries.
-    $charge_count = db_query('SELECT count(did) FROM {fundraiser_sustainers} WHERE master_did = :master_did', array(':master_did' => $master_donation->did))->fetchField();
-    // We only want to increment the series if there's one remaining donation.
-    if (_fundraiser_sustainers_count_donations_recurr_remaining($master_donation->did) < 1) {
-      // Set the date so that a new series entry is created.
-      $new_exp = strtotime("now +" . $charge_count ." months");
-      $end_date['month'] = date('m', $new_exp);
-      $end_date['year'] = date('y', $new_exp);
-    }
-    else {
-      // If there's more than one future donation, set the dates so that no entries will be created or deleted.
-      $new_exp = strtotime("now +" . ($charge_count - 1) ." months");
-      $end_date['month'] = date('m', $new_exp);
-      $end_date['year'] = date('y', $new_exp);
+  // If the source_donation is NULL, this must be the initial submission of a
+  // sustainer series. In that case, don't alter the end date because we want to
+  // use the "standard" expiration date.
+  if (!empty($context['source_donation'])) {
+    // Bank account recurring transactions can share a cardonfile entry.
+    // Because bank accounts don't have expiration dates, using the cardonfile date isn't a reliable way to increment a series.
+    $master_donation = $context['master_donation'];
+    // $source_donation = $context['source_donation'];
+    if ($master_donation->gateway['gateway_details']['method_id'] == 'authnet_echeck') {
+      // Get the count of series entries.
+      $charge_count = db_query('SELECT count(did) FROM {fundraiser_sustainers} WHERE master_did = :master_did', array(':master_did' => $master_donation->did))->fetchField();
+      // We only want to increment the series if there's one remaining donation.
+      if (_fundraiser_sustainers_count_donations_recurr_remaining($master_donation->did) < 1) {
+        // Set the date so that a new series entry is created.
+        $new_exp = strtotime("now +" . $charge_count ." months");
+        $end_date['month'] = date('m', $new_exp);
+        $end_date['year'] = date('y', $new_exp);
+      }
+      else {
+        // If there's more than one future donation, set the dates so that no entries will be created or deleted.
+        $new_exp = strtotime("now +" . ($charge_count - 1) ." months");
+        $end_date['month'] = date('m', $new_exp);
+        $end_date['year'] = date('y', $new_exp);
+      }
     }
   }
 }

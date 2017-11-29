@@ -65,7 +65,8 @@ function springboard_dw_queue_legacy_dashboard() {
   $total_payments = db_query('SELECT count(transaction_id) FROM {commerce_payment_transaction}')->fetchField();
   $total_messages = springboard_dw_queue_legacy_get_advocacy_messages_count();
   $total_salesforce_sync = db_query("SELECT count(rmid) FROM {salesforce_sync_map} WHERE (delta IN (:included_types) OR object_type = 'sb_Actions_Taken__c') AND sfid <> ''", array(':included_types' => array('user', 'sba_message_action', 'sba_social_action', 'springboard_petition', 'donation') ), array('target' => 'slave'))->fetchField();
-  $records_in_drupal_count = $total_contacts + $total_donations + $total_actions + $total_petition_messages + $total_forms + $total_submissions + $total_payments + $total_messages + $total_salesforce_sync;
+  $total_line_items = db_query("SELECT count(line_item_id) FROM {commerce_line_item} WHERE type <> 'donation'", array(), array(), array('target' => 'slave'))->fetchField();
+  $records_in_drupal_count = $total_contacts + $total_donations + $total_actions + $total_petition_messages + $total_forms + $total_submissions + $total_payments + $total_messages + $total_salesforce_sync + $total_line_items;
 
   $total_records = array(
     'action:&nbsp;' . number_format($total_actions, 0, '', ','),
@@ -77,6 +78,7 @@ function springboard_dw_queue_legacy_dashboard() {
     'petition message:&nbsp;' . number_format($total_petition_messages, 0, '', ','),
     'salesforce sync:&nbsp;' . number_format($total_salesforce_sync, 0, '', ','),
     'submission:&nbsp;' . number_format($total_submissions, 0, '', ','),
+    'line_item:&nbsp;' . number_format($total_line_items, 0, '', ','),
   );
 
   $records_in_queue_table = db_query("SELECT count(item_id) FROM {queue} WHERE name = 'springboard_dw_export'", array(), array('target' => 'slave'))->fetchField();
@@ -94,6 +96,7 @@ function springboard_dw_queue_legacy_dashboard() {
     'advocacy petition message' => 0,
     'advocacy message' => 0,
     'salesforce sync' => 0,
+    'line_item' => 0,
 
   );
   $processed_records = array();
@@ -114,6 +117,8 @@ function springboard_dw_queue_legacy_dashboard() {
     'petition message' => strval($total_petition_messages - $processed_counts_by_type['advocacy petition message']),
     'salesforce sync' => strval($total_salesforce_sync - $processed_counts_by_type['salesforce sync']),
     'submission' => strval($total_submissions - $processed_counts_by_type['submission']),
+    'line_item' => strval($total_line_items - $processed_counts_by_type['line_item']),
+
   );
   $unprocessed_items = array();
   $unprocessed_total = 0;
@@ -129,7 +134,7 @@ function springboard_dw_queue_legacy_dashboard() {
     $dw_totals[] = $key . ':&nbsp;' . number_format($val, 0, '', ',');
     $dw_total_count += $val;
   }
-  $dw_totals[] = l('View recent submissions', 'https://dw.gospringboard.io/report/recent-submissions?authenticationToken=' . variable_get("springboard_dw_authentication_token"));
+  $dw_totals[] = l('View recent submissions', variable_get('springboard_dw_api_endpoint') . '/report/recent-submissions?authenticationToken=' . variable_get('springboard_dw_authentication_token'));
 
   $header = array('Records in Drupal', 'Unprocessed', 'Processed', 'Queued for Export', 'In Data Warehouse');
   $rows = array(
@@ -243,10 +248,10 @@ function springboard_dw_queue_legacy_reset_highwater_marks() {
     'donation',
     'petition_message',
     'payment',
-    'salesforce_sync'
+    'salesforce_sync',
+    'line_item',
   );
   foreach ($types as $type) {
     springboard_dw_queue_legacy_set_highwater_mark($type, 0);
   }
 }
-

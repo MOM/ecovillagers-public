@@ -23,7 +23,7 @@ function springboard_p2p_rules_menu() {
   $items['admin/springboard/p2p/rules'] = array(
     'title' => 'Rules',
     'type' => MENU_LOCAL_TASK,
-    'description' => 'Enable and configure P2P rule configurations.',
+    'description' => 'Enable and configure Peer to Peer rule configurations.',
     'page callback' => 'springboard_p2p_rules_admin_page',
     'access arguments' => array('administer springboard p2p rules'),
     'file' => 'springboard_p2p_rules.admin.inc',
@@ -34,8 +34,8 @@ function springboard_p2p_rules_menu() {
   $items += $controller->config_menu('admin/springboard/p2p/rules');
 
   $items['admin/springboard/p2p/rules/add'] = array(
-    'title' => 'Add a P2P rule',
-    'description' => 'Adds an additional P2P rule configuration.',
+    'title' => 'Add a Peer to Peer rule',
+    'description' => 'Adds an additional Peer to Peer rule configuration.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('springboard_p2p_rules_add_rule_form', 'admin/springboard/p2p/rules'),
     'access arguments' => array('administer springboard p2p rules'),

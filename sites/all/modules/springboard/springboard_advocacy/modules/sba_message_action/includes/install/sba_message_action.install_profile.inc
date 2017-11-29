@@ -52,9 +52,12 @@ function _sbp_message_action_create_user_profile_fields() {
     'module' => 'list',
     'settings' => array(
       'allowed_values' => array(
-        'Mr' => 'Mr',
-        'Mrs' => 'Mrs',
         'Ms' => 'Ms',
+        'Mr' => 'Mr',
+        'Mx' => 'Mx',
+        'Dr' => 'Dr',
+        'Mrs' => 'Mrs',
+        'Miss' => 'Miss',
       ),
       'allowed_values_function' => '',
     ),

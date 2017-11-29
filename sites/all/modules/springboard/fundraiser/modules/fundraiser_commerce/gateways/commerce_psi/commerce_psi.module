@@ -18,17 +18,21 @@ define('COMMERCE_PSI_MODE_TEST', 'test');
  *   Array of values to send with the request.
  * @param string $type
  *   Type of request, can be check or credit, defaults to credit.
+ * @param bool $vault
+ *   TRUE to vault the payment method.
+ * @param bool $vaulted
+ *   TRUE if payment method already vaulted and to send Vaulted payment method.
  *
  * @return object|NULL
  *   The response object from PSI.
  */
-function _commerce_psi_request($payment_method, $nvp, $type = 'credit') {
+function _commerce_psi_request($payment_method, $nvp, $type = 'credit', $vault = FALSE, $vaulted = FALSE) {
   $account_details = $payment_method['settings'];
   $account_details['account_password'] = _commerce_psi_decrypt($payment_method['settings']['account_password']);
   $account_details['title'] = $payment_method['title'];
   $client = new PsiClient($account_details);
   if (!empty($client)) {
-    return $client->{$type . 'Request'}($nvp);
+    return $client->{$type . 'Request'}($nvp, $vault, $vaulted);
   }
 
   return NULL;
@@ -53,6 +57,7 @@ function _commerce_psi_default_settings() {
       'market_source' => '',
       'send_mail' => '',
     ),
+    'cardonfile' => FALSE,
   );
 }
 
@@ -91,6 +96,13 @@ function _commerce_psi_settings_form($settings) {
     '#value_callback' => '_commerce_psi_encrypt_settings_password',
     '#required' => TRUE,
   );
+  if (module_exists('commerce_cardonfile')) {
+    $form['cardonfile'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Enable Card on File functionality with this payment method.'),
+      '#default_value' => $settings['cardonfile'],
+    );
+  }
   $form['custom_fields'] = array(
     '#type' => 'fieldset',
     '#title' => t('Custom Fields'),

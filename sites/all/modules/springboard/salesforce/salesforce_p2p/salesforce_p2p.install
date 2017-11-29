@@ -9,11 +9,11 @@
  * Implements hook_install().
  */
 function salesforce_p2p_install() {
-  // Install the peer to peer category fieldmap.
+  // Install the Peer to Peer category fieldmap.
   $category_mapping = entity_import('salesforce_mapping', salesforce_p2p_category_fieldmap());
   entity_save('salesforce_mapping', $category_mapping);
 
-  // Install the peer to peer campaign fieldmap.
+  // Install the Peer to Peer campaign fieldmap.
   $campaign_mapping = entity_import('salesforce_mapping', salesforce_p2p_campaign_fieldmap());
   entity_save('salesforce_mapping', $campaign_mapping);
 
@@ -24,13 +24,13 @@ function salesforce_p2p_install() {
 
 /**
  * Provides a default salesforce_mapping entity for the
- * peer to peer personal campaign content type.
+ * Peer to Peer personal campaign content type.
  */
 function salesforce_p2p_personal_campaign_fieldmap() {
   return '{
     "type" : "salesforce_mapping",
     "name" : "peer_to_peer_personal_campaign",
-    "label" : "Peer to peer personal campaign",
+    "label" : "Peer to Peer personal campaign",
     "sync_triggers" : "3",
     "salesforce_object_type" : "P2P_Personal_Campaign__c",
     "salesforce_record_type" : "default",
@@ -637,13 +637,13 @@ function salesforce_p2p_personal_campaign_fieldmap() {
 
 /**
  * Provides a default salesforce_mapping entity for the
- * peer to peer campaign content type.
+ * Peer to Peer campaign content type.
  */
 function salesforce_p2p_campaign_fieldmap() {
   return '{
     "type" : "salesforce_mapping",
     "name" : "peer_to_peer_campaign",
-    "label" : "Peer to peer campaign",
+    "label" : "Peer to Peer campaign",
     "sync_triggers" : "3",
     "salesforce_object_type" : "P2P_Campaign__c",
     "salesforce_record_type" : "default",
@@ -1317,13 +1317,13 @@ function salesforce_p2p_campaign_fieldmap() {
 
 /**
  * Provides a default salesforce_mapping entity for the
- * peer to peer category content type.
+ * Peer to Peer category content type.
  */
 function salesforce_p2p_category_fieldmap() {
   return '{
     "type" : "salesforce_mapping",
     "name" : "peer_to_peer_category",
-    "label" : "Peer to peer category",
+    "label" : "Peer to Peer category",
     "sync_triggers" : "3",
     "salesforce_object_type" : "P2P_Category__c",
     "salesforce_record_type" : "default",

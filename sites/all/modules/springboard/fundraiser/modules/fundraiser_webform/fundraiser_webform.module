@@ -20,6 +20,25 @@ function fundraiser_webform_menu_alter(&$items) {
     'description' => 'View and edit all the available webforms on your site.',
     'type' => MENU_LOCAL_TASK,
   );
+
+  // Add the node clone link as a tab, positioned to the right of the node edit tab:
+  if (isset($items['node/%node/edit']['weight'])) {
+    // Reduce the edit tab's weight so clone tab can be positioned next to it:
+    $items['node/%node/edit']['weight'] -= 3;
+    $items['node/%node/clone/%clone_token']['weight'] = $items['node/%node/edit']['weight'] + 1;
+
+    // Turn the clone link into a tab:
+    $items['node/%node/clone/%clone_token']['title'] = 'Clone';
+    $items['node/%node/clone/%clone_token']['title callback'] = '_fundaiser_webform_clone_link_title_callback';
+    $items['node/%node/clone/%clone_token']['type'] = MENU_LOCAL_TASK;
+  } 
+}
+
+/**
+ * Replacement title callback for the Clone link:
+ */
+function _fundaiser_webform_clone_link_title_callback() {
+  return t('Clone');
 }
 
 /**
@@ -1466,6 +1485,11 @@ function fundraiser_webform_node_delete($node) {
  * submission display page. Also break down donations consisting of multiple amounts.
  */
 function fundraiser_webform_webform_submission_render_alter(&$renderable) {
+  // Only perform this check on donation enable form types.
+  if (!fundraiser_is_donation_type($renderable['#node']->type)) {
+    return;
+  }
+
   $donation = _fundraiser_webform_get_donation_by_sid($renderable['#submission']->sid);
   if (empty($donation)) {
     return;

@@ -562,6 +562,71 @@ function _sba_message_action_create_node_fields($update = false) {
     ),
   );
 
+  $fields['field_sba_message_salutations'] = array(
+    'active' => 1,
+    'cardinality' => 2,
+    'deleted' => 0,
+    'entity_types' => array(
+      0 => 'node',
+    ),
+    'field_name' => 'field_sba_message_salutations',
+    'foreign keys' => array(),
+    'indexes' => array(
+      'value' => array(
+        0 => 'value',
+      ),
+    ),
+    'locked' => 0,
+    'module' => 'list',
+    'settings' => array(
+      'allowed_values' => array(
+        1 => 'Enabled',
+      ),
+      'allowed_values_function' => '',
+    ),
+    'translatable' => 0,
+    'type' => 'list_text',
+    '_instance' => array(
+      'bundle' => 'sba_message_action',
+      'default_value' => array(
+        0 => array(
+          'value' => 0,
+        ),
+      ),
+      'deleted' => 0,
+      'description' => t("The default Salutation field is limited to the small set of salutations accepted by most legislator webforms. Enabling user-preferred salutations will allow you to add any options you wish to make available to your supporters (such as Mx., Hon., Sister) by editing the Salutations component. Supporters who choose one of these options will be prompted to select an additional salutation from the default list, for use on webform deliveries."),
+      'display' => array(
+        'default' => array(
+          'label' => 'Above',
+          'module' => 'list',
+          'settings' => array(),
+          'type' => 'hidden',
+          'weight' => 3,
+        ),
+        'teaser' => array(
+          'label' => 'hidden',
+          'settings' => array(),
+          'type' => 'hidden',
+          'weight' => 0,
+        ),
+      ),
+      'entity_type' => 'node',
+      'field_name' => 'field_sba_message_salutations',
+      'label' => 'User-Preferred Salutations',
+      'required' => 0,
+      'settings' => array(
+        'user_register_form' => FALSE,
+      ),
+      'widget' => array(
+        'active' => 1,
+        'module' => 'options',
+        'settings' => array(),
+        'type' => 'options_buttons',
+        'weight' => 6,
+      ),
+    ),
+  );
+
 
   $fields['field_sba_action_step_two_submit'] = array(
     'active' => 1,
@@ -815,6 +880,7 @@ function _sba_message_action_create_node_fields($update = false) {
     0 => 'field_message_call_to_action',
     1 => 'field_message_action_img',
     2 => 'field_sba_message_action_label',
+    3 => 'field_sba_message_salutations',
   );
   $field_group->format_type = 'fieldset';
   $field_group->format_settings = array(
@@ -844,6 +910,23 @@ function _sba_message_action_create_node_fields($update = false) {
 }
 
 /**
+ * Add Dual Salutations field to node Action options field group.
+ */
+function _sba_message_action_add_salutations_to_fieldgroup() {
+  $groups = field_group_read_groups(array(
+    'entity_type' => 'node',
+    'bundle'      => 'sba_message_action',
+    'view_mode'   => 'full'
+  ));
+
+  if (!empty($groups['node']['sba_message_action']['form']['group_sba_action_page_elements'])) {
+    $groups['node']['sba_message_action']['form']['group_sba_action_page_elements']->children[]
+      = 'field_sba_message_salutations';
+    field_group_group_save($groups['node']['sba_message_action']['form']['group_sba_action_page_elements']);
+  }
+}
+
+/**
  * Delete springboard message action fields.
  */
 function _sba_message_action_delete_fields() {
@@ -852,7 +935,8 @@ function _sba_message_action_delete_fields() {
     'field_message_action_img',
     'field_sba_test_mode',
     'field_sba_test_mode_email',
-    'field_sba_message_action_label'
+    'field_sba_message_action_label',
+    'field_sba_message_salutations',
   );
   foreach ($fields as $field_name) {
     $field = field_info_instance('node', $field_name, 'sba_message_action');

@@ -230,7 +230,7 @@ function springboard_p2p_personal_campaign_panelizer_defaults() {
           'name' => 'node_field_populated',
           'settings' => array(
             'node_field' => 'p2p_personal_campaign:field_p2p_video_embed',
-            'label' => 'Peer to peer personal campaign - Upload a Campaign Video',
+            'label' => 'Peer to Peer personal campaign - Upload a Campaign Video',
           ),
           'context' => 'panelizer',
           'not' => FALSE,
@@ -476,7 +476,7 @@ function springboard_p2p_personal_campaign_panelizer_defaults() {
           'name' => 'node_field_populated',
           'settings' => array(
             'node_field' => 'p2p_campaign:field_p2p_suggested_donation',
-            'label' => 'Peer to Peer Campaign - P2P Suggested Donation Amount',
+            'label' => 'Peer to Peer Campaign - Peer to Peer Suggested Donation Amount',
           ),
           'context' => 'panelizer',
           'not' => TRUE,

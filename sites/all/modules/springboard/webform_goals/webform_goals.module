@@ -302,24 +302,14 @@ function webform_goals_springboard_admin_alias_patterns() {
  * Implements hook_springboard_admin_admin_menu_items_alter().
  */
 function webform_goals_springboard_admin_admin_menu_items_alter(&$items) {
-  // Marketing & Analytics > Goals.
+  // Marketing > Goals
   $items['admin/springboard/marketing-analytics']['_children']['admin/config/content/webform_goals'] = array(
     'link_path' => 'admin/config/content/webform_goals',
-    'link_title' => 'Goals',
+    'link_title' => t('Goals'),
     'menu_name' => 'springboard_admin_menu',
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 0,
-  );
-
-  // Settings > Settings > Goals.
-  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/config/content/webform_goals'] = array(
-    'link_path' => 'admin/config/content/webform_goals',
-    'link_title' => 'Goals',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 4,
+    'weight' => -100,
   );
 }
 

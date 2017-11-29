@@ -154,6 +154,12 @@
         $(this).remove();
       });
 
+      // Add a class to the views forms if they fields have labels.
+      $('.view-filters form').each(function () {
+        if ($(this).find('label').length > 0) {
+          $(this).addClass('with-labels');
+        }
+      });
 
       // end.
     } // attach.function

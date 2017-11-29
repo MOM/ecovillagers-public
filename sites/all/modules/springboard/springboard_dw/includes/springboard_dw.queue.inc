@@ -7,6 +7,9 @@
 
 /**
  * Queue processing hook.
+ *
+ * @return int
+ *   Count of items processed, whether or not they were successful.
  */
 function springboard_dw_process_queue() {
 
@@ -17,11 +20,16 @@ function springboard_dw_process_queue() {
   // Get an instance of the Drupal data warehouse queue.
   $queue = DrupalQueue::get('springboard_dw_export');
 
+  // Keep a count of the number of items processed, whether or not they fail.
+  $counter = 0;
+
   // Create an array for placeholder to track any failed queue items.
   $failed_queue_items = array();
 
   // Lock and claim an item for queue processing.
   while (time() < $end && ($item = $queue->claimItem())) {
+    // Increment counter when item is claimed.
+    $counter++;
 
     // If the api responds back correctly, remove the queue item.
     if (call_user_func($callback, $item->data)) {
@@ -67,6 +75,9 @@ function springboard_dw_process_queue() {
   foreach ($failed_queue_items as $queue_item) :
     $queue->releaseItem($queue_item);
   endforeach;
+
+  // Return the counter to the calling function.
+  return $counter;
 }
 
 /**

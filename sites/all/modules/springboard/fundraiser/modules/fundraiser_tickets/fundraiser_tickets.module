@@ -1075,6 +1075,8 @@ function fundraiser_tickets_update_inventory($node_wrapper) {
   if (isset($new_ticket_added)) {
     cache_clear_all('field:node:' . $node_wrapper->getIdentifier(), 'cache_field');
   }
+
+  module_invoke_all('fundraiser_tickets_inventory_update', $node_wrapper, $ticket_types);
 }
 
 /**
@@ -1304,6 +1306,7 @@ function fundraiser_tickets_fundraiser_donation_process($donation) {
 function fundraiser_tickets_check_addon_required_fields($nid, $donation = NULL, $node = NULL) {
   $exempt_fields = variable_get('fundraiser_tickets_exempt_add_on_fields', array('quantity', 'recurring_amount'));
   $addon_details = springboard_api_get_form_details($nid);
+
   if ($donation) {
     // Validate the submission.
     foreach ($addon_details['fields'] as $name => $field) {
@@ -1321,7 +1324,10 @@ function fundraiser_tickets_check_addon_required_fields($nid, $donation = NULL, 
     foreach ($node->webform['components'] as $id => $component) {
       $components[$component['form_key']] = $node->webform['components'][$id];
     }
+
+
     foreach ($addon_details['fields'] as $name => $field) {
+
       if ($field['required'] == 1 && !in_array($name, $exempt_fields)) {
         if (!isset($components[$name]) || $components[$name]['mandatory'] == '0') {
           return FALSE;
@@ -1445,4 +1451,40 @@ function fundraiser_tickets_publishcontent_unpublish_access($node, $account) {
     }
   }
   return PUBLISHCONTENT_ACCESS_IGNORE;
+}
+
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Don't let the ticket box field be dragged away from its parent.
+ */
+function fundraiser_tickets_form_webform_components_form_alter(&$form, &$form_state, $form_id) {
+  // Hide the uneditable sub-components on the component listing page.
+  if (fundraiser_tickets_is_ticket_type($form['#node']->type)) {
+    $form['#attached']['js'][] = array(
+      'data' => "jQuery(document).ready(function(){jQuery('td:contains(\"Ticket box\")').closest('tr').children('td.first').children('a').remove();})",
+      'type' => 'inline',
+      'scope' => 'footer'
+    );
+  }
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Disallow deletion of tickets fieldset.
+ */
+function fundraiser_tickets_form_webform_component_delete_form_alter(&$form, &$form_state, $form_id) {
+  // Make sure we are dealing with a tickets form.
+  if (fundraiser_tickets_is_ticket_type($form['node']['#value']->type)) {
+    $cid = $form['component']['#value']['cid'];
+    $component = $form['node']['#value']->webform['components'][$cid];
+    if ($component['form_key'] == 'tickets') {
+      $message = t('<strong>!name</strong> is a required fundraiser field and cannot be deleted from this form.',
+        array('!name' => $component['name']));
+      $form['description']['#markup'] = $message;
+      unset($form['actions']['submit']);
+    }
+  }
 }

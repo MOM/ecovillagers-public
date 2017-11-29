@@ -23,39 +23,6 @@ function springboard_ga_menu() {
 }
 
 /**
- * Implements hook_springboard_admin_admin_menu_items_alter().
- */
-function springboard_ga_springboard_admin_admin_menu_items_alter(&$items) {
-  // Marketing & Analytics > Analytics Integraiton.
-  $items['admin/springboard/marketing-analytics']['_children']['admin/springboard/options/ga'] = array(
-    'link_path' => 'admin/springboard/options/ga',
-    'link_title' => 'Analytics Integration',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 4,
-  );
-  // Settings > Settings > Analytics Configuration.
-  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/config/system/googleanalytics'] = array(
-    'link_path' => 'admin/config/system/googleanalytics',
-    'link_title' => 'Analytics Configuration',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 8,
-  );
-  // Settings > Settings > Analytics Integraiton.
-  $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/springboard/options/ga'] = array(
-    'link_path' => 'admin/springboard/options/ga',
-    'link_title' => 'Analytics Integration',
-    'menu_name' => 'springboard_admin_menu',
-    'expanded' => 1,
-    'customized' => 1,
-    'weight' => 8,
-  );
-}
-
-/**
  * Main settings form for the module
  */
 function springboard_ga_settings_form($form, &$form_state) {

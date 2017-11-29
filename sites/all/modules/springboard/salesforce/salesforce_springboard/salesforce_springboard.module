@@ -25,9 +25,9 @@ function salesforce_springboard_springboard_admin_admin_menu_items_alter(&$items
     'link_path' => 'admin/structure/salesforce/mappings/cache',
     'link_title' => 'Clear Salesforce Object Cache',
     'menu_name' => 'springboard_admin_menu',
+    'attributes' => array('sb_link_group' => t('Salesforce')),
     'expanded' => 1,
     'customized' => 1,
-    'weight' => 3,
   );
 }
 

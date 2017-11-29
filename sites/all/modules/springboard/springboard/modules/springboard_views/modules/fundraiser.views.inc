@@ -331,6 +331,20 @@ function springboard_views_fundraiser_views_data() {
       'handler' => 'views_handler_filter_date',
     ),
   );
+  $data['fundraiser_donation']['unique_id'] = array(
+    'title' => t('Unique ID'),
+    'help' => t('A unique value generated from current time and order_id.'),
+    'field' => array(
+      'handler' => 'springboard_views_views_handler_field',
+    ),
+  );
+  $data['fundraiser_donation']['extra_props'] = array(
+    'title' => t('Extra Props'),
+    'help' => t('Field which returns a serialized array containing this donation\'s extra props.'),
+    'field' => array(
+      'handler' => 'springboard_views_views_handler_field',
+    ),
+  );
   $data['fundraiser_donation']['changed'] = array(
     'title' => t('Changed time'),
     'help' => t('The time that the donation was last updated.'),

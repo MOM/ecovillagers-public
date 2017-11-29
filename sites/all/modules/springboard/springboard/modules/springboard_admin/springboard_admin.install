@@ -32,6 +32,9 @@ function springboard_admin_install() {
 
   // Create the Springboard Admin Menu.
   springboard_admin_create_menu();
+
+  //  Sets the site-wide short date format; see ticket #2279:
+  variable_set('date_format_short', 'm/d/Y - H:i');
 }
 
 /**
@@ -81,4 +84,11 @@ function springboard_admin_update_7003() {
  */
 function springboard_admin_update_7004() {
   menu_rebuild();
+}
+
+/**
+ * Sets the site-wide short date format; see ticket #2279.
+ */
+function springboard_admin_update_7005() {
+  variable_set('date_format_short', 'm/d/Y - H:i');
 }

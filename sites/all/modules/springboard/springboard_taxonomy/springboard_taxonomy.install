@@ -5,7 +5,10 @@
  */
 function springboard_taxonomy_install() {
   _springboard_taxonomy_install_vocab_organization_issues();
+  _springboard_taxonomy_install_vocab_node_extras();
   _springboard_taxonomy_install_taxonomy_fields();
+  _springboard_taxonomy_install_node_extras_defaults();
+
 }
 
 
@@ -31,6 +34,67 @@ function _springboard_taxonomy_install_vocab_organization_issues() {
 }
 
 /**
+ * Install the node extras vocabulary.
+ */
+function _springboard_taxonomy_install_vocab_node_extras() {
+  $already_exists = FALSE;
+  foreach (taxonomy_get_vocabularies() as $vocab) {
+    if ($vocab->machine_name == 'sb_node_extras') {
+      $already_exists = TRUE;
+      break;
+    }
+  }
+  if (!$already_exists) {
+    $t = get_t();
+    $status = taxonomy_vocabulary_save((object) array(
+      'name' => t("Node Extras"),
+      'machine_name' => 'sb_node_extras',
+      'description' => $t("Provides tags for the Springboard Node Extras Module"),
+    ));
+    if ($status == SAVED_NEW) {
+      $vocab = taxonomy_vocabulary_machine_name_load('sb_node_extras');
+      // Populate with Springboard standard terms.
+      $weight = 0;
+      foreach (_springboard_taxonomy_node_extras_terms() as $parent => $children) {
+        taxonomy_term_save((object) array(
+          'vid' => $vocab->vid,
+          'name' => $t($parent),
+          'weight' => $weight++,
+          'vocabulary_machine_name' => $vocab->machine_name,
+        ));
+        $parent_terms = taxonomy_term_load_multiple(array(), array('name' => $t($parent), 'vid' => $vocab->vid));
+        if (!empty($parent_terms)) {
+          $parent_term = reset($parent_terms);
+          foreach ($children as $child) {
+            taxonomy_term_save((object) array(
+              'vid' => $vocab->vid,
+              'name' => $t($child),
+              'weight' => $weight++,
+              'parent' => array($parent_term->tid),
+              'vocabulary_machine_name' => $vocab->machine_name,
+            ));
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * The default terms for the node extras vocab.
+ *
+ * @return array
+ *   An array of taxonomy terms.
+ */
+function _springboard_taxonomy_node_extras_terms() {
+  return array(
+    "Save as clone template?" => array(),
+  );
+}
+
+
+
+/**
  * Create base taxonomy fields.
  */
 function _springboard_taxonomy_install_taxonomy_fields() {
@@ -46,7 +110,10 @@ function _springboard_taxonomy_install_taxonomy_fields() {
 }
 
 /**
+ * Create the base taxonomy fields.
+ *
  * @return mixed
+ *   The field definition.
  */
 function _springboard_taxonomy_field_base() {
   $t = get_t();
@@ -84,49 +151,192 @@ function _springboard_taxonomy_field_base() {
     ),
   );
 
+
+  // Organization issues.
+  $fields['sb_node_extras'] = array(
+    'field_config' => array(
+      'field_name' => 'field_sb_node_extras',
+      'type' => 'taxonomy_term_reference',
+      'translatable' => '0',
+      'cardinality' => '-1',
+      'foreign keys' => array(
+        'tid' => array(
+          'columns' => array(
+            'tid' => 'tid',
+          ),
+          'table' => 'taxonomy_term_data',
+        ),
+      ),
+      'indexes' => array(
+        'tid' => array(
+          0 => 'tid',
+        ),
+      ),
+      'locked' => '0',
+      'module' => 'taxonomy',
+      'settings' => array(
+        'allowed_values' => array(
+          0 => array(
+            'vocabulary' => 'sb_node_extras',
+            'parent' => '0',
+          ),
+        ),
+      ),
+    ),
+  );
+
+  return $fields;
+}
+
+
+/**
+ * Create an instance of a springboard taxonomy field.
+ *
+ * @param string $type
+ *   The content type machine name.
+ * @param string $name
+ *   "organization" or "extras".
+ *
+ * @return array
+ *   The field definition.
+ */
+function _springboard_taxonomy_field_instance($type, $name) {
+  $t = get_t();
+  $fields = array();
+
+  // Try to place the extras field after internal name if it exists, or title.
+  $data = field_info_instances("node", $type);
+  foreach ($data as $field_key => $field_values) {
+    if (strpos($field_key, 'internal_name') !== FALSE) {
+      if (isset($field_values['widget']['weight'])) {
+        $weight = $field_values['widget']['weight'] + 0.5;
+      }
+    }
+  }
+  if (empty($weight)) {
+    $weight = -4.5;
+  }
+
+  if ($name == 'organization') {
+    // Organization issues.
+    $fields['sba_organization_issues'] = array(
+      'field_instance' => array(
+        'field_name' => 'field_sba_organization_issues',
+        'entity_type' => 'node',
+        'bundle' => $type,
+        'label' => $t("Organization Issues"),
+        'default_value' => NULL,
+        'description' => '',
+        'display' => array(
+          'default' => array(
+            'label' => 'above',
+            'settings' => array(),
+            'type' => 'hidden',
+            'weight' => '3',
+          ),
+          'teaser' => array(
+            'label' => 'above',
+            'settings' => array(),
+            'type' => 'hidden',
+            'weight' => 0,
+          ),
+        ),
+        'required' => FALSE,
+        'widget' => array(
+          'active' => 1,
+          'module' => 'options',
+          'settings' => array(),
+          'type' => 'options_buttons',
+          'weight' => 4,
+        ),
+
+      ),
+    );
+  }
+
+  if ($name == 'extras') {
+    // Organization issues.
+    $fields['sb_node_extras'] = array(
+      'field_instance' => array(
+        'field_name' => 'field_sb_node_extras',
+        'entity_type' => 'node',
+        'bundle' => $type,
+        'label' => $t("Node Extras"),
+        'default_value' => NULL,
+        'description' => '',
+        'display' => array(
+          'default' => array(
+            'label' => 'above',
+            'settings' => array(),
+            'type' => 'hidden',
+            'weight' => '-1',
+          ),
+          'teaser' => array(
+            'label' => 'above',
+            'settings' => array(),
+            'type' => 'hidden',
+            'weight' => 0,
+          ),
+        ),
+        'required' => FALSE,
+        'widget' => array(
+          'active' => 1,
+          'module' => 'options',
+          'settings' => array(),
+          'type' => 'options_buttons',
+          'weight' => $weight,
+        ),
+
+      ),
+    );
+  }
+
   return $fields;
 }
 
 /**
- * @return mixed
+ * Install the default values for the node extras feature.
  */
-function _springboard_taxonomy_field_instance($type) {
-  $t = get_t();
+function  _springboard_taxonomy_install_node_extras_defaults() {
+  module_load_include('inc', 'springboard_taxonomy', 'springboard_taxonomy.admin');
 
-  // Organization issues.
-  $fields['sba_organization_issues'] = array(
-    'field_instance' => array(
-      'field_name' => 'field_sba_organization_issues',
-      'entity_type' => 'node',
-      'bundle' => $type,
-      'label' => $t("Organization Issues"),
-      'default_value' => NULL,
-      'description' => '',
-      'display' => array(
-        'default' => array(
-          'label' => 'above',
-          'settings' => array(),
-          'type' => 'hidden',
-          'weight' => '3',
-        ),
-        'teaser' => array(
-          'label' => 'above',
-          'settings' => array(),
-          'type' => 'hidden',
-          'weight' => 0,
-        ),
-      ),
-      'required' => FALSE,
-      'widget' => array(
-        'active' => 1,
-        'module' => 'options',
-        'settings' => array(),
-        'type' => 'options_buttons',
-        'weight' => 4,
-      ),
-
-    ),
+  $defaults = array(
+    'donation_form' => 'donation_form',
+    'email_wrapper' => 'email_wrapper',
+    'page_wrapper' => 'page_wrapper',
+    'webform' => 'webform',
+    'sba_message_action' => 'sba_message_action',
+    'sba_social_action' => 'sba_social_action',
+    'p2p_donation_form' => 'p2p_donation_form',
+    'springboard_petition' => 'springboard_petition',
+    'ticketed_event' => 'ticketed_event',
+    'designation_form' => 'designation_form',
   );
-  return $fields;
+
+  variable_set('springboard_taxonomy_node_extras_types', $defaults);
+  $existing_types = node_type_get_names();
+  foreach ($defaults as $type) {
+    if (isset($existing_types[$type])) {
+      _springboard_taxonomy_create_instances($type, 'extras');
+    }
+  }
+
+  $default_views = array(
+    'sbv_forms|page_1' => 'sbv_forms|page_1',
+    'sbv_forms|page_2' => 'sbv_forms|page_2',
+    'sbv_assets|page_1' => 'sbv_assets|page_1',
+    'sba_actions|block_4' => 'sba_actions|block_4',
+    'sba_actions|block_2' => 'sba_actions|block_2',
+  );
+  variable_set('extras_filter_views', $default_views);
+}
+
+/**
+ * Add the node extras vocabulary and defaults.
+ */
+function springboard_taxonomy_update_7001() {
+  _springboard_taxonomy_install_vocab_node_extras();
+  _springboard_taxonomy_install_taxonomy_fields();
+  _springboard_taxonomy_install_node_extras_defaults();
 }
 

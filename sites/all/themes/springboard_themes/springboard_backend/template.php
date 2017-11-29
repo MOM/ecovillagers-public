@@ -65,8 +65,19 @@ function springboard_backend_preprocess_page(&$vars) {
   if (module_exists('springboard_admin')) {
     $menu_links = menu_tree('springboard_admin_menu');
 
-    // Get rid of third level menu items
     foreach ($menu_links as $key => $items) {
+      // Removed expanded class from the gear menu item:
+      if (isset($menu_links[$key]['#attributes']['class']) && $menu_links[$key]['#href'] == 'admin/springboard/settings/config') {
+        if (is_array($menu_links[$key]['#attributes']['class'])) {
+          foreach ($menu_links[$key]['#attributes']['class'] as $class_key => $class_name) {
+            if ($class_name == 'expanded') {
+              unset($menu_links[$key]['#attributes']['class'][$class_key]);
+              break;
+            }
+          }
+        }
+      }
+      // Get rid of third level menu items
       if(isset($items['#below'])) {
         foreach($items['#below'] as $key2 => $item) {
           if(isset($menu_links[$key]['#below'][$key2]['#below'])) {
@@ -75,13 +86,21 @@ function springboard_backend_preprocess_page(&$vars) {
         }
       }
     }
-
     $vars['main_menu'] = $menu_links;
+
+    // Display the gear/Options drop-down as a single link in the footer menu:
+    foreach ($menu_links as $key => $items) {
+      if (isset($menu_links[$key]['#title']) && $menu_links[$key]['#href'] == 'admin/springboard/settings/config') {
+        $menu_links[$key]['#title'] = t('Settings');
+        $menu_links[$key]['#below'] = array();
+        continue;
+      } 
+    }
 
     // menu_tree() is the best available option for rendering menu links, but
     // isn't flexible for changing the HTML/Classes in different contexts.
     // So, use a regex to change the classes on the menu for the footer.
-    $vars['footer_menu'] = drupal_render($vars['main_menu']);
+    $vars['footer_menu'] = drupal_render($menu_links);
     // change the wrapping ul's class so drop-down js isn't applied
     $vars['footer_menu'] = preg_replace('/class="nav nav-tabs"/', '/class="nav nav-footer"/', $vars['footer_menu']);
     // change sub-ul's class so drop-down styling isn't applied

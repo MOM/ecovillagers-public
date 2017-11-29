@@ -401,11 +401,11 @@ function springboard_hmac_springboard_admin_admin_menu_items_alter(&$items) {
   if (user_access('administer springboard hmac')) {
     $items['admin/springboard/settings']['_children']['admin/springboard/settings/config']['_children']['admin/config/hmac'] = array(
       'link_path' => 'admin/config/hmac',
-      'link_title' => 'Springboard HMAC Settings',
+      'link_title' => 'HMAC Settings',
       'menu_name' => 'springboard_admin_menu',
+      'attributes' => array('sb_link_group' => t('Fundraising')),
       'expanded' => 0,
       'customized' => 1,
-      'weight' => -2,
     );
   }
 }

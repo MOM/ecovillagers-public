@@ -15,6 +15,8 @@ function commerce_litle_fundraiser_commerce_fundraiser_gateway_info() {
     // @todo bank account (echeck) recurring is not yet fully implemented.
     'allow_recurring' => array('credit', 'bank account'),
     'allow_refund' => array('credit', 'bank account'),
+    'auto_extend' => array('credit'),
+    'offsite_recurring_external' => array('credit', 'bank account'),
     'form callback' => 'commerce_litle_fundraiser_commerce_submit_form',
     'cleanup callback' => 'commerce_litle_fundraiser_commerce_cleanup',
     'scrub callback' => 'commerce_litle_fundraiser_commerce_scrub',
@@ -26,6 +28,21 @@ function commerce_litle_fundraiser_commerce_fundraiser_gateway_info() {
     'cardonfile callback' => 'commerce_litle_fundraiser_commerce_cardonfile',
   );
 }
+
+/**
+ * Implements hook_fundraiser_gateway_info_alter().
+ */
+function commerce_litle_fundraiser_gateway_info_alter(&$gateways) {
+  foreach($gateways as &$gateway) {
+    if ($gateway['gateway_details']['base'] == 'commerce_litle_cc') {
+      // Determine if the gateway has the account updater/extension enabled. If so, remove auto_extend from gateway settings.
+      if ($gateway['gateway_details']['settings']['accountupdater_extend_sustainers'] == 1 && !empty($gateway['auto_extend']) && ($key = array_search($gateway['payment_method'][0], $gateway['auto_extend'])) !== FALSE) {
+        unset($gateway['auto_extend'][$key]);
+      }
+    }
+  }
+}
+
 
 /**
  * Implements hook_fundraiser_donation_form_config_check().

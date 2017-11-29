@@ -72,7 +72,7 @@ function springboard_api_menu() {
  * Implements hook_services_resources().
  */
 function springboard_api_services_resources() {
-  $resource = array(
+  $resources = array(
     // future development.
     /*'springboard-donation' => array(
       'operations' => array(
@@ -245,8 +245,63 @@ function springboard_api_services_resources() {
         ),*/
       ),
     ),
+
+    // Resource for listing products.
+    'springboard-products' => array(
+      'operations' => array(
+        'index' => array(
+          'help' => 'Retreive a list of designation products.',
+          'file' => array(
+            'type' => 'inc',
+            'module' => 'springboard_api',
+            'name' => 'resources/springboard_api.products',
+          ),
+          'callback' => 'springboard_api_products_index',
+          // Using the access callback from the form resouce.
+          'access callback' => 'springboard_api_form_resource_access',
+          'access arguments' => array('index'),
+          'access arguments append' => TRUE,
+          'args' => array(
+            array(
+              'name'         => 'type',
+              'type'         => 'int',
+              'description'  => t('Filter index values by product type.'),
+              'source'       => array('param' => 'type'),
+              'optional'     => TRUE,
+              'default value' => NULL,
+            ),
+            // Key in args for springboard_api_basic_service_authenticate().
+            array(
+              'name'         => 'api_key',
+              'type'         => 'string',
+              'description'  => t('API key.'),
+              'source'       => array('param' => 'api_key'),
+              'optional'     => TRUE,
+              'default value' => NULL,
+            ),
+            array(
+              'name' => 'limit',
+              'type' => 'int',
+              'description' => 'The number of products to retrieve.',
+              'optional' => TRUE,
+              'source' => array('param' => 'limit'),
+              'default value' => 100,
+            ),
+            array(
+              'name' => 'offset',
+              'type' => 'int',
+              'description' => 'The zero-based index from which to start retrieving products.',
+              'optional' => TRUE,
+              'source' => array('param' => 'offset'),
+              'default value' => 0,
+            ),
+          ),
+        ),
+      ),
+    ),
   );
-  return $resource;
+
+  return $resources;
 }
 
 /**
@@ -267,6 +322,17 @@ function springboard_api_ctools_plugin_type() {
   );
 
   return $plugins;
+}
+
+/**
+ * Implements hook_ctools_plugin_api().
+ *
+ * Implemented to expose exported endpoint.
+ */
+function springboard_api_ctools_plugin_api($module, $api) {
+  if ($module == 'services' && $api == 'services') {
+    return array('version' => 3);
+  }
 }
 
 /**
@@ -360,6 +426,19 @@ function springboard_api_get_form_details($nid) {
       'fields' => array(),
       'token' => drupal_get_token('services'),
     );
+    // Handle advocacy fields if enabled.
+    if (module_exists('springboard_advocacy')) {
+      if (springboard_advocacy_is_action_type($node->type)) {
+        // Can't currently handle this type.
+        if ($node->type == 'sba_social_action') {
+          return FALSE;
+        }
+        if (springboard_api_get_action_form_details($node, $form_details) === FALSE) {
+          // Multi-step or other unsupported type.
+          return FALSE;   
+        }
+      }
+    }
     // Build form field list.
     foreach ($node->webform['components'] as $cid => $component) {
       // Skip fieldsets.
@@ -398,6 +477,67 @@ function springboard_api_get_form_details($nid) {
   }
   else {
     return FALSE;
+  }
+}
+
+/**
+ * Get form node & field information for a requested advocacy form.
+ */
+function springboard_api_get_action_form_details($node, &$form_details) {
+  switch ($node->type) {
+    case 'sba_message_action':
+      $form = array(
+        '#node' => $node,
+      );
+      // Add fields from springboard_advocacy_form_alter().
+      if (!empty($node->message_ids)) {
+        $form['messages'] = array();
+        $form['messages']['#tree'] = TRUE;
+        foreach ($node->message_ids as $id) {
+          $form['messages'][$id] = array(
+              '#type' => 'hidden',
+              '#value' => $id,
+          );
+        }
+      } 
+      $form['advocacy_id'] = array('#type' => 'hidden', '#value' => $node->advocacy_id);
+      // Pass-thru to populate advocacy fields.
+      module_load_include('inc', 'sba_message_action', 'includes/sba_message_action.form');
+      sba_message_action_additional_elements($form, $form_state);
+      
+      // If this is a single step, check for editable message subject or body.
+      if (isset($form['sba_messages']['single_not_multi_flow'])) {
+        // Subject or body editable and required?
+        $message = current($form['sba_messages']['message']);
+        $message_id = $message['sba_message_id']['#value'];
+        $message = &$form['sba_messages']['message'][$message_id];
+        // Denote the actual subject and edit_body fields as required in the form details. 
+        if (isset($message['subject_required'])) {
+          $message['subject']['#required'] = $message['subject_required']['#value'];
+        }
+        if (isset($message['body_required'])) {
+          $message['edited_body']['#required'] = $message['body_required']['#value'];
+        }
+        if ($message['edited_body']['#required'] || (isset($message['subject']['#required']) && $message['subject']['#required'])) {
+          // If subject or body is required, mark their containers required.
+          $form['sba_messages']['#required'] = TRUE;
+          $form['sba_messages']['message']['#required'] = TRUE;
+        }
+      } elseif (isset($form['sba_messages']['multiflow'])) {
+        // Can't currently handle multistep forms
+        return FALSE;
+      }
+      // Parse the form built by advocacy.
+      foreach (element_children($form) as $key) {
+        // Skip fieldsets & markup.
+        if (isset($form[$key]['#type']) && ($form[$key]['#type'] == 'fieldset' || $form[$key]['#type'] == 'markup')) {
+          continue;
+        }
+        $save = &$form_details['fields'][$key];
+        $fapi = $form[$key];
+        _springboard_api_parse_component_fapi($save, $fapi);
+      }
+      break;
   }
 }
 
@@ -455,7 +595,7 @@ function _springboard_api_parse_component_fapi(&$save, $fapi, $component_type = 
  */
 function _springboard_api_convert_submission($submission, $node) {
   $converted_submission = array();
-
+  
   foreach ($node->webform['components'] as $cid => $component) {
     $form_key = $component['form_key'];
     // Skip fieldsets & markup.
@@ -515,14 +655,33 @@ function _springboard_api_convert_fapi(&$converted_submission, $fapi, $submissio
 }
 
 /**
- * Unpack webform component "extra" data.
+ * Convert submission flat array to nested array.
  *
- * @param string $items
- *   Raw "extra" string.
+ * @param array $submission
+ *   Associative array of field keys and submitted values.
  *
- * @return mixed
- *   Returns unpacked array of data.
+ * @param mixed $node
+ *   Webform node the data will be submitted to.
+ *
+ * @return array
+ *   Returns a nested array of submission values formatted for consumption by
+ *   the submit endpoint.
  */
+function _springboard_api_convert_action_submission($submission, $node) {
+  $converted_submission = array();
+  switch ($node->type) {
+    case 'sba_message_action':
+      $keys = array('advocacy_id', 'message_ids', 'messages', 'sba_messages');
+      foreach ($keys as $key) {
+        if (isset($submission[$key])) {
+          $converted_submission[$key] = $submission[$key];
+        }
+      }
+      break;
+  }
+  return $converted_submission;
+}
+  
 function _springboard_api_parse_extra_items($items) {
   $parts = explode("\n", $items);
   foreach ($parts as $part) {
@@ -572,7 +731,7 @@ function springboard_api_log_service_usage($op, $access, $data = NULL, $api_key 
     'access' => $access,
     'remote_ip' => ip_address(),
     'api_key' => $api_key,
-    'referrer' => isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'unknown',
+    'referrer' => isset($_SERVER['HTTP_REFERER']) ? substr($_SERVER['HTTP_REFERER'], 0, 255) : 'unknown',
     'endpoint' => $op,
     'data' => serialize($data),
   );
@@ -584,4 +743,42 @@ function springboard_api_log_service_usage($op, $access, $data = NULL, $api_key 
  */
 function _springboard_api_is_secure() {
   return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on') ? TRUE : FALSE;
+}
+
+/**
+ * Implements hook_webform_user_session_storage_cancel().
+ *
+ * Don't store API sessions, else their data gets shared.
+ */
+function springboard_api_webform_user_session_storage_cancel($form_state) {
+  if (arg(0) == 'springboard-api' && arg(1) == 'springboard-forms' && arg(2) == 'submit') {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Implements hook_springboard_api_response_alter().
+ *
+ * TODO: Move this somewhere else, 
+ */
+function springboard_api_springboard_api_response_alter(&$response, $context) {
+  // If advocacy is enabled, check for transaction server response in session.
+  if (module_exists('springboard_advocacy')) {
+    $node = $context['node'];
+    if (springboard_advocacy_is_action_type($node->type)) {
+      if (isset($_SESSION['delivered_messages']) || isset($_SESSION['undelivered_messages'])) {
+        $delivered_html = theme('webform_confirmations_delivered', $_SESSION['delivered_messages']);
+        $undelivered_html = theme('webform_confirmations_undelivered', $_SESSION['undelivered_messages']);
+        // Add the transaction server results to the response to the client.
+        $data = array(
+          'confirmations_delivered' => $delivered_html,
+          'confirmations_undelivered' => $undelivered_html,
+          'raw_confirmations_delivered' => $_SESSION['delivered_messages'],
+          'raw_confirmations_undelivered' => $_SESSION['undelivered_messages'],
+        );
+        $response['data'] = $data;
+      }
+    }
+  }
 }

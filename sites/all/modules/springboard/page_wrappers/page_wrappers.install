@@ -7,41 +7,54 @@
  */
 
 /**
- * Implementation hook_install().
+ * Implements hook_install().
  */
 function page_wrappers_install() {
-  // change the clone module's cloning method to save-edit cause that's the way we like it.
+
+  // Change the clone module's cloning method to save-edit cause
+  // that's the way we like it.
   variable_set('clone_method', 'save-edit');
+  module_enable(array('file_entity'));
+
+  module_load_include('inc', 'page_wrappers', 'includes/install/page_wrappers.node_type');
+  _page_wrappers_create_node_type();
+
+  module_load_include('inc', 'page_wrappers', 'includes/install/page_wrappers.node_fields');
   _page_wrappers_create_fields();
+
+  module_load_include('inc', 'page_wrappers', 'includes/install/page_wrappers.file_entities');
+  _page_wrappers_create_file_entities();
+
 }
 
 /**
- * Implementation of hook_uninstall().
+ * Implements hook_uninstall().
  */
 function page_wrappers_uninstall() {
+  module_load_include('inc', 'page_wrappers', 'includes/install/page_wrappers.node_type');
+  module_load_include('inc', 'page_wrappers', 'includes/install/page_wrappers.node_fields');
   variable_del('page_wrapper_enabled_node_types');
   _page_wrappers_delete_nodes();
   _page_wrappers_delete_fields();
-
   node_type_delete('page_wrapper');
   field_purge_batch(1000);
 }
 
 /**
- * Implementation of hook_schema().
+ * Implements hook_schema().
  */
 function page_wrappers_schema() {
   $schema['page_wrappers'] = array(
-    'description' => t('TODO: please describe this table!'),
+    'description' => 'TODO: please describe this table!',
     'fields' => array(
       'nid' => array(
-        'description' => t('TODO: please describe this field!'),
+        'description' => 'TODO: please describe this field!',
         'type' => 'int',
         'not null' => TRUE,
         'default' => 0,
       ),
       'template' => array(
-        'description' => t('TODO: please describe this field!'),
+        'description' => 'TODO: please describe this field!',
         'type' => 'varchar',
         'length' => '255',
         'not null' => FALSE,
@@ -51,16 +64,17 @@ function page_wrappers_schema() {
   );
 
   $schema['node_page_wrappers'] = array(
-    'description' => t('TODO: please describe this table!'),
+    'description' => 'TODO: please describe this table!',
+
     'fields' => array(
       'nid' => array(
-        'description' => t('Node nid.'),
+        'description' => 'Node nid.',
         'type' => 'int',
         'not null' => TRUE,
         'default' => 0,
       ),
       'wrapper_nid' => array(
-        'description' => t('Nid of the Page Wrapper node.'),
+        'description' => 'Nid of the Page Wrapper node.',
         'type' => 'int',
         'not null' => TRUE,
       ),
@@ -78,6 +92,7 @@ function page_wrappers_schema() {
         'description' => 'Weight of assignment.',
       ),
     ),
+
     'indexes' => array(
       'nid' => array('nid'),
       'weight' => array('weight'),
@@ -87,227 +102,6 @@ function page_wrappers_schema() {
   );
 
   return $schema;
-}
-
-/**
- * Node and associated field setup for Page Wrappers content type.
- */
-function _page_wrappers_create_fields() {
-  $t = get_t();
-
-  // implement node type.
-  if (!in_array('page_wrapper', node_type_get_names())) {
-    $type = array(
-      'type' => 'page_wrapper',
-      'name' => $t('Page Wrapper'),
-      'description' => $t('Allows a user to define custom page templates that can then be assigned to specific nodes.'),
-      'base' => 'node_content',
-      'custom' => 1,
-      'modified' => 1,
-      'locked' => 0,
-      'title_label' => $t('Internal Title'),
-      'node_submitted' => 0,
-    );
-    $type = node_type_set_defaults($type);
-    node_type_save($type);
-  }
-  // build list of themes for the theme css select field's options
-  $themes = list_themes();
-  $themes_options = array();
-  foreach ($themes as $theme) {
-    $themes_options[$theme->name] = $theme->info['name'];
-  }
-  $fields = array(
-    // theme css select field
-    'theme_css' => array(
-      'active' => 1,
-      'cardinality' => -1,
-      'deleted' => 0,
-      'entity_types' => array(),
-      'field_name' => 'page_wrappers_theme_css',
-      'foreign keys' => array(),
-      'indexes' => array(
-        'value' => array(
-          0 => 'value',
-        ),
-      ),
-      'locked' => 0,
-      'module' => 'list',
-      'settings' => array(
-        'allowed_values' => $themes_options,
-      ),
-      'translatable' => 0,
-      'type' => 'list_text',
-      '_instance' => array(
-        'bundle' => 'page_wrapper',
-        'default_value' => NULL,
-        'deleted' => 0,
-        'description' => '',
-        'entity_type' => 'node',
-        'field_name' => 'page_wrappers_theme_css',
-        'label' => 'Include Theme CSS',
-        'required' => 0,
-        'settings' => array(
-          'user_register_form' => FALSE,
-        ),
-        'widget' => array(
-          'active' => 1,
-          'module' => 'options',
-          'settings' => array(),
-          'type' => 'options_select',
-          'weight' => 1,
-        ),
-      ),
-    ),
-    // css filefield
-    'css_filefield' => array(
-      'translatable' => '1',
-      'settings' => array(
-        'display_field' => 1,
-        'display_default' => 0,
-        'uri_scheme' => 'public',
-      ),
-      'field_name' => 'page_wrappers_css',
-      'type' => 'file',
-      'active' => '1',
-      'locked' => '0',
-      'cardinality' => '-1',
-      '_instance' => array(
-        'label' => st('Upload a stylesheet'),
-        'widget' => array(
-          'weight' => '-4',
-          'type' => 'file_generic',
-          'active' => 1,
-          'settings' => array(
-            'progress_indicator' => 'throbber',
-          ),
-        ),
-        'settings' => array(
-          'file_directory' => 'page_wrappers/styles',
-          'file_extensions' => 'css',
-          'max_filesize' => '2 MB',
-          'description_field' => 0,
-          'user_register_form' => FALSE,
-        ),
-        'display' => array(
-          'default' => array(
-            'label' => 'above',
-            'type' => 'file_default',
-            'settings' => array(),
-            'weight' => 0,
-          ),
-          'teaser' => array(
-            'type' => 'hidden',
-            'label' => 'above',
-            'settings' => array(),
-            'weight' => 0,
-          ),
-        ),
-        'required' => 0,
-        'description' => '',
-        'field_name' => 'page_wrappers_css',
-        'entity_type' => 'node',
-        'bundle' => 'page_wrapper',
-      ),
-    ),
-    // javascript filefield
-    'js_filefield' => array(
-      'field_name' => 'page_wrappers_js',
-      'type' => 'file',
-      'active' => '1',
-      'locked' => '0',
-      'cardinality' => '-1',
-      '_instance' => array(
-        'label' => st('Upload a script'),
-        'widget' => array(
-          'weight' => '-4',
-          'type' => 'file_generic',
-          'active' => 1,
-          'settings' => array(
-            'progress_indicator' => 'throbber',
-          ),
-        ),
-        'settings' => array(
-          'file_directory' => 'page_wrappers/scripts',
-          'file_extensions' => 'js',
-          'max_filesize' => '2 MB',
-          'description_field' => 0,
-          'user_register_form' => FALSE,
-        ),
-        'display' => array(
-          'default' => array(
-            'label' => 'above',
-            'type' => 'file_default',
-            'settings' => array(),
-            'weight' => 0,
-          ),
-          'teaser' => array(
-            'type' => 'hidden',
-            'label' => 'above',
-            'settings' => array(),
-            'weight' => 0,
-          ),
-        ),
-        'required' => 0,
-        'description' => '',
-        'field_name' => 'page_wrappers_js',
-        'entity_type' => 'node',
-        'bundle' => 'page_wrapper',
-      ),
-    ),
-    // html template
-    'html_template' => array(
-      'field_name' => 'page_wrappers_html_template',
-      'type' => 'text_with_summary',
-      'cardinality' => 1,
-      'settings' => array(),
-      'entity_types' => array('node'),
-      '_instance' => array(
-        'field_name' => 'page_wrappers_html_template',
-        'entity_type' => 'node',
-        'bundle' => 'page_wrapper',
-        'required' => TRUE,
-        'label' => st('HTML Template'),
-        'description' => st('HTML version of the email body.'),
-        'widget' => array(
-          'type' => 'text_with_summary',
-          'weight' => 6,
-          'settings' => array(),
-        ),
-      ),
-    ),
-  );
-
-  foreach ($fields as $key => $values) {
-    $instance = $values['_instance'];
-    unset($values['_instance']);
-
-    field_create_field($values);
-    field_create_instance($instance);
-  }
-}
-
-function _page_wrappers_delete_fields() {
-  $fields = array(
-    'page_wrappers_css',
-    'page_wrappers_js',
-    'page_wrappers_html_template',
-    'page_wrappers_theme_css',
-  );
-  foreach ($fields as $field_name) {
-    $field = field_info_instance('node', $field_name, 'email_wrapper');
-    field_delete_instance($field);
-    $field = field_info_field($field_name);
-    field_delete_field($field);
-  }
-  drupal_set_message(t('Page Wrapper fields deleted.'));
-}
-
-function _page_wrappers_delete_nodes() {
-  require_once 'page_wrappers.module';
-  $nids = page_wrappers_get_nodes();
-  node_delete_multiple($nids);
-  drupal_set_message(t('Page Wrappers have been deleted.'));
 }
 
 /**
@@ -418,4 +212,202 @@ function page_wrappers_update_7003() {
 
   field_create_field($field);
   field_create_instance($field_instance);
+}
+
+/**
+ * Enable File Entity and Inline Entity Form modules.
+ *
+ * Create the new file entities. Add a file entity reference field to page
+ * wrapper node type.
+ */
+function page_wrappers_update_7004() {
+
+  module_enable(array('file_entity', 'inline_entity_form'));
+
+  // Add the new reference fields to page wrapper nodes.
+  module_load_include('inc', 'page_wrappers', 'includes/install/page_wrappers.node_fields');
+  _page_wrappers_create_fields();
+
+  // Create the file entities.
+  module_load_include('inc', 'page_wrappers', 'includes/install/page_wrappers.file_entities');
+  _page_wrappers_create_file_entities();
+
+}
+
+/**
+ * Populate the file asset fields on file entities.
+ */
+function page_wrappers_update_7005(&$sandbox) {
+
+  if (!isset($sandbox['progress'])) {
+    $sandbox['progress'] = 0;
+    $sandbox['current_fid'] = 0;
+    $sandbox['max'] = db_query('SELECT COUNT(fid) FROM {file_managed}')->fetchField();
+  }
+
+  // Get all page wrapper assets from the file managed table, including
+  // those that are no longer active on a node or controlled by a file
+  // upload field (in the future, these will be available in the file entity
+  // reference autocomplete). Use these values to populate the file entity asset
+  // fields.
+  $files_managed = db_query("SELECT * FROM {file_managed} WHERE fid > :current LIMIT 10", array(':current' => $sandbox['current_fid']));
+
+  foreach ($files_managed as $file) {
+
+    if (strpos($file->uri, 'page_wrappers') !== FALSE) {
+
+      $type = $file->filemime == 'text/css' ? 'css' : 'js';
+
+      $data_description = array(
+        'entity_type' => 'file',
+        'bundle' => 'page_wrappers_asset_' . $type,
+        'entity_id' => $file->fid,
+        'revision_id' => $file->fid,
+        'language' => 'und',
+        'delta' => 0,
+        'field_pw_asset_description_value' => $file->filename,
+      );
+
+      drupal_write_record('field_data_field_pw_asset_description', $data_description);
+      drupal_write_record('field_revision_field_pw_asset_description', $data_description);
+
+      $data_title = array(
+        'entity_type' => 'file',
+        'bundle' => 'page_wrappers_asset_' . $type,
+        'entity_id' => $file->fid,
+        'revision_id' => $file->fid,
+        'language' => 'und',
+        'delta' => 0,
+        'field_pw_asset_title_value' => $file->filename,
+      );
+
+      drupal_write_record('field_data_field_pw_asset_title', $data_title);
+      drupal_write_record('field_revision_field_pw_asset_title', $data_title);
+
+    }
+    $sandbox['progress']++;
+    $sandbox['current_fid'] = $file->fid;
+  }
+
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+
+  if ($sandbox['#finished'] >= 1) {
+    return t('Success');
+  }
+}
+
+/**
+ * Populate the new file reference fields on page wrapper nodes.
+ *
+ * References to existing page wrapper js files.
+ */
+function page_wrappers_update_7006(&$sandbox) {
+
+  if (!isset($sandbox['progress'])) {
+    $sandbox['progress'] = 0;
+    $sandbox['max'] = db_query('SELECT COUNT(page_wrappers_js_fid) FROM {field_data_page_wrappers_js}')->fetchField();
+  }
+
+  $sql = "SELECT * FROM {field_data_page_wrappers_js}";
+  $field_content = db_query_range($sql, $sandbox['progress'], 10);
+
+  foreach ($field_content as $row) {
+
+    // Populate the reference fields.
+    $data_reference = array(
+      'entity_type' => 'node',
+      'bundle' => 'page_wrapper',
+      'entity_id' => $row->entity_id,
+      'revision_id' => $row->revision_id,
+      'language' => 'und',
+      'delta' => $row->delta,
+      'sb_page_wrappers_js_target_id' => $row->page_wrappers_js_fid,
+    );
+
+    drupal_write_record('field_data_sb_page_wrappers_js', $data_reference);
+    drupal_write_record('field_revision_sb_page_wrappers_js', $data_reference);
+
+    // So files don't get deleted when the node file field is deleted in the
+    // next update hook, remove file records from the file usage table.
+    db_delete('file_usage')
+      ->condition('fid', $row->page_wrappers_js_fid)
+      ->condition('module', 'file')
+      ->condition('type', 'node')
+      ->condition('id', $row->entity_id)
+      ->execute();
+
+    $sandbox['progress']++;
+  }
+
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+  if ($sandbox['#finished'] >= 1) {
+    return t('Success');
+  }
+}
+
+/**
+ * Populate the new file reference fields on page wrapper nodes.
+ *
+ * References to existing page wrapper css files.
+ */
+function page_wrappers_update_7007(&$sandbox) {
+
+  if (!isset($sandbox['progress'])) {
+    $sandbox['progress'] = 0;
+    $sandbox['max'] = db_query('SELECT COUNT(page_wrappers_css_fid) FROM {field_data_page_wrappers_css}')->fetchField();
+  }
+
+  $sql = "SELECT * FROM {field_data_page_wrappers_css}";
+  $field_content = db_query_range($sql, $sandbox['progress'], 10);
+
+  foreach ($field_content as $row) {
+
+    // Populate the reference fields.
+    $data_reference = array(
+      'entity_type' => 'node',
+      'bundle' => 'page_wrapper',
+      'entity_id' => $row->entity_id,
+      'revision_id' => $row->revision_id,
+      'language' => 'und',
+      'delta' => $row->delta,
+      'sb_page_wrappers_css_target_id' => $row->page_wrappers_css_fid,
+    );
+
+    drupal_write_record('field_data_sb_page_wrappers_css', $data_reference);
+    drupal_write_record('field_revision_sb_page_wrappers_css', $data_reference);
+
+    // So files don't get deleted when the node file field is deleted
+    // in the next update hook, remove file records from the file usage table.
+    db_delete('file_usage')
+      ->condition('fid', $row->page_wrappers_css_fid)
+      ->condition('module', 'file')
+      ->condition('type', 'node')
+      ->condition('id', $row->entity_id)
+      ->execute();
+
+    $sandbox['progress']++;
+  }
+
+  $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
+  if ($sandbox['#finished'] >= 1) {
+    return t('Success');
+  }
+}
+
+/**
+ * Delete old page wrapper css and js fields.
+ */
+function page_wrappers_update_7008() {
+
+  $delete_fields = array(
+    'page_wrappers_css',
+    'page_wrappers_js',
+  );
+
+  foreach ($delete_fields as $delete_name) {
+    $field_instance_delete = field_info_instance('node', $delete_name, 'page_wrapper');
+    field_delete_instance($field_instance_delete);
+    $field_delete = field_info_field($delete_name);
+    field_delete_field($field_delete);
+  }
 }

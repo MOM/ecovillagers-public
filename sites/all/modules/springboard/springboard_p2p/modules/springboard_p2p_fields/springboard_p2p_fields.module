@@ -24,8 +24,8 @@ function springboard_p2p_fields_theme() {
 function springboard_p2p_fields_field_info() {
   return array(
     'springboard_p2p_fields_campaign_goals' => array(
-      'label' => t('Peer to peer goals configuration'),
-      'description' => t('Goals configuration for a peer to peer campaign.'),
+      'label' => t('Peer to Peer goals configuration'),
+      'description' => t('Goals configuration for a Peer to Peer campaign.'),
       'default_widget' => 'springboard_p2p_fields_campaign_goals_widget',
       'default_formatter' => 'hidden',
       'no_ui' => FALSE,
@@ -33,8 +33,8 @@ function springboard_p2p_fields_field_info() {
       'property_type' => 'field_campaign_goals',
     ),
     'springboard_p2p_fields_personal_campaign_progress' => array(
-      'label' => t('Peer to peer personal campaign progress'),
-      'description' => t('Progress for a peer to peer personal campaign'),
+      'label' => t('Peer to Peer personal campaign progress'),
+      'description' => t('Progress for a Peer to Peer personal campaign'),
       'default_widget' => 'springboard_p2p_fields_personal_campaign_progress_widget',
       'default_formatter' => 'hidden',
       'no_ui' => FALSE,
@@ -187,7 +187,7 @@ function springboard_p2p_fields_field_delete($entity_type, $entity, $field, $ins
 function springboard_p2p_fields_field_widget_info() {
   return array(
     'springboard_p2p_fields_campaign_goals_widget' => array(
-      'label' => t('Peer to peer campaign goals table'),
+      'label' => t('Peer to Peer campaign goals table'),
       'field types' => array('springboard_p2p_fields_campaign_goals'),
       'behaviors' => array(
         'default value' => FIELD_BEHAVIOR_NONE,
