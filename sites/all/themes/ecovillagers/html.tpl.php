@@ -8,7 +8,7 @@
 
         <!--[if lt IE 9]>
         <script src="<?php print $base_path . path_to_theme() ?>/js/respond.min.js"></script>
-        <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+        <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
         <![endif]-->
 
         <?php print $scripts; ?>
