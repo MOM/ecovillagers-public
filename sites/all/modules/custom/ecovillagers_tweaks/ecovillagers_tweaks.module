@@ -101,6 +101,25 @@ function ecovillagers_tweaks_webform_user_webform_submit($form, &$form_state) {
 }
 
 /**
+ * Implements hook_webform_user_submission_insert().
+ */
+function ecovillagers_tweaks_webform_user_submission_insert($node, $submission, $account) {
+  $profile_data = array('profile' => array());
+  try {
+    $user_wrapper = entity_metadata_wrapper('user', $account);
+    $properties = $user_wrapper->getPropertyInfo();
+
+    if (array_key_exists('field_phone', $properties)) {
+      $profile_data['profile']['phone'] = $user_wrapper->field_phone->value();
+    }
+  } catch (EntityMetadataWrapperException $exc) {
+    watchdog('ecovillagers_tweaks', 'Error loading user profile data into cookie for uid %uid.', array('%uid' => $account->uid), WATCHDOG_ERROR);
+  }
+  springboard_cookie_tag_client($profile_data);
+}
+
+
+/**
  * Menu callback for springboard_cookie/js/regurgitate
  *
  * Returns current contents of the Springboard cookie if they're less than 24 hours old.
