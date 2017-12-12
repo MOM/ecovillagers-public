@@ -54,9 +54,15 @@ function ecovillagers_tweaks_salesforce_queue_create_item_alter(&$item) {
     foreach ($item['sobject']->fields as $key => $value) {
       if (substr($key, -13) == '_Interests__c') {
         // Assume "___ Interests" fields come from multi-checkbox webform components and need
-        // semicolon delimiters converted to newlines.
+        // semicolon delimiters converted to newlines. Assume also that the Salesforce
+        // field is limited to 255 characters.
         if (!empty($value)) {
-          $item['sobject']->fields[$key] = preg_replace("|\\s*;\\s*|", "\n", $value);
+          if (strlen($value) > 255) {
+            // Truncate and don't leave any chopped up half item at the end.
+            $value = substr($value, 0, 255);
+            $value = preg_replace("|;[^;]+\$|", '', $value);
+          }
+          $item['sobject']->fields[$key] = trim(preg_replace("|\\s*;\\s*|", "\n", $value));
         }
       }
     }
