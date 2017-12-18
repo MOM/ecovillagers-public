@@ -169,7 +169,7 @@ function braintree_transaction_sale(&$sale_data, &$context = array(), $settings 
  *   and the second element is an array of additional information like the
  *   result and any related error messages.
  */
-function braintree_update_card($card_id, $params, $settings = array(), &$context = array(), $settings = array()) {
+function braintree_update_card($card_id, $params, $settings = array(), &$context = array()) {
   if (!is_int($card_id)) {
     $context['error'] = t('Invalid card ID provided.');
     return array(FALSE, $context);
